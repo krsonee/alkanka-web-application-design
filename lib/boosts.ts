@@ -3,10 +3,12 @@ import { rows, sql } from '@/lib/db'
 import { getContent, setContent } from '@/lib/content'
 import { driftMessage } from '@/lib/drift'
 import {
+  LEGACY_BOOST_KEYS,
   activeBoosts,
   applyMult,
   boostFor,
   cleanBoosts,
+  runningCampaigns,
   trDayOf,
   type BoostConfig,
   type BoostSource,
@@ -14,13 +16,13 @@ import {
 
 const KEY = 'boosts:config'
 const BOOST_LABELS = {
-  'happyHour.start': 'Mutlu saat başlangıcı',
-  'happyHour.end': 'Mutlu saat bitişi',
-  'happyHour.mult': 'Mutlu saat çarpanı',
-  'weekend.mult': 'Hafta sonu çarpanı',
-  'derby.mult': 'Derbi çarpanı',
-  'flash.pct': 'Flaş indirim yüzdesi',
-  'badgeDay.pct': 'Rozet günü yüzdesi',
+  name: 'Kampanya adı',
+  start: 'Başlangıç saati',
+  end: 'Bitiş saati',
+  fromHour: 'Başlangıç saati',
+  toHour: 'Bitiş saati',
+  sources: 'Kazanç türleri',
+  days: 'Günler',
   'comeback.days': 'Geri dönüş gün sayısı',
   'comeback.coin': 'Geri dönüş hediyesi',
   'birthday.coin': 'Doğum günü hediyesi',
@@ -42,10 +44,14 @@ export async function getBoostConfig(): Promise<BoostConfig> {
 }
 
 export async function saveBoostConfig(input: Partial<BoostConfig>) {
+  if (!Array.isArray(input.campaigns)) throw new Error('Kampanya listesi gelmedi. Sayfayı yenileyip tekrar dene. Hiçbir şey kaydedilmedi.')
   const cfg = cleanBoosts(input)
-  const drift = driftMessage(input, cfg, { labels: BOOST_LABELS, ignore: ['until', 'day', 'siteId', 'badgeId', 'id'], blankOk: ['title', 'text'] })
+  const drift = driftMessage(input, cfg, { labels: BOOST_LABELS, ignore: ['until', 'from', 'siteId', 'badgeId', 'id', 'kind', 'type'], blankOk: ['title', 'text'] })
   if (drift) throw new Error(drift)
-  await setContent(KEY, cfg)
+  // The six fixed boxes the list replaced stay in the record as they were, so rolling this build back brings the old settings back unchanged.
+  const stored = ((await getContent<Record<string, unknown>>(KEY).catch(() => null)) ?? {}) as Record<string, unknown>
+  const legacy = Object.fromEntries(LEGACY_BOOST_KEYS.filter((k) => stored[k] !== undefined).map((k) => [k, stored[k]]))
+  await setContent(KEY, { ...legacy, ...cfg })
   cache = { at: Date.now(), cfg }
   return cfg
 }
@@ -171,11 +177,14 @@ export async function setBirthday(userId: string, raw: string) {
 /** Best single discount for this member right now. Discounts never stack. */
 export async function marketDiscountPct(userId: string) {
   const cfg = await getBoostConfig()
-  const active = activeBoosts(cfg)
-  let pct = active.some((b) => b.id === 'flash') ? cfg.flash.pct : 0
-  if (active.some((b) => b.id === 'badgeDay')) {
-    const own = await rows(sql`SELECT 1 FROM kp_awards WHERE user_id = ${userId} AND badge_id = ${cfg.badgeDay.badgeId} LIMIT 1`).catch(() => [])
-    if (own.length) pct = Math.max(pct, cfg.badgeDay.pct)
+  const running = runningCampaigns(cfg).map((r) => r.campaign)
+  let pct = Math.max(0, ...running.filter((c) => c.kind === 'indirim').map((c) => c.pct))
+  const forBadges = running.filter((c) => c.kind === 'rozet' && c.pct > pct)
+  if (forBadges.length) {
+    const own = await rows<{ badge_id: string }>(sql`SELECT DISTINCT badge_id FROM kp_awards
+      WHERE user_id = ${userId} AND badge_id IN ${forBadges.map((c) => c.badgeId)}`).catch(() => [])
+    const mine = new Set(own.map((o) => o.badge_id))
+    pct = Math.max(pct, ...forBadges.filter((c) => mine.has(c.badgeId)).map((c) => c.pct))
   }
   const [perk] = await rows<{ p: number | null }>(sql`SELECT max(b.perk_pct) AS p FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id
     WHERE a.user_id = ${userId}`).catch(() => [{ p: 0 }])

@@ -15,6 +15,7 @@ import {
   setMemberRole,
   type RoleInput,
 } from '@/lib/kanka-puan'
+import { roleSummary, type RoleLimit, type RoleLimits } from '@/lib/kanka-puan-shared'
 import { closeSignup, openSignup } from '@/lib/signup-gate'
 import { listLedger } from '@/lib/wallet-ledger'
 import type { LedgerPage } from '@/lib/wallet-ledger-shared'
@@ -180,7 +181,7 @@ export async function walletAction(userId: string, amount: number, reason: strin
 export async function memberActivityAction(userId: string): Promise<{
   activity: MemberActivity
   badges: { id: string; name: string; tier: string }[]
-  roles: { id: string; name: string; staff: boolean }[]
+  roles: { id: string; name: string; summary: string }[]
   roleId: string | null
   canRoles: boolean
 } | null> {
@@ -195,7 +196,7 @@ export async function memberActivityAction(userId: string): Promise<{
   return {
     activity,
     badges: badges.filter((b) => !roleIds.has(b.id)).map((b) => ({ id: b.id, name: b.name, tier: b.tier })),
-    roles: roles.map((r) => ({ id: r.id, name: r.name, staff: r.staff })),
+    roles: roles.map((r) => ({ id: r.id, name: r.name, summary: roleSummary(r.staff, r.limits) })),
     roleId: activity.badges.find((b) => roleIds.has(b.id))?.id ?? null,
     canRoles,
   }
@@ -222,9 +223,13 @@ export async function memberRoleAction(userId: string, roleId: string | null) {
 
 export async function saveRoleAction(input: RoleInput) {
   return roleGuard(async () => {
-    const role = { id: input.id ? String(input.id) : undefined, name: String(input.name), icon: String(input.icon), style: String(input.style), staff: !!input.staff }
+    const staff = !!input.staff
+    const on = (limit: RoleLimit) => (input.limits ? !!input.limits[limit] : staff)
+    const limits: RoleLimits = { kp: on('kp'), rank: on('rank'), market: on('market'), events: on('events') }
+    const role = { id: input.id ? String(input.id) : undefined, name: String(input.name), icon: String(input.icon), style: String(input.style), staff, limits }
     await saveRole(role)
-    await logAudit(role.id ? 'Rol düzenlendi' : 'Rol oluşturuldu', null, `${role.name.trim()}${role.staff ? ' · görevli' : ''}`)
+    const summary = roleSummary(staff, limits)
+    await logAudit(role.id ? 'Rol düzenlendi' : 'Rol oluşturuldu', null, `${role.name.trim()}${summary ? ` · ${summary}` : ' · sadece görünüm'}`)
     return role.id ? 'Rol güncellendi.' : 'Rol oluşturuldu. Üye detayındaki "Hediye ve rozet" sekmesinden verebilirsin.'
   })
 }

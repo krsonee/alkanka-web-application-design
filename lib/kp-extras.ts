@@ -78,34 +78,115 @@ export async function getQuestConfig(): Promise<WeeklyQuestConfig> {
   return { ...DEFAULT_QUEST, ...(r?.value ?? {}) }
 }
 
+const whole = (value: unknown, min: number, max: number, label: string) => {
+  const n = Number(value)
+  if (!Number.isInteger(n) || n < min || n > max) throw new Error(`${label} ${min.toLocaleString('tr-TR')} ile ${max.toLocaleString('tr-TR')} arasında tam sayı olmalı.`)
+  return n
+}
+
 export async function saveQuestConfig(input: WeeklyQuestConfig) {
   await ensureKp()
   const title = String(input.title ?? '').trim().slice(0, 40)
-  const target = Math.floor(Number(input.target))
-  if (!QUEST_METRICS.some((m) => m.id === input.metric)) throw new Error('Geçersiz görev tipi.')
-  if (!Number.isFinite(target) || target < 1 || target > 10000) throw new Error('Hedef 1 ile 10.000 arasında olmalı.')
+  const metric = QUEST_METRICS.find((m) => m.id === input.metric)
+  if (!metric) throw new Error('Geçersiz görev tipi.')
+  const target = whole(input.target, 1, metric.max ?? 10000, 'Hedef')
+  const game = String(input.game ?? '')
+  const group = String(input.group ?? '')
+  if (metric.pick === 'game' && !isArenaGame(game)) throw new Error('Hangi oyunun sayılacağını seç.')
+  if (metric.pick === 'game-optional' && game && !isArenaGame(game)) throw new Error('Geçersiz oyun.')
+  if (metric.pick === 'group' && !QUEST_GROUPS.some((g) => g.id === group)) throw new Error('Hangi oyun grubunun sayılacağını seç.')
+  const kp = whole(input.kp ?? 0, 0, 100000, 'Ek KP')
+  const coin = whole(input.coin ?? 0, 0, 100000, 'Ek KC')
   if (input.enabled) {
     if (title.length < 2) throw new Error('Görev başlığı en az 2 karakter olmalı.')
     const [b] = await rows(sql`SELECT 1 FROM kp_badges WHERE id = ${input.badgeId} AND active`)
     if (!b) throw new Error('Ödül olarak aktif bir değerli rozet seç.')
   }
-  const value: WeeklyQuestConfig = { enabled: Boolean(input.enabled), title, badgeId: String(input.badgeId ?? ''), metric: input.metric, target }
+  const value: WeeklyQuestConfig = {
+    enabled: Boolean(input.enabled),
+    title,
+    badgeId: String(input.badgeId ?? ''),
+    metric: metric.id,
+    target,
+    game: metric.pick === 'game' || metric.pick === 'game-optional' ? game : '',
+    group: metric.pick === 'group' ? group : DEFAULT_QUEST.group,
+    kp,
+    coin,
+  }
   await rows(sql`INSERT INTO kp_settings (key, value) VALUES ('weekly_quest', ${JSON.stringify(value)}::jsonb)
     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`)
 }
 
-async function questProgress(userId: string, metric: QuestMetric) {
-  const table: Record<QuestMetric, string> = { tahmin: 'league_picks', oyun: 'game_history', gorev: 'game_history', sohbet: 'tg_chat_messages', dakika: 'kp_events' }
-  if (!(await exists(table[metric]))) return 0
-  const q = {
+const QUEST_TABLES: Record<QuestMetric, string> = {
+  tahmin: 'league_picks', oyun: 'game_history', 'oyun-tek': 'game_history', 'oyun-grup': 'game_history', galibiyet: 'game_history', gorev: 'game_history',
+  sohbet: 'tg_chat_messages', dakika: 'kp_events', seri: 'kp_events', sponsor: 'link_clicks', davet: 'referrals', market: 'market_requests', turnuva: 'tournament_entries',
+}
+
+/** Rows that are a finished game: not a prize, not a fee or purchase, not a result typed in by staff. */
+const PLAYED = sql`mode NOT IN ('odul', 'harcama', 'admin') AND created_at >= ${WEEK_START}`
+
+/** Longest run of days in a row, from a list of 'YYYY-MM-DD' days. */
+export function longestRun(days: string[]): number {
+  const stamps = [...new Set(days)].map((d) => Date.parse(`${d}T00:00:00Z`)).sort((a, b) => a - b)
+  let best = 0
+  let run = 0
+  stamps.forEach((t, i) => {
+    run = i > 0 && t - stamps[i - 1] === 86_400_000 ? run + 1 : 1
+    best = Math.max(best, run)
+  })
+  return best
+}
+
+export async function questProgress(userId: string, cfg: Pick<WeeklyQuestConfig, 'metric' | 'game' | 'group'>): Promise<number> {
+  const metric = cfg.metric
+  if (!(await exists(QUEST_TABLES[metric]))) return 0
+  if (metric === 'seri') {
+    const days = await rows<{ d: string }>(sql`SELECT DISTINCT (created_at AT TIME ZONE 'Europe/Istanbul')::date::text AS d FROM kp_events
+      WHERE user_id = ${userId} AND source = 'sure' AND created_at >= ${WEEK_START}`)
+    return longestRun(days.map((r) => r.d))
+  }
+  const games = QUEST_GROUPS.find((g) => g.id === cfg.group)?.games ?? []
+  const wins = cfg.game ? [cfg.game] : [...ARENA_GAMES]
+  const q: Record<Exclude<QuestMetric, 'seri'>, ReturnType<typeof sql>> = {
     tahmin: sql`SELECT count(*) AS n FROM league_picks WHERE user_id = ${userId} AND created_at >= ${WEEK_START}`,
     oyun: sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND mode <> 'odul' AND game <> 'turnuva' AND mode <> 'admin' AND created_at >= ${WEEK_START}`,
+    'oyun-tek': sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND game = ${cfg.game} AND ${PLAYED}`,
+    'oyun-grup': games.length ? sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND game IN ${games} AND ${PLAYED}` : sql`SELECT 0 AS n`,
+    galibiyet: sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND game IN ${wins} AND result = 'win' AND ${PLAYED}`,
     gorev: sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND mode = 'odul' AND game = 'gorev' AND created_at >= ${WEEK_START}`,
     sohbet: sql`SELECT count(*) AS n FROM tg_chat_messages WHERE user_id = ${userId} AND created_at >= ${WEEK_START}`,
     dakika: sql`SELECT count(*) AS n FROM kp_events WHERE user_id = ${userId} AND source = 'sure' AND created_at >= ${WEEK_START}`,
-  }[metric]
-  const [r] = await rows<{ n: string }>(q)
+    sponsor: sql`SELECT count(DISTINCT site_id || ':' || (created_at AT TIME ZONE 'Europe/Istanbul')::date::text) AS n FROM link_clicks
+      WHERE user_id = ${userId} AND created_at >= ${WEEK_START}`,
+    davet: sql`SELECT count(*) AS n FROM referrals WHERE referrer_id = ${userId} AND rewarded_at >= ${WEEK_START}`,
+    market: sql`SELECT count(*) AS n FROM market_requests WHERE user_id = ${userId} AND status <> 'reddedildi' AND created_at >= ${WEEK_START}`,
+    turnuva: sql`SELECT count(*) AS n FROM tournament_entries WHERE user_id = ${userId} AND created_at >= ${WEEK_START}`,
+  }
+  const [r] = await rows<{ n: string }>(q[metric])
   return Number(r?.n ?? 0)
+}
+
+/** What the member has to do, as it reads after the target number: "Tavla oyunu", "galibiyet", "spor oyunu". */
+export function questUnit(cfg: Pick<WeeklyQuestConfig, 'metric' | 'game' | 'group'>): string {
+  const metric = QUEST_METRICS.find((m) => m.id === cfg.metric)
+  const title = isArenaGame(cfg.game) ? ARENA_META[cfg.game].title : ''
+  if (cfg.metric === 'oyun-tek' && title) return `${title} oyunu`
+  if (cfg.metric === 'galibiyet' && title) return `${title} galibiyeti`
+  if (cfg.metric === 'oyun-grup') return QUEST_GROUPS.find((g) => g.id === cfg.group)?.unit ?? 'oyun'
+  return metric?.unit ?? ''
+}
+
+/** Extra KP and KC on top of the badge. The week is part of the ref, so a second call in the same week pays nothing. */
+async function payQuestExtra(userId: string, period: string, cfg: WeeklyQuestConfig) {
+  if (cfg.kp <= 0 && cfg.coin <= 0) return
+  const { roleBlocks } = await import('@/lib/kanka-puan')
+  if (await roleBlocks(userId, 'kp')) return
+  await rows(sql`ALTER TABLE kp_events ADD COLUMN IF NOT EXISTS coins int NOT NULL DEFAULT 0`)
+  const paid = await rows(sql`INSERT INTO kp_events (user_id, source, points, coins, ref, note)
+    VALUES (${userId}, 'kampanya', ${cfg.kp}, ${cfg.coin}, ${period}, ${`Haftalık görev: ${cfg.title}`.slice(0, 120)}) ON CONFLICT DO NOTHING RETURNING id`)
+  if (!paid.length || cfg.coin <= 0) return
+  const { credit } = await import('@/lib/member')
+  await credit(userId, cfg.coin, 'Haftalık görev ödülü')
 }
 
 export type WeeklyQuest = {

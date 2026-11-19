@@ -41,7 +41,7 @@ const MARKET: Record<string, string> = { beklemede: 'Bekliyor', onaylandi: 'Onay
 
 export type ActivityTab = 'oyunlar' | 'islemler' | 'odul'
 
-type RoleOption = { id: string; name: string; staff: boolean }
+type RoleOption = { id: string; name: string; summary: string }
 
 export function MemberActivityTabs({
   tab,
@@ -288,13 +288,13 @@ function RewardsTab({
               {roles.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
-                  {r.staff ? ' (görevli)' : ''}
+                  {r.summary ? ` (${r.summary})` : ''}
                 </option>
               ))}
             </select>
-            {nextRole?.staff && (
+            {nextRole && (
               <p className="text-xs leading-relaxed text-muted-foreground">
-                Görevli rolü: bu üye Kanka Puan kazanmaz, sıralamada görünmez, marketten alışveriş yapamaz ve etkinliklere katılamaz.
+                {nextRole.summary ? `Bu rolün etkisi: ${nextRole.summary}.` : 'Bu rol sadece adın görünümünü değiştirir; üye puan kazanmaya, alışverişe ve etkinliklere devam eder.'}
               </p>
             )}
             <div className="flex flex-wrap gap-2">
@@ -304,7 +304,7 @@ function RewardsTab({
                 onClick={() =>
                   confirmed(
                     `${currentRole ? `Üyenin şu anki "${currentRole.name}" rolü kalkar, yerine "${nextRole?.name ?? ''}" verilir.` : `Üyeye "${nextRole?.name ?? ''}" rolü verilir.`}${
-                      nextRole?.staff ? ' Görevli rolüyle Kanka Puan kazanamaz, alışveriş yapamaz ve etkinliklere katılamaz.' : ''
+                      nextRole?.summary ? ` Bu rolün etkisi: ${nextRole.summary}.` : ''
                     } Onaylıyor musun?`,
                     () => run(() => memberRoleAction(userId, pickedRole), () => {}),
                   )

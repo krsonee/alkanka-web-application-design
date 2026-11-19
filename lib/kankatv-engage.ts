@@ -1,6 +1,6 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
-import { ensureKp, isRoleHolder } from '@/lib/kanka-puan'
+import { ensureKp, roleBlocks } from '@/lib/kanka-puan'
 import { credit } from '@/lib/member'
 import { trDay } from '@/lib/task-period'
 import { getGameSnapshot, getLiveFootball, type LiveGame } from '@/lib/kankatv'
@@ -152,7 +152,7 @@ export async function tickWatch(userId: string): Promise<TvWatchStatus> {
   if (!cfg.watch.enabled) return watchStatus(userId, cfg)
   await rows(sql`INSERT INTO tv_watch_ticks (user_id, minute) VALUES (${userId}, date_trunc('minute', now())) ON CONFLICT DO NOTHING`)
   const status = await watchStatus(userId, cfg)
-  if (cfg.watch.coin <= 0 || (await isRoleHolder(userId))) return status
+  if (cfg.watch.coin <= 0 || (await roleBlocks(userId, 'events'))) return status
   const today = trDay()
   const steps = Math.floor(status.minutes / cfg.watch.minutes)
   const maxSteps = cfg.watch.dailyCap > 0 ? Math.floor(cfg.watch.dailyCap / cfg.watch.coin) : steps
@@ -202,7 +202,7 @@ export async function playHalftime(userId: string, gameId: number) {
   const game = (await halftimeGames(userId)).find((g) => g.gameId === gameId)
   if (!game) throw new Error('Bu maç şu an devre arasında değil')
   if (game.played) throw new Error('Bu maçın kartını zaten kazıdın')
-  if (await isRoleHolder(userId)) throw new Error('Yetkili hesaplar devre arası ödülü alamaz')
+  if (await roleBlocks(userId, 'events')) throw new Error('Bu rolle devre arası ödülü alınamıyor')
   const { boosted } = await import('@/lib/boosts')
   const coin = await boosted('kankatv', luckyCoin(cfg.halftime.min, cfg.halftime.max))
   const inserted = await rows(sql`INSERT INTO tv_halftime_plays (user_id, game_id, coin) VALUES (${userId}, ${gameId}, ${coin})
@@ -236,7 +236,7 @@ export async function payWeeklyWatchers() {
   let rank = 0
   for (const row of list) {
     if (rank >= cfg.weekly.prizes.length) break
-    if (await isRoleHolder(row.userId)) continue
+    if (await roleBlocks(row.userId, 'events')) continue
     const prize = cfg.weekly.prizes[rank]
     rank++
     if (await payOnce(row.userId, 'kankatv-hafta', `week:${weekStart}:${rank}`, prize, `Haftanın İzleyicisi #${rank} (${row.minutes} dk)`)) paid++
@@ -509,7 +509,7 @@ async function openGoalChest(cfg: TvConfig, g: LiveGame) {
   const { boosted } = await import('@/lib/boosts')
   let paid = 0
   for (const w of watchers) {
-    if (await isRoleHolder(w.user_id)) continue
+    if (await roleBlocks(w.user_id, 'events')) continue
     const coin = await boosted('kankatv', luckyCoin(cfg.goalChest.min, cfg.goalChest.max))
     const ref = `${today}:${g.id}:${g.home.score}-${g.away.score}`
     if (await payOnce(w.user_id, 'kankatv-sandik', ref, coin, `Gol sandığı · ${g.home.name} ${g.home.score}-${g.away.score} ${g.away.name}`)) paid++

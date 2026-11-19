@@ -1,6 +1,6 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
-import { ensureKp, isRoleHolder } from '@/lib/kanka-puan'
+import { ensureKp, roleBlocks } from '@/lib/kanka-puan'
 import { publicRankName } from '@/lib/kanka-puan-shared'
 import { credit } from '@/lib/member'
 import { ensureTasks } from '@/lib/tasks'
@@ -99,7 +99,7 @@ export async function tickOnline(userId: string): Promise<OnlineStatus> {
   const minutes = Math.max(0, Math.floor((new Date(s.last_seen).getTime() - started.getTime()) / 60000))
   const hours = Math.min(Math.floor(minutes / 60), MAX_ONLINE_HOURS)
   const granted: OnlineGrant[] = []
-  if (hours >= 1 && !(await isRoleHolder(userId))) {
+  if (hours >= 1 && !(await roleBlocks(userId, 'kp'))) {
     const sessionKey = started.getTime().toString(36)
     // Pings arrive every minute, so only the current and previous hour can still be unpaid.
     for (const h of [hours - 1, hours]) {

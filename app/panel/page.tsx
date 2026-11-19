@@ -504,12 +504,12 @@ async function marketPanel(themesHere: boolean) {
 }
 
 async function kpPanel() {
-  const [cfg, badges, awards, board, online, ticker, quest, questWinners, boosts, raffles] = await Promise.all([getKpConfig(), listSpecialBadges({ includeInactive: true }), recentAwards(), leaderboard(50), getOnlineConfig(), getTickerConfig(), getQuestConfig(), questWinnersThisWeek(), getBoostConfig(), recentRaffles().catch(miss([]))])
+  const [cfg, badges, awards, board, online, ticker, quest, questWinners, boosts, raffles, sites] = await Promise.all([getKpConfig(), listSpecialBadges({ includeInactive: true }), recentAwards(), leaderboard(50), getOnlineConfig(), getTickerConfig(), getQuestConfig(), questWinnersThisWeek(), getBoostConfig(), recentRaffles().catch(miss([])), listSites().catch(miss([]))])
   return (
     <div className="flex flex-col gap-10">
       <KpManager levels={cfg.levels} rules={cfg.rules} badges={badges} awards={awards} board={board} autoLabels={AUTO_LABELS} online={online} ticker={ticker} quest={quest} questWinners={questWinners} />
-      <BadgeRaffle badges={badges.map((b) => ({ id: b.id, name: b.name, holders: b.holders }))} recent={raffles} />
-      <BoostManager initial={boosts} />
+      <BadgeRaffle badges={badges.map((b) => ({ id: b.id, name: b.name, holders: b.holders, role: Boolean(b.roleStyle) }))} recent={raffles} />
+      <BoostManager initial={boosts} badges={badges.map((b) => ({ id: b.id, name: b.name }))} sites={sites.map((s) => ({ id: String(s.id), name: s.name }))} />
     </div>
   )
 }

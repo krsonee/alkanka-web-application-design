@@ -3,7 +3,10 @@ import { rows, sql } from '@/lib/db'
 import { ensureCommunity } from '@/lib/community'
 import { wholeInRange } from '@/lib/drift'
 import { SPRINT_MULTIPLIER, sprintState } from '@/lib/sprint'
-import { BADGE_ICONS, BADGE_TIERS, DEFAULT_LEVELS, DEFAULT_RULES, ROLE_STYLES, publicRankName, type BadgeTier, type LevelDef, type MemberRole, type PointRules } from '@/lib/kanka-puan-shared'
+import {
+  BADGE_ICONS, BADGE_TIERS, DEFAULT_LEVELS, DEFAULT_RULES, NO_ROLE_LIMITS, ROLE_STYLES, publicRankName,
+  type BadgeTier, type LevelDef, type MemberRole, type PointRules, type RoleLimit, type RoleLimits,
+} from '@/lib/kanka-puan-shared'
 
 export * from '@/lib/kanka-puan-shared'
 
@@ -56,6 +59,16 @@ export const ROLE_BADGES = [
 
 export const ROLE_BADGE_IDS: readonly string[] = ROLE_BADGES.map((b) => b.id)
 
+let limitColumns = false
+
+/** Public pages read rankings without running the setup, so the split limit columns may not exist yet right after a deploy. */
+async function hasLimitColumns() {
+  if (limitColumns) return true
+  const r = await rows(sql`SELECT 1 FROM information_schema.columns WHERE table_name = 'kp_badges' AND column_name = 'role_no_events'`)
+  limitColumns = r.length > 0
+  return limitColumns
+}
+
 let ready: Promise<unknown> | null = null
 export function ensureKp() {
   ready ??= (async () => {
@@ -92,6 +105,15 @@ export function ensureKp() {
       await rows(sql`UPDATE kp_badges SET role_staff = true, role_style = CASE id WHEN 'moderator' THEN 'moderator' ELSE 'sponsor' END
         WHERE id IN ('moderator', 'sponsor-destek')`)
     }
+    await rows(sql`ALTER TABLE kp_badges ADD COLUMN IF NOT EXISTS role_no_kp boolean NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS role_hidden boolean NOT NULL DEFAULT false, ADD COLUMN IF NOT EXISTS role_no_market boolean NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS role_no_events boolean NOT NULL DEFAULT false`)
+    // The single staff mark used to switch all four off at once. Roles that had it keep every limit, so nothing changes for them.
+    const limits = await rows(sql`INSERT INTO kp_settings (key, value) VALUES ('role_limits_seeded', 'true'::jsonb) ON CONFLICT DO NOTHING RETURNING key`)
+    if (limits.length) {
+      await rows(sql`UPDATE kp_badges SET role_no_kp = true, role_hidden = true, role_no_market = true, role_no_events = true WHERE role_staff`)
+    }
+    limitColumns = true
     const perks = await rows(sql`INSERT INTO kp_settings (key, value) VALUES ('badge_perks_seeded', 'true'::jsonb) ON CONFLICT DO NOTHING RETURNING key`)
     if (perks.length) {
       await rows(sql`UPDATE kp_badges SET perk_pct = CASE tier WHEN 'efsane' THEN 10 WHEN 'elmas' THEN 5 ELSE 3 END
@@ -190,12 +212,15 @@ function periodStart(period: RankPeriod) {
 type Window = { since: ReturnType<typeof sql>; until: ReturnType<typeof sql> }
 const NO_END = sql`'infinity'::timestamptz`
 
-async function totals(rules: PointRules, userId: string | null, limit = 1, period: RankPeriod = 'tum', win?: Window) {
+/** `ranking` is for lists shown to everyone: it also leaves out roles that only hide the member from rankings. */
+async function totals(rules: PointRules, userId: string | null, limit = 1, period: RankPeriod = 'tum', win?: Window, ranking = false) {
   const since = win?.since ?? periodStart(period)
   const until = win?.until ?? NO_END
   const [chat, tg, awards] = await Promise.all([tableExists('tg_chat_messages'), tableExists('tg_links'), tableExists('kp_awards')])
+  const split = awards && (await hasLimitColumns())
+  const left = !split ? sql`role_staff` : ranking ? sql`role_no_kp OR role_hidden` : sql`role_no_kp`
   const notRoleHolder = awards
-    ? sql`AND NOT EXISTS (SELECT 1 FROM kp_awards ra WHERE ra.user_id = ids.user_id AND ra.badge_id IN (SELECT id FROM kp_badges WHERE role_staff))`
+    ? sql`AND NOT EXISTS (SELECT 1 FROM kp_awards ra WHERE ra.user_id = ids.user_id AND ra.badge_id IN (SELECT id FROM kp_badges WHERE ${left}))`
     : sql``
   const chatCte = chat
     ? sql`SELECT user_id, sum(least(n, ${rules.chatDailyCap}))::bigint AS v FROM (
@@ -243,10 +268,10 @@ async function totals(rules: PointRules, userId: string | null, limit = 1, perio
 
 /** Totals for a window where activity after `sprintSince` counts SPRINT_MULTIPLIER times. */
 async function rankedWindow(rules: PointRules, limit: number, win: Window, sprintSince: ReturnType<typeof sql> | null) {
-  if (!sprintSince) return totals(rules, null, limit, 'tum', win)
+  if (!sprintSince) return totals(rules, null, limit, 'tum', win, true)
   const [base, sprint] = await Promise.all([
-    totals(rules, null, Math.max(limit, 1000), 'tum', win),
-    totals(rules, null, 5000, 'tum', { since: sprintSince, until: win.until }),
+    totals(rules, null, Math.max(limit, 1000), 'tum', win, true),
+    totals(rules, null, 5000, 'tum', { since: sprintSince, until: win.until }, true),
   ])
   const extra = new Map(sprint.map((s) => [s.userId, Math.floor(s.total * (SPRINT_MULTIPLIER - 1))]))
   return base
@@ -268,7 +293,7 @@ export async function memberLevel(userId: string): Promise<{ level: number; name
   const cfg = await getKpConfig()
   const [row] = await totals(cfg.rules, userId)
   const names = cfg.levels.map((l) => l.name)
-  if (!row && (await isRoleHolder(userId))) return { level: names.length, names }
+  if (!row && (await roleBlocks(userId, 'kp'))) return { level: names.length, names }
   return { level: levelFor(cfg.levels, row?.total ?? 0).index + 1, names }
 }
 
@@ -381,7 +406,7 @@ export async function leaderboard(limit = 20, period: RankPeriod = 'tum', opts?:
   const sprintOn = period === 'hafta' && sprintState().active
   const raw = sprintOn
     ? await rankedWindow(cfg.rules, limit, { since: periodStart('hafta'), until: NO_END }, periodStart('gun'))
-    : await totals(cfg.rules, null, limit, period)
+    : await totals(cfg.rules, null, limit, period, undefined, true)
   const list = raw.filter((l) => l.total > 0)
   if (!list.length) return []
   let counts: { user_id: string; n: string }[] = []
@@ -446,12 +471,29 @@ export async function isRoleHolder(userId: string): Promise<boolean> {
   return r.length > 0
 }
 
+/** What the member's role switches off. A member without a role, or with a role that only changes the name's look, has no limit. */
+export async function roleLimits(userId: string): Promise<RoleLimits> {
+  if (!(await tableExists('kp_awards'))) return NO_ROLE_LIMITS
+  if (!(await hasLimitColumns())) {
+    const staff = await isRoleHolder(userId)
+    return { kp: staff, rank: staff, market: staff, events: staff }
+  }
+  const [r] = await rows<Record<RoleLimit, boolean | null>>(sql`SELECT bool_or(b.role_no_kp) AS kp, bool_or(b.role_hidden) AS rank,
+      bool_or(b.role_no_market) AS market, bool_or(b.role_no_events) AS events
+    FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id WHERE a.user_id = ${userId}`)
+  return { kp: Boolean(r?.kp), rank: Boolean(r?.rank), market: Boolean(r?.market), events: Boolean(r?.events) }
+}
+
+export async function roleBlocks(userId: string, limit: RoleLimit): Promise<boolean> {
+  return (await roleLimits(userId))[limit]
+}
+
 // --- Time on site --------------------------------------------------------
 
 /** Credits one minute of active time. The minute bucket makes repeated or parallel pings harmless. */
 export async function pingActive(userId: string) {
   const cfg = await getKpConfig()
-  if (cfg.rules.minute > 0 && !(await isRoleHolder(userId))) {
+  if (cfg.rules.minute > 0 && !(await roleBlocks(userId, 'kp'))) {
     const { boosted, onFirstMinuteOfDay } = await import('@/lib/boosts')
     const minute = await boosted('sure', cfg.rules.minute)
     const [inserted] = await rows<{ first: boolean }>(sql`INSERT INTO kp_events (user_id, source, points, ref)
@@ -560,9 +602,10 @@ export async function deleteSpecialBadge(id: string) {
 
 // --- Roles ---------------------------------------------------------------
 
-export type RoleDef = { id: string; name: string; icon: string; style: string; staff: boolean; builtIn: boolean; holders: number }
+export type RoleDef = { id: string; name: string; icon: string; style: string; staff: boolean; limits: RoleLimits; builtIn: boolean; holders: number }
 
-export type RoleInput = { id?: string; name: string; icon: string; style: string; staff: boolean }
+/** Without `limits` the role is saved the old way: the staff mark switches all four off. */
+export type RoleInput = { id?: string; name: string; icon: string; style: string; staff: boolean; limits?: Partial<RoleLimits> }
 
 let roleCache: { at: number; data: Record<string, MemberRole> } | null = null
 
@@ -574,7 +617,7 @@ export async function isRoleBadge(id: string): Promise<boolean> {
 
 export async function listRoles(): Promise<RoleDef[]> {
   await ensureKp()
-  const r = await rows(sql`SELECT b.id, b.name, b.icon, b.role_style, b.role_staff,
+  const r = await rows(sql`SELECT b.id, b.name, b.icon, b.role_style, b.role_staff, b.role_no_kp, b.role_hidden, b.role_no_market, b.role_no_events,
       (SELECT count(DISTINCT user_id) FROM kp_awards a WHERE a.badge_id = b.id) AS holders
     FROM kp_badges b WHERE b.role_style IS NOT NULL ORDER BY b.sort, b.created_at`)
   return r.map((x) => ({
@@ -583,6 +626,7 @@ export async function listRoles(): Promise<RoleDef[]> {
     icon: String(x.icon),
     style: String(x.role_style),
     staff: Boolean(x.role_staff),
+    limits: { kp: Boolean(x.role_no_kp), rank: Boolean(x.role_hidden), market: Boolean(x.role_no_market), events: Boolean(x.role_no_events) },
     builtIn: ROLE_BADGE_IDS.includes(String(x.id)),
     holders: Number(x.holders ?? 0),
   }))
@@ -603,18 +647,24 @@ export async function saveRole(input: RoleInput) {
   if (!BADGE_ICONS.includes(input.icon)) throw new Error('Geçersiz simge.')
   if (!ROLE_STYLES.some((s) => s.id === input.style)) throw new Error('Geçersiz renk.')
   const staff = Boolean(input.staff)
+  const on = (limit: RoleLimit) => (input.limits ? Boolean(input.limits[limit]) : staff)
+  const limits: RoleLimits = { kp: on('kp'), rank: on('rank'), market: on('market'), events: on('events') }
   if (input.id) {
-    const r = await rows(sql`UPDATE kp_badges SET name = ${name}, icon = ${input.icon}, role_style = ${input.style}, role_staff = ${staff}
+    const r = await rows(sql`UPDATE kp_badges SET name = ${name}, icon = ${input.icon}, role_style = ${input.style}, role_staff = ${staff},
+        role_no_kp = ${limits.kp}, role_hidden = ${limits.rank}, role_no_market = ${limits.market}, role_no_events = ${limits.events}
       WHERE id = ${input.id} AND role_style IS NOT NULL RETURNING id`)
     if (!r.length) throw new Error('Rol bulunamadı.')
   } else {
     const id = `rol-${slug(name) || Date.now()}`
-    const r = await rows(sql`INSERT INTO kp_badges (id, name, description, icon, tier, bonus, auto, active, perk_pct, sort, role_style, role_staff)
-      VALUES (${id}, ${name}, ${`AL KANKA ${name} ekibi üyesi.`}, ${input.icon}, 'elmas', 0, NULL, true, 0, 900, ${input.style}, ${staff})
+    const r = await rows(sql`INSERT INTO kp_badges (id, name, description, icon, tier, bonus, auto, active, perk_pct, sort, role_style, role_staff,
+        role_no_kp, role_hidden, role_no_market, role_no_events)
+      VALUES (${id}, ${name}, ${`AL KANKA ${name} ekibi üyesi.`}, ${input.icon}, 'elmas', 0, NULL, true, 0, 900, ${input.style}, ${staff},
+        ${limits.kp}, ${limits.rank}, ${limits.market}, ${limits.events})
       ON CONFLICT DO NOTHING RETURNING id`)
     if (!r.length) throw new Error('Bu isimde bir rol zaten var.')
   }
   roleCache = null
+  levelCache = null
 }
 
 /** Removes a custom role; everyone holding it loses it. The two built-in staff roles stay. */

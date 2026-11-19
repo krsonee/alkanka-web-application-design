@@ -20,19 +20,47 @@ export type PointRules = {
   streak30: number
 }
 
-export type QuestMetric = 'tahmin' | 'oyun' | 'gorev' | 'sohbet' | 'dakika'
+export type QuestMetric =
+  | 'tahmin' | 'oyun' | 'oyun-tek' | 'oyun-grup' | 'galibiyet' | 'gorev' | 'sohbet' | 'dakika' | 'seri' | 'sponsor' | 'davet' | 'market' | 'turnuva'
 
-export const QUEST_METRICS: { id: QuestMetric; label: string; unit: string }[] = [
-  { id: 'tahmin', label: 'Tahmin ligi tahmini', unit: 'tahmin' },
-  { id: 'oyun', label: 'Oynanan oyun', unit: 'oyun' },
-  { id: 'gorev', label: 'Tamamlanan görev', unit: 'görev' },
-  { id: 'sohbet', label: 'Sohbet mesajı', unit: 'mesaj' },
-  { id: 'dakika', label: 'Sitede geçirilen dakika', unit: 'dakika' },
+/** `pick` names the extra choice the metric needs; `max` is the most a week can hold. */
+export const QUEST_METRICS: { id: QuestMetric; label: string; unit: string; hint: string; pick?: 'game' | 'group' | 'game-optional'; max?: number }[] = [
+  { id: 'tahmin', label: 'Tahmin ligi tahmini', unit: 'tahmin', hint: 'Bu hafta tahmin ligine yazılan her tahmin sayılır.' },
+  { id: 'oyun', label: 'Oynanan oyun (hepsi)', unit: 'oyun', hint: 'Bu hafta biten her oyun sayılır.' },
+  { id: 'oyun-tek', label: 'Belirli bir oyun', unit: 'oyun', hint: 'Sadece seçtiğin oyunda biten eller sayılır.', pick: 'game' },
+  { id: 'oyun-grup', label: 'Oyun grubu', unit: 'oyun', hint: 'Seçtiğin gruptaki oyunların hepsi birlikte sayılır.', pick: 'group' },
+  { id: 'galibiyet', label: 'Galibiyet', unit: 'galibiyet', hint: 'Kazanılan oyunlar sayılır. Oyun seçersen sadece o oyundaki galibiyetler.', pick: 'game-optional' },
+  { id: 'gorev', label: 'Tamamlanan görev', unit: 'görev', hint: 'Görevler sayfasında ödülü alınan her görev sayılır.' },
+  { id: 'sohbet', label: 'Sohbet mesajı', unit: 'mesaj', hint: 'Sohbete yazılan her mesaj sayılır.' },
+  { id: 'dakika', label: 'Sitede geçirilen dakika', unit: 'dakika', hint: 'Sekme açık ve aktifken geçen dakikalar sayılır.' },
+  { id: 'seri', label: 'Üst üste gün', unit: 'gün üst üste giriş', hint: 'Bu hafta ara vermeden siteye gelinen en uzun gün sayısı. En fazla 7.', max: 7 },
+  { id: 'sponsor', label: 'Sponsor ziyareti', unit: 'sponsor ziyareti', hint: 'Sponsor linkine tıklama. Aynı sponsor aynı gün bir kez sayılır.' },
+  { id: 'davet', label: 'Arkadaş daveti', unit: 'arkadaş daveti', hint: 'Bu hafta davet ödülü onaylanan her arkadaş sayılır.' },
+  { id: 'market', label: 'Market alışverişi', unit: 'market alışverişi', hint: 'Marketten alınan her ürün sayılır; reddedilen talep sayılmaz.' },
+  { id: 'turnuva', label: 'Turnuva katılımı', unit: 'turnuva kaydı', hint: 'Bu hafta kaydolunan her turnuva sayılır; kayıttan ayrılırsa sayılmaz.' },
 ]
 
-export type WeeklyQuestConfig = { enabled: boolean; title: string; badgeId: string; metric: QuestMetric; target: number }
+export const QUEST_GROUPS: { id: string; label: string; unit: string; games: string[] }[] = [
+  { id: 'masa', label: 'Kâğıt ve taş oyunları (Tavla, Okey, 101 Okey, Batak, Pişti, Papaz, Jakopoly)', unit: 'kâğıt ya da taş oyunu', games: ['tavla', 'okey', 'okey101', 'batak', 'pisti', 'papaz', 'monopoly'] },
+  { id: 'spor', label: 'Spor oyunları (Bilardo, Kafa Topu, Kafa Basketbolu)', unit: 'spor oyunu', games: ['bilardo', 'kafa-topu', 'kafa-basketbolu'] },
+  { id: 'kasa', label: 'Kasa oyunları (Blackjack, Rulet)', unit: 'kasa oyunu', games: ['blackjack', 'rulet'] },
+]
 
-export const DEFAULT_QUEST: WeeklyQuestConfig = { enabled: false, title: 'Hafta Kâhini', badgeId: '', metric: 'tahmin', target: 10 }
+export type WeeklyQuestConfig = {
+  enabled: boolean
+  title: string
+  badgeId: string
+  metric: QuestMetric
+  target: number
+  /** Game id for "belirli bir oyun"; optional for "galibiyet". */
+  game: string
+  group: string
+  /** Paid once on top of the badge and its own KP bonus. */
+  kp: number
+  coin: number
+}
+
+export const DEFAULT_QUEST: WeeklyQuestConfig = { enabled: false, title: 'Hafta Kâhini', badgeId: '', metric: 'tahmin', target: 10, game: '', group: 'masa', kp: 0, coin: 0 }
 
 export const DEFAULT_RULES: PointRules = {
   minute: 1,
@@ -110,6 +138,32 @@ export const ROLE_STYLES = [
   { id: 'elmas', label: 'Mavi' },
   { id: 'bronz', label: 'Bronz' },
 ] as const
+
+/** What a role switches off for the members holding it. Each one is set on its own, apart from the staff mark. */
+export type RoleLimit = 'kp' | 'rank' | 'market' | 'events'
+
+export type RoleLimits = Record<RoleLimit, boolean>
+
+export const NO_ROLE_LIMITS: RoleLimits = { kp: false, rank: false, market: false, events: false }
+
+export const ROLE_STAFF_HINT = 'Sohbette susturulamaz; siteden yazdığı mesajda adının yanında rolü yazar.'
+
+export const ROLE_LIMITS: { id: RoleLimit; label: string; short: string; hint: string }[] = [
+  { id: 'kp', label: 'KP kazanmaz', short: 'KP yok', hint: 'Kanka Puanı sıfır görünür; sitede geçen dakika ve online kalma ödülü işlemez. Seviye yerine rolüyle görünür.' },
+  { id: 'rank', label: 'Sıralamada görünmez', short: 'Sıralama dışı', hint: 'Kanka Puan sıralamalarında (günlük, haftalık, aylık, tüm zamanlar) adı çıkmaz. Puanı ve seviyesi işlemeye devam eder.' },
+  { id: 'market', label: 'Marketten alamaz', short: 'Market kapalı', hint: 'Marketten ürün ya da sponsor ödülü alamaz.' },
+  {
+    id: 'events',
+    label: 'Etkinliklere katılamaz',
+    short: 'Etkinlik kapalı',
+    hint: 'KankaTV canlı etkinliklerine giremez, izleme coin’i, devre arası kartı, gol sandığı ve haftalık izleyici ödülü alamaz; tahmin ligi dönem ödülü de verilmez.',
+  },
+]
+
+/** "Görevli · KP yok · Market kapalı", or an empty string for a role that only changes how the name looks. */
+export function roleSummary(staff: boolean, limits: RoleLimits): string {
+  return [staff ? 'Görevli' : '', ...ROLE_LIMITS.filter((l) => limits[l.id]).map((l) => l.short)].filter(Boolean).join(' · ')
+}
 
 /** What the site shows next to a member who holds a role. */
 export type MemberRole = { name: string; style: string; icon: string }

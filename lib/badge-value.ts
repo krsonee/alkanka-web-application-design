@@ -1,6 +1,7 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { ensureKp, publicRankName, type BadgeTier } from '@/lib/kanka-puan'
+import { ALL_BADGES, MAX_RAFFLE_WINNERS, type RaffleRow } from '@/lib/badge-raffle-shared'
 
 export const MAX_PINS = 3
 
@@ -21,6 +22,7 @@ function ensure() {
     await rows(sql`CREATE TABLE IF NOT EXISTS kp_set_claims (set_id text NOT NULL, user_id text NOT NULL, claimed_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (set_id, user_id))`)
     await rows(sql`CREATE TABLE IF NOT EXISTS kp_raffles (id serial PRIMARY KEY, badge_id text NOT NULL, user_id text NOT NULL, prize int NOT NULL,
       note text, drawn_at timestamptz NOT NULL DEFAULT now())`)
+    await rows(sql`ALTER TABLE kp_raffles ADD COLUMN IF NOT EXISTS badge_label text`)
   })().catch((error) => {
     ready = null
     throw error
@@ -125,26 +127,73 @@ export async function getBadgeSets(userId: string | null): Promise<SetProgress[]
 
 // --- Badge-only raffle (RZ1) -----------------------------------------------
 
-export type RaffleRow = { id: number; badgeName: string; userName: string; prize: number; note: string | null; drawnAt: string }
+export type { RaffleRow }
 
-/** Picks one random holder of the badge and pays the prize in KP. */
-export async function drawBadgeRaffle(badgeId: string, prize: number, note: string) {
+/** Badges a raffle can draw from when "all badges" is chosen: every badge that is not a role. */
+const anyBadge = sql`SELECT id FROM kp_badges WHERE role_style IS NULL`
+
+/**
+ * Members holding at least one of the badges, each counted once however many of them they hold.
+ * A member whose role earns no KP is left out: the prize would never show on their account.
+ */
+function rafflePool(badgeIds: string[] | typeof ALL_BADGES) {
+  const wanted = badgeIds === ALL_BADGES ? sql`a.badge_id IN (${anyBadge})` : sql`a.badge_id IN ${badgeIds}`
+  return sql`SELECT a.user_id FROM kp_awards a WHERE ${wanted}
+    AND NOT EXISTS (SELECT 1 FROM kp_awards ra JOIN kp_badges rb ON rb.id = ra.badge_id WHERE ra.user_id = a.user_id AND rb.role_no_kp)
+    GROUP BY a.user_id`
+}
+
+function raffleBadges(input: string[] | typeof ALL_BADGES): string[] | typeof ALL_BADGES {
+  if (input === ALL_BADGES) return ALL_BADGES
+  const ids = [...new Set((Array.isArray(input) ? input : []).map(String).filter(Boolean))]
+  if (!ids.length) throw new Error('En az bir rozet seç.')
+  if (ids.length > 100) throw new Error('Tek çekilişte en fazla 100 rozet seçilebilir. Hepsi için "Tüm rozetler"i kullan.')
+  return ids
+}
+
+/** How many different members the chosen badges cover. */
+export async function rafflePoolSize(input: string[] | typeof ALL_BADGES): Promise<number> {
   await ensure()
-  const p = Math.floor(Number(prize))
-  if (!Number.isFinite(p) || p < 1 || p > 100000) throw new Error('Ödül 1 ile 100.000 KP arasında olmalı.')
-  const [winner] = await rows<{ user_id: string; name: string | null }>(sql`SELECT a.user_id, max(u.name) AS name FROM kp_awards a
-    LEFT JOIN public."user" u ON u.id = a.user_id WHERE a.badge_id = ${badgeId} GROUP BY a.user_id ORDER BY random() LIMIT 1`)
-  if (!winner) throw new Error('Bu rozetin henüz sahibi yok, çekiliş yapılamaz.')
-  const [row] = await rows<{ id: number }>(sql`INSERT INTO kp_raffles (badge_id, user_id, prize, note) VALUES (${badgeId}, ${winner.user_id}, ${p}, ${note.trim().slice(0, 120) || null}) RETURNING id`)
-  await rows(sql`INSERT INTO kp_events (user_id, source, points, ref, note)
-    VALUES (${winner.user_id}, 'admin', ${p}, ${`cekilis:${row.id}`}, ${note.trim().slice(0, 120) || 'Rozet çekilişi'}) ON CONFLICT DO NOTHING`)
-  return publicRankName(winner.name)
+  const [r] = await rows<{ n: string }>(sql`SELECT count(*) AS n FROM (${rafflePool(raffleBadges(input))}) p`)
+  return Number(r?.n ?? 0)
+}
+
+/**
+ * Draws `winners` different members from the holders of the chosen badges and pays each the prize in KP.
+ * The draw, its records and the payments are one statement: either every winner is paid or nobody is.
+ */
+export async function drawBadgeRaffle(input: string[] | typeof ALL_BADGES, prize: number, note: string, winners = 1): Promise<string[]> {
+  await ensure()
+  const badgeIds = raffleBadges(input)
+  const p = Number(prize)
+  if (!Number.isInteger(p) || p < 1 || p > 100000) throw new Error('Ödül 1 ile 100.000 KP arasında tam sayı olmalı.')
+  const n = Number(winners)
+  if (!Number.isInteger(n) || n < 1 || n > MAX_RAFFLE_WINNERS) throw new Error(`Kazanan sayısı 1 ile ${MAX_RAFFLE_WINNERS} arasında tam sayı olmalı.`)
+  const size = await rafflePoolSize(badgeIds)
+  if (!size) throw new Error('Seçtiğin rozetlerde ödül alabilecek üye yok, çekiliş yapılamaz.')
+  if (n > size) throw new Error(`Seçtiğin rozetlerde ${size} farklı üye var; ${n} kazanan seçilemez. Hiçbir şey ödenmedi.`)
+
+  let label: string | null = 'Tüm rozetler'
+  if (badgeIds !== ALL_BADGES) {
+    const names = await rows<{ id: string; name: string }>(sql`SELECT id, name FROM kp_badges WHERE id IN ${badgeIds}`)
+    if (names.length !== badgeIds.length) throw new Error('Seçtiğin rozetlerden biri artık yok. Sayfayı yenileyip tekrar dene.')
+    label = badgeIds.length === 1 ? null : names.map((x) => x.name).join(', ').slice(0, 200)
+  }
+  const key = badgeIds === ALL_BADGES ? ALL_BADGES : badgeIds.length === 1 ? badgeIds[0] : 'coklu'
+  const text = note.trim().slice(0, 120)
+  const won = await rows<{ name: string | null }>(sql`WITH picked AS (SELECT user_id FROM (${rafflePool(badgeIds)}) pool ORDER BY random() LIMIT ${n}),
+    drawn AS (INSERT INTO kp_raffles (badge_id, badge_label, user_id, prize, note)
+      SELECT ${key}, ${label}, user_id, ${p}, ${text || null} FROM picked RETURNING id, user_id),
+    paid AS (INSERT INTO kp_events (user_id, source, points, ref, note)
+      SELECT user_id, 'admin', ${p}, 'cekilis:' || id::text, ${text || 'Rozet çekilişi'} FROM drawn ON CONFLICT DO NOTHING RETURNING user_id)
+    SELECT u.name FROM drawn d LEFT JOIN public."user" u ON u.id = d.user_id ORDER BY d.id`)
+  return won.map((w) => publicRankName(w.name))
 }
 
 export async function recentRaffles(limit = 10): Promise<RaffleRow[]> {
   await ensure()
   const r = await rows<{ id: number; badge_name: string; name: string | null; prize: number; note: string | null; drawn_at: string }>(sql`
-    SELECT r.id, b.name AS badge_name, u.name, r.prize, r.note, r.drawn_at FROM kp_raffles r
-    JOIN kp_badges b ON b.id = r.badge_id LEFT JOIN public."user" u ON u.id = r.user_id ORDER BY r.drawn_at DESC LIMIT ${limit}`)
+    SELECT r.id, coalesce(r.badge_label, b.name, 'Silinmiş rozet') AS badge_name, u.name, r.prize, r.note, r.drawn_at FROM kp_raffles r
+    LEFT JOIN kp_badges b ON b.id = r.badge_id LEFT JOIN public."user" u ON u.id = r.user_id ORDER BY r.drawn_at DESC, r.id DESC LIMIT ${limit}`)
   return r.map((x) => ({ id: x.id, badgeName: x.badge_name, userName: publicRankName(x.name), prize: Number(x.prize), note: x.note, drawnAt: String(x.drawn_at) }))
 }

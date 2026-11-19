@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import { askConfirm } from '@/components/panel/confirm-dialog'
 import { deleteRoleAction, saveRoleAction, signupGateAction } from '@/app/panel/members-actions'
 import { ICONS, RoleChip } from '@/components/alkanka/kp/emblem'
-import { BADGE_ICONS, ROLE_STYLES } from '@/lib/kanka-puan-shared'
+import { BADGE_ICONS, NO_ROLE_LIMITS, ROLE_LIMITS, ROLE_STAFF_HINT, ROLE_STYLES, roleSummary } from '@/lib/kanka-puan-shared'
 import type { RoleDef } from '@/lib/kanka-puan'
 import type { SignupGate } from '@/lib/signup-gate'
 
@@ -127,7 +127,19 @@ function SignupCard({ gate }: { gate: SignupGate }) {
   )
 }
 
-const EMPTY = { id: '', name: '', style: 'moderator', icon: 'shield', staff: false }
+function RoleBox({ checked, onChange, label, hint }: { checked: boolean; onChange: (on: boolean) => void; label: string; hint: string }) {
+  return (
+    <label className="flex items-start gap-2 text-sm text-foreground">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="mt-0.5 size-4 shrink-0 accent-primary" />
+      <span className="flex flex-col gap-0.5">
+        {label}
+        <span className="text-xs leading-relaxed text-muted-foreground">{hint}</span>
+      </span>
+    </label>
+  )
+}
+
+const EMPTY = { id: '', name: '', style: 'moderator', icon: 'shield', staff: false, limits: NO_ROLE_LIMITS }
 
 function RolesCard({ roles, canRoles }: { roles: RoleDef[]; canRoles: boolean }) {
   const [busy, start] = useTransition()
@@ -157,14 +169,16 @@ function RolesCard({ roles, canRoles }: { roles: RoleDef[]; canRoles: boolean })
         {roles.map((r) => (
           <li key={r.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-background px-3 py-2">
             <RoleChip name={r.name} style={r.style} icon={r.icon} />
-            {r.staff && <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground">Görevli</span>}
+            {roleSummary(r.staff, r.limits) && (
+              <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground">{roleSummary(r.staff, r.limits)}</span>
+            )}
             <span className="ml-auto text-xs tabular-nums text-muted-foreground">{r.holders} üye</span>
             {canRoles && (
               <>
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => setForm({ id: r.id, name: r.name, style: r.style, icon: r.icon, staff: r.staff })}
+                  onClick={() => setForm({ id: r.id, name: r.name, style: r.style, icon: r.icon, staff: r.staff, limits: r.limits })}
                   aria-label={`${r.name} rolünü düzenle`}
                   title="Düzenle"
                   className="flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-40"
@@ -244,15 +258,20 @@ function RolesCard({ roles, canRoles }: { roles: RoleDef[]; canRoles: boolean })
               )
             })}
           </div>
-          <label className="flex items-start gap-2 text-sm text-foreground">
-            <input type="checkbox" checked={form.staff} onChange={(e) => setForm({ ...form, staff: e.target.checked })} className="mt-0.5 size-4 accent-primary" />
-            <span className="flex flex-col gap-0.5">
-              Görevli rolü
-              <span className="text-xs leading-relaxed text-muted-foreground">
-                İşaretliyse bu roldeki üye Kanka Puan kazanmaz, sıralamada görünmez, marketten alışveriş yapamaz ve etkinliklere katılamaz. Sadece görünüm için işaretsiz bırak.
-              </span>
-            </span>
-          </label>
+          <fieldset className="flex flex-col gap-2 rounded-lg border border-border p-3">
+            <legend className="px-1 text-xs font-semibold text-muted-foreground">Bu rol neyi değiştirir</legend>
+            <p className="text-xs leading-relaxed text-muted-foreground">Her kutu ayrıdır. Hiçbirini işaretlemezsen rol sadece adın görünümünü değiştirir.</p>
+            <RoleBox checked={form.staff} onChange={(staff) => setForm({ ...form, staff })} label="Görevli" hint={ROLE_STAFF_HINT} />
+            {ROLE_LIMITS.map((l) => (
+              <RoleBox
+                key={l.id}
+                checked={form.limits[l.id]}
+                onChange={(on) => setForm({ ...form, limits: { ...form.limits, [l.id]: on } })}
+                label={l.label}
+                hint={l.hint}
+              />
+            ))}
+          </fieldset>
           <div className="flex flex-wrap gap-2">
             <button type="submit" disabled={busy || form.name.trim().length < 2} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-40">
               {form.id ? 'Rolü kaydet' : 'Rol oluştur'}
