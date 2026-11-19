@@ -1,12 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { CalendarDays, Send, Swords, TrendingUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { listPulse, type Tournament } from '@/lib/tournaments-shared'
-import { JakoAvatar } from '../jako'
+import { ARENA_META, type ArenaGame } from '@/lib/arena'
+import { DUEL_TOURNAMENT_GAMES, TABLE_TOURNAMENT_GAMES, listPulse, type Tournament } from '@/lib/tournaments-shared'
 import { usePoints } from '../points-context'
 import { useTelegramUrl } from '../telegram-address'
 import { TournamentCard } from './tournament-card'
@@ -183,49 +184,81 @@ const HOW_IT_WORKS = [
   { title: 'Ödülünü al', text: 'Turnuva bitince ödül sıralamaya göre Kanka Coin olarak hesabına yüklenir.' },
 ]
 
-/** Shown while there is nothing to join or watch: what comes next, where it is announced, and how a tournament goes. */
+const TOURNAMENT_GAMES = [...DUEL_TOURNAMENT_GAMES, ...TABLE_TOURNAMENT_GAMES].filter((game): game is ArenaGame => game in ARENA_META)
+
+/** Shown while there is nothing to join or watch: what comes next, where it is announced, which games host tournaments, and how one goes. */
 function NoneOpen() {
   const telegramUrl = useTelegramUrl()
   return (
     <section aria-labelledby="turnuva-yok" className="@container overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="flex flex-col items-center gap-5 p-6 text-center @2xl:flex-row @2xl:gap-7 @2xl:p-8 @2xl:text-left">
-        <JakoAvatar pose="duyuru" size="lg" />
-        <div className="flex min-w-0 flex-1 flex-col items-center gap-3 @2xl:items-start">
-          <p className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-            <span aria-hidden="true" className="size-1.5 rounded-full bg-primary" />
+      <div className="flex flex-col @3xl:flex-row">
+        <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-4 p-6 @2xl:p-8">
+          <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary">
+            <span aria-hidden="true" className="h-px w-6 bg-primary" />
             Şu an açık turnuva yok
           </p>
-          <h2 id="turnuva-yok" className="font-display text-2xl font-bold uppercase leading-tight text-foreground text-balance @2xl:text-3xl">
+          <h2 id="turnuva-yok" className="font-display text-3xl font-bold uppercase leading-none text-foreground text-balance @2xl:text-4xl @5xl:text-5xl">
             Yeni turnuva yakında
           </h2>
-          <p className="max-w-xl text-sm leading-relaxed text-muted-foreground text-pretty">
-            Yeni bir turnuva açıldığında kayıtlar bu sayfada başlar ve Telegram kanalımızda duyurulur. O zamana kadar masalarda ısınabilirsin.
+          <p className="max-w-md leading-relaxed text-muted-foreground text-pretty @5xl:max-w-lg @5xl:text-lg">
+            Kayıtlar bu sayfada açılır, aynı anda Telegram kanalımızda duyurulur. O zamana kadar turnuva oyunlarında ısınabilirsin.
           </p>
-          <div className="flex w-full flex-col gap-2 pt-1 @md:w-auto @md:flex-row">
+          <div className="flex w-full flex-col gap-2 pt-1 @md:w-auto @md:flex-row @md:flex-wrap">
             <a
               href={telegramUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110"
+              className="flex items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-primary px-5 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110"
             >
               <Send className="size-4 shrink-0" aria-hidden="true" />
               Telegram&apos;da haber al
               <span className="sr-only"> (yeni sekmede açılır)</span>
             </a>
-            <Link href="/oyunlar" className="flex items-center justify-center rounded-xl border border-border px-5 py-3 text-sm font-bold uppercase tracking-wide text-foreground hover:bg-secondary">
-              Masalarda ısın
+            <Link href="/oyunlar" className="flex items-center justify-center whitespace-nowrap rounded-xl border border-border px-5 py-3 text-sm font-bold uppercase tracking-wide text-foreground hover:bg-secondary">
+              Tüm oyunlar
             </Link>
           </div>
         </div>
+
+        <div className="flex flex-col gap-3 border-t border-border bg-background/50 p-6 @3xl:w-[42%] @3xl:border-t-0 @3xl:border-l @5xl:w-[36rem]">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Turnuva açılan oyunlar</h3>
+          <ul className="grid grid-cols-3 gap-2">
+            {TOURNAMENT_GAMES.map((game) => (
+              <li key={game}>
+                <Link
+                  href={`/oyunlar/${game}`}
+                  className="group relative block aspect-[4/3] overflow-hidden rounded-xl bg-surface ring-1 ring-border transition hover:ring-primary @md:aspect-[2/1] @3xl:aspect-[4/3] @5xl:aspect-[3/2]"
+                >
+                  <Image
+                    src={ARENA_META[game].image || '/placeholder.svg'}
+                    alt=""
+                    fill
+                    sizes="(min-width: 768px) 180px, 33vw"
+                    className="object-cover object-[center_30%] transition-transform duration-300 group-hover:scale-105"
+                  />
+                  <span aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-transparent" />
+                  <span className="absolute inset-x-0 bottom-0 px-2 pb-1.5 text-xs font-bold leading-tight text-foreground">{ARENA_META[game].title}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
-      <ol aria-label="Turnuva nasıl işler" className="grid gap-px border-t border-border bg-border @2xl:grid-cols-3">
+
+      <ol aria-label="Turnuva nasıl işler" className="flex flex-col gap-5 border-t border-border p-6 @2xl:flex-row @2xl:gap-0 @2xl:px-8">
         {HOW_IT_WORKS.map((step, i) => (
-          <li key={step.title} className="flex gap-3 bg-card p-4 @2xl:p-5">
-            <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary font-display text-sm font-bold text-primary-foreground">
-              {i + 1}
-            </span>
-            <div className="flex min-w-0 flex-col gap-1">
-              <span className="text-sm font-bold text-foreground">{step.title}</span>
+          <li key={step.title} className="flex flex-1 gap-3 @2xl:flex-col">
+            <div className="flex items-center gap-3 self-start @2xl:self-auto">
+              <span
+                aria-hidden="true"
+                className="flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/50 bg-primary/10 font-display text-sm font-bold text-primary"
+              >
+                {i + 1}
+              </span>
+              {i < HOW_IT_WORKS.length - 1 && <span aria-hidden="true" className="hidden h-px flex-1 bg-border @2xl:mr-3 @2xl:block" />}
+            </div>
+            <div className="flex min-w-0 flex-col gap-1 @2xl:pr-8">
+              <span className="font-display text-base font-bold uppercase text-foreground">{step.title}</span>
               <span className="text-sm leading-relaxed text-muted-foreground text-pretty">{step.text}</span>
             </div>
           </li>
