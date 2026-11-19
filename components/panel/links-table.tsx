@@ -403,12 +403,12 @@ export function LinksTable({ report: initial, sites, siteUrl, editHrefs }: Props
             <thead className="bg-secondary text-xs">
               <tr>
                 <th scope="col" className="px-3 py-2 font-semibold text-muted-foreground">Link</th>
-                <th scope="col" className="hidden w-52 px-3 py-2 font-semibold text-muted-foreground md:table-cell xl:w-64">Sponsor ve hedef</th>
-                <th scope="col" className="hidden w-28 px-3 py-2 font-semibold text-muted-foreground lg:table-cell">Kaynak</th>
+                <th scope="col" className="hidden w-52 px-3 py-2 font-semibold text-muted-foreground md:table-cell xl:w-56">Sponsor ve hedef</th>
+                <th scope="col" className="hidden w-24 px-3 py-2 font-semibold text-muted-foreground lg:table-cell">Kaynak</th>
                 <SortHead id="clicks" label="Tıklama" sort={sort} onSort={onSort} className="w-24" />
                 <SortHead id="uniques" label="Tekil" sort={sort} onSort={onSort} className="hidden w-24 sm:table-cell" />
                 <SortHead id="signups" label="Kayıt" sort={sort} onSort={onSort} className="hidden w-24 sm:table-cell" />
-                <SortHead id="lastClick" label="Son tıklama" sort={sort} onSort={onSort} className="hidden w-40 lg:table-cell" />
+                <SortHead id="lastClick" label="Son tıklama" sort={sort} onSort={onSort} className="hidden w-36 lg:table-cell" />
                 <th scope="col" className="hidden w-28 px-3 py-2 sm:table-cell">
                   <span className="sr-only">İşlem</span>
                 </th>

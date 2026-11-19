@@ -2,8 +2,9 @@
 
 import { HideButton } from '@/components/panel/hide-button'
 import { ImageField } from '@/components/panel/image-field'
-import { useState, useTransition } from 'react'
-import { BarChart3, Eye, EyeOff, Link2, Loader2, Pencil, Plus } from 'lucide-react'
+import { useId, useState, useTransition, type ReactNode } from 'react'
+import { BarChart3, Eye, EyeOff, Link2, Loader2, Pencil, Plus, Save } from 'lucide-react'
+import { SideSheet } from '@/components/panel/side-sheet'
 import { cn } from '@/lib/utils'
 import { bulkSitesActiveAction, checkSiteLinksAction, reorderSitesAction, saveSiteAction, sponsorSummaryAction } from '@/app/panel/site-actions'
 import { askConfirm } from '@/components/panel/confirm-dialog'
@@ -138,7 +139,13 @@ export function SitesManager({ sites, today, legacyLogos = {} }: { sites: Sponso
   }
 
   const [editing, setEditing] = useState<SiteInput | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  function open(input: SiteInput) {
+    setFormError(null)
+    setEditing(input)
+  }
   const [pending, start] = useTransition()
   const order = useOrder(sites, (site) => String(site.id))
   const [sorting, startSort] = useTransition()
@@ -174,13 +181,16 @@ export function SitesManager({ sites, today, legacyLogos = {} }: { sites: Sponso
 
   function save(input: SiteInput) {
     if (!slugHasLetter(publicSlug(input.slug, input.name))) {
-      setMsg({ ok: false, text: SLUG_LETTER_ERROR })
+      setFormError(SLUG_LETTER_ERROR)
       return
     }
+    setFormError(null)
     start(async () => {
       const res = await saveSiteAction(input)
-      setMsg(res.ok ? { ok: true, text: res.message ?? 'Kaydedildi.' } : { ok: false, text: res.error })
-      if (res.ok) setEditing(null)
+      if (res.ok) {
+        setMsg({ ok: true, text: res.message ?? 'Kaydedildi.' })
+        setEditing(null)
+      } else setFormError(res.error)
     })
   }
 
@@ -195,7 +205,7 @@ export function SitesManager({ sites, today, legacyLogos = {} }: { sites: Sponso
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
-          onClick={() => setEditing({ ...EMPTY, sortOrder: sites.length })}
+          onClick={() => open({ ...EMPTY, sortOrder: sites.length })}
           className="flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground"
         >
           <Plus className="size-4" aria-hidden="true" />
@@ -242,9 +252,9 @@ export function SitesManager({ sites, today, legacyLogos = {} }: { sites: Sponso
           )}
         </div>
       )}
-      {editing && <SiteForm value={editing} pending={pending} onCancel={() => setEditing(null)} onSave={save} />}
+      {editing && <SiteForm key={editing.id ?? 'yeni'} value={editing} pending={pending} error={formError} onCancel={() => setEditing(null)} onSave={save} />}
       {sites.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Henüz sponsor yok. Formdan ekle.</p>
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Henüz sponsor yok. &quot;Yeni sponsor&quot; ile ekle.</p>
       ) : (
         <SortableList
           items={order.ordered}
@@ -303,7 +313,7 @@ export function SitesManager({ sites, today, legacyLogos = {} }: { sites: Sponso
                   Özet
                 </button>
                 <HideButton key={`${site.id}-${site.active}`} kind="sponsor" id={site.id} hidden={!site.active} label={site.name} />
-                <button type="button" aria-label={`${site.name} düzenle`} onClick={() => setEditing({ ...site, logoUrl: logoOf(site) })} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
+                <button type="button" aria-label={`${site.name} düzenle`} onClick={() => open({ ...site, logoUrl: logoOf(site) })} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
                   <Pencil className="size-4" aria-hidden="true" />
                 </button>
               </div>
@@ -343,17 +353,24 @@ function savedFrom(draft: SiteDraft): SiteInput {
   return { ...draft, rating: numberFrom(draft.rating), sortOrder: numberFrom(draft.sortOrder), dealFee: feeFrom(draft.dealFee) ?? 0 }
 }
 
+function Group({ children }: { children: ReactNode }) {
+  return <h3 className="border-t border-border pt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground first:border-t-0 first:pt-0 md:col-span-2">{children}</h3>
+}
+
 function SiteForm({
   value,
   pending,
+  error,
   onSave,
   onCancel,
 }: {
   value: SiteInput
   pending: boolean
+  error: string | null
   onSave: (value: SiteInput) => void
   onCancel: () => void
 }) {
+  const formId = useId()
   const [v, setV] = useState<SiteDraft>(() => draftFrom(value))
   const [slugError, setSlugError] = useState<string | null>(null)
   const [feeError, setFeeError] = useState<string | null>(null)
@@ -372,13 +389,35 @@ function SiteForm({
     onSave(savedFrom(v))
   }
   return (
+    <SideSheet
+      size="lg"
+      eyebrow={value.id ? 'Sponsor düzenle' : 'Sponsorlar'}
+      title={value.id ? value.name : 'Yeni sponsor'}
+      onClose={onCancel}
+      footer={
+        <>
+          <button form={formId} disabled={pending} className="flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50">
+            {pending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
+            {pending ? 'Kaydediliyor…' : value.id ? 'Kaydet' : 'Sponsoru ekle'}
+          </button>
+          {(error || slugError || feeError) && (
+            <p role="alert" className="min-w-0 flex-1 text-sm leading-relaxed text-destructive text-pretty">
+              {error || slugError || feeError}
+            </p>
+          )}
+        </>
+      }
+    >
     <form
+      id={formId}
+      data-no-guard
       onSubmit={(event) => {
         event.preventDefault()
         submit()
       }}
-      className="grid gap-4 rounded-xl border border-border bg-card p-4 md:grid-cols-2"
+      className="grid gap-4 md:grid-cols-2"
     >
+      <Group>Kimlik</Group>
       <Field label="Sponsor adı" value={v.name} onChange={(name) => set('name', name)} required />
       <Field
         label="Adres kısaltması"
@@ -402,6 +441,7 @@ function SiteForm({
           hint="Sponsor kartlarında baş harflerin yerine görünür. Kare ya da şeffaf arka planlı PNG/SVG en iyi sonucu verir; bilgisayardan yükle ya da link yapıştır."
         />
       </div>
+      <Group>Bonus ve çekim</Group>
       <Field label="Bonus satırı" value={v.bonusText} onChange={(bonusText) => set('bonusText', bonusText)} />
       <Field label="Bonus türü" value={v.bonusType} onChange={(bonusType) => set('bonusType', bonusType)} placeholder="Deneme, hoş geldin…" />
       <Field label="Çevrim" value={v.wagerText} onChange={(wagerText) => set('wagerText', wagerText)} />
@@ -414,9 +454,11 @@ function SiteForm({
         hint="Sayı ile yaz (ör. 15 dk, 2 saat). Sayı yoksa sitede gösterilmez."
         error={v.payout.trim() && !/\d/.test(v.payout) ? 'Çekim süresi bir sayı içermeli.' : null}
       />
+      <Group>Adresler</Group>
       <Field label="Site adresi" value={v.url} onChange={(url) => set('url', url)} placeholder="https://" />
       <Field label="Giriş adresi" value={v.entryUrl} onChange={(entryUrl) => set('entryUrl', entryUrl)} placeholder="https://" />
       <Field label="Alan adı" value={v.domain} onChange={(domain) => set('domain', domain)} placeholder="ornek.com" />
+      <Group>Rozet ve sıra</Group>
       <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
         Rozet
         <select value={v.badge} onChange={(event) => set('badge', event.target.value)} className={field}>
@@ -429,6 +471,7 @@ function SiteForm({
       </label>
       <Field label="Puan (5 üzerinden)" value={v.rating} onChange={(rating) => set('rating', rating)} inputMode="decimal" />
       <Field label="Sıra" value={v.sortOrder} onChange={(sortOrder) => set('sortOrder', sortOrder)} inputMode="numeric" />
+      <Group>Anlaşma</Group>
       <Field
         label="Anlaşma bitiş tarihi"
         type="date"
@@ -448,6 +491,7 @@ function SiteForm({
         hint="Sponsorun sana her ay ödediği sabit tutar. Özet ekranında kayıt başı maliyet bununla hesaplanır. Sitede görünmez."
         error={feeError}
       />
+      <Group>Ayrıcalıklar ve yayın</Group>
       <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground md:col-span-2">
         Ayrıcalıklar
         <textarea
@@ -466,15 +510,8 @@ function SiteForm({
         <input type="checkbox" checked={v.active} onChange={(event) => set('active', event.target.checked)} className="size-4 accent-primary" />
         Aktif
       </label>
-      <div className="flex flex-wrap gap-2 md:col-span-2">
-        <button type="button" disabled={pending} onClick={submit} className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">
-          {pending ? 'Kaydediliyor…' : 'Kaydet'}
-        </button>
-        <button type="button" onClick={onCancel} className="h-10 rounded-lg border border-border px-4 text-sm font-semibold text-foreground">
-          Vazgeç
-        </button>
-      </div>
     </form>
+    </SideSheet>
   )
 }
 
