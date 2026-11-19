@@ -112,6 +112,18 @@ const MARKET_STEPS: GuideStep[] = [
 
 const TOURNAMENT_STEPS: GuideStep[] = [
   {
+    title: 'Liste, arama ve turnuvayı açma',
+    body: (
+      <ol className={ol}>
+        <li>Turnuvalar tek satırlık bir listede durur: ad, oyun ve düzen, durum, kayıt sayısı, başlangıç ve bitiş. Üstteki kutudan <b>ad, oyun ya da #numara</b> ile ararsın; <b>Hepsi / Kayıtlar açık / Devam ediyor / Tamamlandı / İptal edildi</b> düğmeleri listeyi duruma göre süzer, yanlarındaki sayı o durumdaki turnuva sayısıdır.</li>
+        <li>Bir satıra tıklayınca turnuva <b>yandan açılan pencerede</b> açılır; liste yerinde kalır. Penceredeki sekmeler: <b>Özet</b> (bilgiler, sıralama ödülleri, başlat / iptal et / gizle / sil), <b>Eşleşmeler, Masalar, Fikstür ya da Puan durumu</b> (turnuva başlayınca çıkar), <b>Katılımcılar</b>, <b>Düzenle</b> ve <b>Şablon</b>.</li>
+        <li><b>Yeni turnuva</b> düğmesi formu yine yandan açar. Form dört adımdır: <b>Oyun ve düzen</b>, <b>Ad ve zaman</b>, <b>Kontenjan ve ödül</b>, <b>Özet</b>. Adımlar arasında <b>İleri / Geri</b> ile ya da üstteki adım kutularına basarak gezersin; yazdıkların kaybolmaz. Turnuva son adımdaki özetten sonra <b>Turnuvayı oluştur</b> ile açılır. Eksik ya da hatalı bir alan varsa form o adımı açar ve alanı gösterir.</li>
+        <li>Yazdığın bir şeyi kaydetmeden pencereyi kapatmak istersen panel önce sorar.</li>
+        <li>Siteden gizlediğin turnuva listede <b>Gizli</b> etiketiyle görünür.</li>
+      </ol>
+    ),
+  },
+  {
     title: 'Turnuva oluşturma',
     body: (
       <ol className={ol}>
@@ -162,7 +174,7 @@ const TOURNAMENT_STEPS: GuideStep[] = [
         <li>Bir tur bitince sıradaki tur beklemeden açılır; günlük ve haftalık ligde ise turun günü ve saati beklenir. <b>Bütün maçlar bitince</b> bitiş saati beklenmez; sonuç yazılır, ödüller yüklenir. Puan ligi bunun dışındadır, sadece bitiş saatinde kapanır.</li>
         <li><b>Bitiş saatinde</b> süren maçlar kapanır, yeni maç açılmaz. Ligde o anki puan durumu geçerlidir; açılmamış turlar oynanmaz. Elemede şampiyon belli değilse turnuvada kalan oyuncular, paylaştıkları sıraların ödül toplamını eşit bölüşür ve şampiyon yazılmaz. Hiçbir maç oynanmadıysa turnuva iptal olur, ücretler iade edilir.</li>
         <li>Saatler ziyaretçi trafiğiyle işler: sitede kimse yokken saati gelen iş, siteye ilk giren ziyaretçide (en geç bir dakika içinde) yapılır.</li>
-        <li>Turnuva başladıktan sonra sadece <b>bitiş saati</b>, <b>açıklama</b> ve <b>ödül notu</b> değişir. Biten ya da iptal olan turnuva düzenlenemez. Her turnuvanın altında nasıl kapandığı yazar.</li>
+        <li>Turnuva başladıktan sonra sadece <b>bitiş saati</b>, <b>açıklama</b> ve <b>ödül notu</b> değişir. Biten ya da iptal olan turnuva düzenlenemez. Turnuvanın nasıl kapandığı <b>Özet</b> sekmesinde yazar.</li>
       </ol>
     ),
   },
@@ -174,10 +186,10 @@ const TOURNAMENT_STEPS: GuideStep[] = [
         <li>Maçlar sitede oynanınca kazanan kendiliğinden ilerler. Bir maç takılırsa kazananı elle seçebilirsin. Seçici sadece <b>devam eden turnuvada, oynanmakta olan turun henüz bitmemiş maçlarında</b> çıkar.</li>
         <li><b>Yazılmış bir sonuç değiştirilemez.</b> Biten maçta, sırası gelmemiş turda ve biten ya da iptal olan turnuvada seçici görünmez. Yanlış oyuncuyu seçmemek için kaydetmeden önce adı kontrol et.</li>
         <li>Elle girdiğin sonuç iki oyuncunun da oyun geçmişine &quot;sonucu yönetim girdi&quot; notuyla düşer (coin değişmez) ve işlem kaydına tur, oyuncu adları ve kazananın adıyla yazılır. Bu satır oynanmış ya da kazanılmış oyun sayılmaz: görev sayaçlarına, Kanka Puanı&apos;na, üye istatistiğine ve günlük oyun sınırına eklenmez. Masada oynanarak, pes ya da süre ile biten maçlar sayılır.</li>
-        <li><b>Maçlar</b> listesi (turnuvanın altında, başlığa basınca açılır): açılan her masa, oyuncuları, kimin masaya girdiği, maçın açık mı kapalı mı olduğu, nasıl bittiği (oynanarak, hükmen, pes, süre, yönetim) ve açılış ile kapanış saati. Liste kendiliğinden yenilenmez; güncel durum için <b>Yenile</b>ye bas. Buradan maç değiştirilmez.</li>
+        <li><b>Maçlar</b> listesi (turnuvayı açınca Eşleşmeler, Masalar ya da Fikstür sekmesinin altında, başlığa basınca açılır): açılan her masa, oyuncuları, kimin masaya girdiği, maçın açık mı kapalı mı olduğu, nasıl bittiği (oynanarak, hükmen, pes, süre, yönetim) ve açılış ile kapanış saati. Liste kendiliğinden yenilenmez; güncel durum için <b>Yenile</b>ye bas. Buradan maç değiştirilmez.</li>
         <li><b>Oyuncu durumu</b> tablosu (elemede): her oyuncunun oynadığı, kazandığı ve kaybettiği maç sayısı ile nerede olduğu (turnuvada, elendi, şampiyon). Masaya gelmediği için kaybedilen maç oynanmış sayılmaz, &quot;gelmedi&quot; diye işaretlenir. Aynı tablo sitede turnuva kartında da görünür. Ligde bunun yerine puan durumu ve fikstür, puan liginde sadece puan durumu vardır; puan liginde maç listesi ve kazanan seçici çıkmaz.</li>
         <li>Ortak masa oyunlarında sadece <b>açık bir masanın</b> birincisini seçebilirsin. Seçtiğin oyuncu birinci olur, masa kapanır; diğerleri oyunun o anki durumuna göre sıralanır ve tur atlayanlar buna göre belirlenir.</li>
-        <li>Bir oyuncuyu başlamadan önce kayıt listesinden çıkarabilirsin; ücreti iade edilir. Turnuvayı iptal edersen tüm giriş ücretleri iade edilir.</li>
+        <li>Bir oyuncuyu başlamadan önce <b>Katılımcılar</b> sekmesinden çıkarabilirsin; ücreti iade edilir. Turnuvayı iptal edersen tüm giriş ücretleri iade edilir.</li>
         <li>Turnuva bitince her sıranın ödülü o oyuncunun hesabına kendiliğinden yüklenir. Şampiyona şampiyon rozeti de verilir, adı kazananlar şeridinde çıkar.</li>
       </ol>
     ),
@@ -186,8 +198,8 @@ const TOURNAMENT_STEPS: GuideStep[] = [
     title: 'Aynı turnuvayı tekrar açma (şablon)',
     body: (
       <ol className={ol}>
-        <li>Beğendiğin bir turnuvanın altındaki <b>Şablon olarak kaydet</b>e bas ve bir ad ver. Oyun, format, lig ayarları (tur aralığı, devre, sayılan oyunlar, oyun sınırı), ad, açıklama, kontenjan, ücret, ödül, başlangıç saati, turnuvanın süresi (başlangıçtan bitişe), maç uzunluğu ve maça giriş süresi saklanır.</li>
-        <li>Yenisini açarken <b>Yeni turnuva oluştur</b> kutusundaki şablona bas. Form dolar, başlangıç yarın şablondaki saate, bitiş şablondaki süre kadar sonrasına ayarlanır. Bu güncellemeden önce kaydedilmiş şablonlarda süre yoktur; onlar 3 saatle açılır, bir kez yeniden kaydedersen süreyi de saklar. Tarihleri kontrol edip <b>Turnuvayı oluştur</b> de.</li>
+        <li>Beğendiğin turnuvayı listeden aç, <b>Şablon</b> sekmesinde bir ad verip <b>Şablonu kaydet</b>e bas. Oyun, format, lig ayarları (tur aralığı, devre, sayılan oyunlar, oyun sınırı), ad, açıklama, kontenjan, ücret, ödül, başlangıç saati, turnuvanın süresi (başlangıçtan bitişe), maç uzunluğu ve maça giriş süresi saklanır.</li>
+        <li>Yenisini açarken <b>Yeni turnuva</b>ya bas ve açılan pencerenin üstündeki şablonu seç. Form dolar, başlangıç yarın şablondaki saate, bitiş şablondaki süre kadar sonrasına ayarlanır. Bu güncellemeden önce kaydedilmiş şablonlarda süre yoktur; onlar 3 saatle açılır, bir kez yeniden kaydedersen süreyi de saklar. Tarihleri kontrol edip son adımda <b>Turnuvayı oluştur</b> de.</li>
         <li><b>İçerik Takvimi</b>nde her turnuva iki satırla görünür: <b>Turnuva</b> (başlangıç saati) ve <b>Turnuva biter</b> (en geç kapanacağı saat). Biten turnuvada ikinci satır gerçekten kapandığı anı gösterir; iptal edilen turnuvanın bitiş satırı olmaz.</li>
         <li>Şablon sadece formu doldurur. Şablonu silmek ya da değiştirmek, daha önce açılmış turnuvalara dokunmaz.</li>
       </ol>

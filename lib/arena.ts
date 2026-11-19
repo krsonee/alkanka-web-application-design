@@ -176,6 +176,50 @@ export function botWinMultiplier(game: ArenaGame, s: ArenaGameSettings, seats = 
   return Math.round(seats * (1 - s.commission / 100) * 100) / 100
 }
 
+/**
+ * What decides a win's payout. Only a `multiplier` game reads the panel's multiplier, and only in its
+ * bot match: a table with players always pays from the pot, and the casino games pay their own odds.
+ */
+export type PayoutRule = 'multiplier' | 'pot' | 'odds'
+export const PAYOUT_RULE: Record<ArenaGame, PayoutRule> = {
+  tavla: 'multiplier',
+  bilardo: 'multiplier',
+  'kafa-topu': 'multiplier',
+  'kafa-basketbolu': 'multiplier',
+  okey: 'pot',
+  okey101: 'pot',
+  batak: 'pot',
+  pisti: 'pot',
+  papaz: 'pot',
+  monopoly: 'pot',
+  blackjack: 'odds',
+  rulet: 'odds',
+}
+export const usesMultiplier = (game: ArenaGame) => PAYOUT_RULE[game] === 'multiplier'
+/** The table commission is taken wherever a pot is paid out: every game but the two that pay their own odds. */
+export const usesCommission = (game: ArenaGame) => PAYOUT_RULE[game] !== 'odds'
+
+/** Highest table commission the panel accepts, in percent. */
+export const MAX_COMMISSION = 30
+
+/** A mars in the tavla bot match pays at least this many times the stake. */
+export const MARS_MIN_MULTIPLIER = 3
+
+/** What a finished bot match hands back, stake included, before the daily profit cap. */
+export function botMatchGross(game: ArenaGame, s: ArenaGameSettings, stake: number, result: 'win' | 'draw' | 'loss', score?: { for: number; against: number } | null) {
+  if (result === 'draw') return stake
+  if (result !== 'win') return 0
+  const mars = game === 'tavla' && score?.for === 15 && score.against === 0
+  // Okey reports its finish factor in score.for: okeyle / çiftten 2x, both 4x.
+  const okeyBonus = game === 'okey' && [2, 4].includes(Number(score?.for)) ? Number(score?.for) : 1
+  return Math.floor(stake * (mars ? Math.max(MARS_MIN_MULTIPLIER, s.multiplier) : botWinMultiplier(game, s) * okeyBonus))
+}
+
+/** The "x2" a game's card may promise: the bot match's factor, or null where a win is not a fixed multiple of the stake. */
+export function botMatchFactor(game: ArenaGame, s: ArenaGameSettings): number | null {
+  return ARENA_META[game].modes.includes('bot') && PAYOUT_RULE[game] !== 'odds' ? botWinMultiplier(game, s) : null
+}
+
 /** Games whose table engine seats server bots, so a table can start without a second player. */
 export const BOT_TABLE_GAMES = ['okey', 'okey101', 'batak', 'pisti', 'papaz', 'monopoly'] as const
 export const isBotTableGame = (game: string) => (BOT_TABLE_GAMES as readonly string[]).includes(game)

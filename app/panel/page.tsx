@@ -23,7 +23,7 @@ import { ContentEditor } from '@/components/panel/content-editor'
 import { HeroManager, SlideManager } from '@/components/panel/slide-manager'
 import { EventCardsEditor } from '@/components/panel/event-cards-editor'
 import { toEventCardRow } from '@/lib/event-cards'
-import { HIDDEN_KEY, isHidden, readHidden } from '@/lib/hidden-shared'
+import { HIDDEN_KEY, isHidden, readHidden, type HiddenMap } from '@/lib/hidden-shared'
 import { ArenaSettingsEditor } from '@/components/panel/arena-settings-editor'
 import { OpenTables } from '@/components/panel/open-tables'
 import { GameStats } from '@/components/panel/game-stats'
@@ -886,8 +886,8 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     }),
     section(ctx, 'tournaments', 'Turnuvalar', async () => {
       const { listTournamentTemplates } = await import('@/lib/tournament-templates')
-      const [tournaments, templates] = await Promise.all([listTournaments(), listTournamentTemplates().catch(miss([]))])
-      return <TournamentManager tournaments={tournaments} templates={templates} />
+      const [tournaments, templates, hidden] = await Promise.all([listTournaments(), listTournamentTemplates().catch(miss([])), getHidden().catch(miss<HiddenMap>({}))])
+      return <TournamentManager tournaments={tournaments} templates={templates} hidden={hidden.tournament ?? []} />
     }),
     section(ctx, 'cember', 'Jako Çemberi', async () => <CemberPanel />),
     telegramSection(ctx),
