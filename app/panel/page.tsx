@@ -195,7 +195,6 @@ import { WithdrawManager } from '@/components/panel/withdraw-manager'
 import { MembersManager } from '@/components/panel/members-manager'
 import { AuditLog } from '@/components/panel/audit-log'
 import { PanelDashboard } from '@/components/panel/dashboard'
-import { SystemStatus } from '@/components/panel/system-status'
 import { loadSystemStatus } from '@/lib/system-status'
 import { dashStats, parseQuery } from '@/lib/panel-stats'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
@@ -999,10 +998,9 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
   }
   const dashboard = onDash ? (
     <div className="flex flex-col gap-6">
-      {sysStatus ? <SystemStatus items={sysStatus} /> : null}
       <SponsorReminders items={dashReminders} />
       <SponsorReminders items={dashStock} title="Market stok uyarıları" />
-      <PanelDashboard counts={dashCounts} pending={detail} recent={dashRecent} stats={dashStatsData} />
+      <PanelDashboard counts={dashCounts} pending={detail} recent={dashRecent} stats={dashStatsData} system={sysStatus} />
     </div>
   ) : null
   const canModerate = can('community') || can('tasks') || can('market')

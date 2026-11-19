@@ -1,5 +1,6 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
+import { dashExtras, EMPTY_EXTRAS, type DashExtras } from '@/lib/panel-overview'
 
 export type DashPreset = 'today' | 'yesterday' | '7' | '30' | 'month' | 'lastmonth' | 'custom'
 export type DashQuery = { preset: DashPreset; from?: string; to?: string }
@@ -138,6 +139,7 @@ export type DashStats = {
   gameModes: { mode: string; count: number; stake: number }[]
   topGames: { game: string; count: number }[]
   health: HealthItem[]
+  extras: DashExtras
 }
 
 const GAME_MODES = ['bot', 'pvp', 'masa']
@@ -250,6 +252,7 @@ export async function dashStats(query: DashQuery): Promise<DashStats> {
     gameModes,
     topGames,
     health,
+    extras,
   ] = await Promise.all([
     safe(async () => {
       const unit = seriesUnit
@@ -425,7 +428,9 @@ export async function dashStats(query: DashQuery): Promise<DashStats> {
       return res.map((x) => ({ game: x.game, count: num(x.count) }))
     }, []),
     systemHealth(),
+    safe(() => dashExtras({ from, to }, now), EMPTY_EXTRAS),
   ])
+  if (extras.sponsor.bestSource) extras.sponsor.bestSource.label = originLabel(extras.sponsor.bestSource.label)
 
   return {
     query,
@@ -463,6 +468,7 @@ export async function dashStats(query: DashQuery): Promise<DashStats> {
     gameModes,
     topGames,
     health,
+    extras,
   }
 }
 
@@ -475,7 +481,7 @@ async function systemHealth(): Promise<HealthItem[]> {
     safe(async () => (await rows<{ n: string; e: string }>(sql`SELECT count(*) AS n, count(last_error) AS e FROM tg_sources WHERE active`))[0], undefined),
     safe(async () => (await rows<{ n: string; e: string }>(sql`SELECT count(*) AS n, count(nullif(web_error, '')) AS e FROM odds_sources WHERE active`))[0], undefined),
     safe(async () => (await rows<{ sent: number; failed: number; created_at: string }>(sql`SELECT sent, failed, created_at FROM push_log ORDER BY id DESC LIMIT 1`))[0], undefined),
-    safe(async () => (await rows<{ n: string; e: string }>(sql`SELECT count(*) AS n, count(*) FILTER (WHERE status <> 'ok' AND status <> 'sent') AS e FROM tg_share_log WHERE created_at > now() - interval '1 day'`))[0], undefined),
+    safe(async () => (await rows<{ n: string; e: string }>(sql`SELECT count(*) AS n, count(*) FILTER (WHERE status = 'failed') AS e FROM tg_share_log WHERE created_at > now() - interval '1 day'`))[0], undefined),
   ])
 
   const items: HealthItem[] = [{ label: 'Veritabanı', state: 'ok', note: 'Bağlı' }]
