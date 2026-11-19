@@ -69,7 +69,7 @@ export function FixturePicker() {
           <h3 id="fikstur" className="flex items-center gap-2 font-display text-base font-bold text-foreground">
             <CalendarDays className="size-4 text-primary" aria-hidden /> Takvimden maç seç
           </h3>
-          <p className="text-xs text-muted-foreground">Büyük ligler, Avrupa kupaları ve milli maçlar. Seç, tek tıkla yayınla; logolar otomatik gelir.</p>
+          <p className="text-xs text-muted-foreground">Büyük ligler, Avrupa kupaları ve milli maçlar. Seç, tek tıkla yayınla; logolar otomatik gelir. Maçlar varsayılan sorularla açılır; tahmin gelmeden önce aşağıdaki listeden maçın sorularını değiştirebilirsin.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {[0, 1, 2].map((o) => {

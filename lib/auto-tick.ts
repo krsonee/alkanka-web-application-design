@@ -62,18 +62,20 @@ async function ledgerPruneSlot() {
 
 async function hubTickSlot() {
   if (!(await claim('auto_tick_hub', HUB_EVERY_SEC))) return
-  const [{ hubTick }, { runOutbox }, { settleDueEvents }, { tournamentTick }] = await Promise.all([
+  const [{ hubTick }, { runOutbox }, { settleDueEvents }, { tournamentTick }, { leagueTick }] = await Promise.all([
     import('@/lib/tg-hub-jobs'),
     import('@/lib/outbox'),
     import('@/lib/event-entries'),
     import('@/lib/tournament-run'),
+    import('@/lib/predictions'),
   ])
-  // Scheduled notifications, inbox messages, event payouts, tournament clocks and the ledger trim share this slot, so they wake nothing on their own.
+  // Scheduled notifications, inbox messages, event payouts, tournament clocks, league prizes and the ledger trim share this slot, so they wake nothing on their own.
   await Promise.all([
     hubTick(),
     runOutbox().catch((e) => console.error('[auto-tick] outbox', e)),
     settleDueEvents().catch((e) => console.error('[auto-tick] events', e)),
     tournamentTick().catch((e) => console.error('[auto-tick] tournaments', e)),
+    leagueTick().catch((e) => console.error('[auto-tick] league', e)),
     ledgerPruneSlot().catch((e) => console.error('[auto-tick] ledger prune', e)),
   ])
 }

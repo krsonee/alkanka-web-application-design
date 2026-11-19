@@ -253,7 +253,8 @@ export type Delivered =
   | { kind: 'shield'; total: number }
   | null
 
-async function deliverInSiteItem(userId: string, itemId: string): Promise<Delivered> {
+/** Puts an in-site product on the account. Null means the site cannot deliver this product by itself. */
+export async function deliverInSiteItem(userId: string, itemId: string): Promise<Delivered> {
   const extra = EXTRA_PLAY_ITEMS[itemId]
   if (extra) {
     const { grantExtraPlays } = await import('@/lib/mini-extras')

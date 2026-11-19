@@ -285,6 +285,56 @@ export async function getFinalScore(id: number): Promise<{ home: number; away: n
   }
 }
 
+export type FinalResult = { home: number; away: number; htHome: number | null; htAway: number | null; corners: number | null; cards: number | null }
+
+const STAGE_HALF_TIME = 7
+const STAGE_FULL_TIME = 9
+const STAT_YELLOWS = 1
+
+type RawStage = { id: number; homeCompetitorScore?: number; awayCompetitorScore?: number }
+
+/**
+ * Everything the prediction league scores from a finished game: the 90-minute score (extra time and
+ * penalties are left out), the half-time score, corners and cards. A figure the feed does not carry is null.
+ */
+export async function getFinalResult(id: number): Promise<FinalResult | null> {
+  try {
+    const res = await fetch(`${API}/game/?${BASE_QUERY}&gameId=${id}`, { headers: HEADERS, cache: 'no-store', signal: AbortSignal.timeout(6000) })
+    if (!res.ok) return null
+    const { game } = (await res.json()) as { game?: RawGame & { stages?: RawStage[] } }
+    if (!game || game.statusGroup !== 4) return null
+    const stage = (stageId: number) => {
+      const s = (game.stages ?? []).find((x) => x.id === stageId)
+      const h = s?.homeCompetitorScore
+      const a = s?.awayCompetitorScore
+      return typeof h === 'number' && typeof a === 'number' && h >= 0 && a >= 0 ? { home: h, away: a } : null
+    }
+    const live = { home: game.homeCompetitor.score, away: game.awayCompetitor.score }
+    const full = stage(STAGE_FULL_TIME) ?? (typeof live.home === 'number' && typeof live.away === 'number' && live.home >= 0 && live.away >= 0 ? { home: live.home, away: live.away } : null)
+    if (!full) return null
+    const half = stage(STAGE_HALF_TIME)
+    const stats = await fetch(`${API}/game/stats/?${BASE_QUERY}&games=${id}`, { headers: HEADERS, cache: 'no-store', signal: AbortSignal.timeout(6000) })
+      .then((r) => (r.ok ? (r.json() as Promise<{ statistics?: { id: number; value?: string | number }[] }>) : null))
+      .catch(() => null)
+    const sum = (statId: number) => {
+      const list = (stats?.statistics ?? []).filter((s) => s.id === statId)
+      return list.length ? list.reduce((acc, s) => acc + (Number.parseInt(String(s.value ?? 0), 10) || 0), 0) : null
+    }
+    const yellows = sum(STAT_YELLOWS)
+    const reds = sum(STAT_REDS)
+    return {
+      home: full.home,
+      away: full.away,
+      htHome: half && half.home <= full.home && half.away <= full.away ? half.home : null,
+      htAway: half && half.home <= full.home && half.away <= full.away ? half.away : null,
+      corners: sum(STAT_CORNERS),
+      cards: yellows === null ? null : yellows + (reds ?? 0),
+    }
+  } catch {
+    return null
+  }
+}
+
 export type LiveGame = {
   id: number
   league: string

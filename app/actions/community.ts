@@ -11,8 +11,9 @@ import {
   attachReferral,
   claimReferralRewards,
   removeAlert,
-  savePick,
 } from '@/lib/community'
+import { savePick } from '@/lib/predictions'
+import type { Answers } from '@/lib/predictions-shared'
 
 export type ActionResult = { ok: true; message?: string; balance?: number } | { ok: false; error: string }
 
@@ -111,9 +112,17 @@ export async function removeAlertAction(keyword: string) {
   return run((m) => removeAlert(m.id, keyword), '/profil')
 }
 
-export async function savePickAction(matchId: number, home: number, away: number) {
+export async function savePickAction(matchId: number, answers: Answers) {
   return run(async (m) => {
-    await savePick(m, matchId, home, away)
+    await savePick(m, Number(matchId), answers)
     return 'Tahminin kaydedildi.'
+  }, '/tahminler')
+}
+
+export async function claimAwardAction(awardId: number, siteUsername: string) {
+  return run(async (m) => {
+    const { claimAward } = await import('@/lib/prediction-awards')
+    await claimAward(m.id, Number(awardId), siteUsername)
+    return 'Kullanıcı adın kaydedildi. Ödülün teslim edilince mesajla haber vereceğiz.'
   }, '/tahminler')
 }

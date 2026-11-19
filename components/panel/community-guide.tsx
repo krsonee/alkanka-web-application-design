@@ -38,18 +38,34 @@ const STEPS: Step[] = [
     ),
   },
   {
-    title: 'Tahmin ligi: maç ekle ve sonuçlandır',
+    title: 'Tahmin ligi: soruları seç, maç ekle, sonuçlandır, ödülü teslim et',
     body: (
       <ol className="flex list-decimal flex-col gap-1.5 pl-5">
         <li>
-          <b>Tahmin ligi</b> sekmesinde <b>Lige maç ekle</b> formuna ev sahibi, deplasman, lig ve başlama saatini gir.
+          <b>Sorular ve puanlama</b> sekmesinde yeni maçların hangi sorularla açılacağını seç: maç sonucu (taraf), tam skor, toplam gol alt/üst, karşılıklı gol, ilk yarı sonucu, korner alt/üst, kart alt/üst. Tek soru, birkaç soru ya da hepsi açılabilir.
+          Her sorunun lig puanını ve ödülünü (Kanka Coin ya da Kanka Puan) ayrı gir; birden çok soru varsa <b>Hepsini bilene ek ödül</b> de tanımlayabilirsin.
         </li>
         <li>
-          Maç <span className={code}>/tahminler</span> sayfasında açılır. Üyeler başlama saatine kadar skor tahmini yapar, sonra tahminler kilitlenir.
+          <b>Maçlar</b> sekmesinde takvimden maç seçip yayınla ya da takvimde olmayan maçı elle ekle. Elle eklerken o maça özel soru seti seçebilirsin. Yayındaki bir maçın soruları, ona ilk tahmin gelene kadar <b>Soruları değiştir</b> ile
+          değiştirilebilir.
         </li>
-        <li>Maç bitince gerçek skoru gir ve <b>Sonuçlandır</b>’a bas. Puanlar otomatik dağıtılır: tam skor 3 puan, doğru sonuç (galibiyet/beraberlik) 1 puan.</li>
-        <li>Puan tablosu anında güncellenir. Ay sonunda ilk sıralara ödül vererek ligi canlı tutabilirsin.</li>
-        <li>Yanlış eklenen maçı çöp kutusu ile silebilirsin.</li>
+        <li>
+          Maç <span className={code}>/tahminler</span> sayfasında açılır. Üye maçın bütün sorularını cevaplayıp bir kez kaydeder; tahmin maç saatinde (ya da girdiğin bitiş saatinde) kilitlenir.
+        </li>
+        <li>
+          Maç başlayınca <b>Sonuç bekleyen</b> listesine düşer. Skoru ve maçın sorduğu diğer rakamları (ilk yarı skoru, korner, kart) gir, <b>Sonucu gir ve puanla</b>’ya bas. Rakamı boş bırakılan soru iptal edilir, kimseye puan yazmaz. Uzatmalı
+          maçlarda 90 dakikanın skoru girilir.
+        </li>
+        <li>
+          <b>Otomatik puanlama</b> açıksa takvimden eklenen maçlar bitince kendiliğinden puanlanır. Korner, kart ya da ilk yarı verisi kaynakta yoksa maç elle girilmeyi bekler.
+        </li>
+        <li>
+          <b>Lig ödülleri</b> sekmesinde haftalık ve aylık sıra ödüllerini tanımla: Kanka Coin, Kanka Puan, market ürünü ya da sponsor sitenin ödeyeceği nakit. Dönem bitince ilk sıralara kendiliğinden dağıtılır.
+        </li>
+        <li>
+          Sponsor nakit ödülü ve elle teslim edilen market ürünü kazanan üye, sitedeki kullanıcı adını Tahminler sayfasına yazar. Ödül <b>Ödül teslimi</b> sekmesinde bekler; teslim edince <b>Teslim edildi</b>’ye bas, üyeye mesaj gider.
+        </li>
+        <li>Yanlış eklenen ya da ertelenen maçı, sonuçlanmadan önce çöp kutusu ile silebilirsin; tahminleri de silinir ve ödül yazılmaz.</li>
       </ol>
     ),
   },
@@ -86,7 +102,7 @@ const HINTS: Record<CommunityTab, string> = {
   reviews: 'Üyelerin site yorumları burada onay bekler. Yayınladıkların /guven sayfasında puana eklenir.',
   complaints: 'Durumu güncelle ve yanıt yaz; üye profilinde görür. Çözülenler sitenin güven kartına yansır.',
   kanit: 'Üyelerin yorumlarına eklediği ekran görüntülerini kontrol et. Onaylanan yorum Kanıtlı rozeti alır, yazarı 30 KP kazanır.',
-  league: 'Maç ekle, bitince skoru girip sonuçlandır. Tam skor 3, doğru sonuç 1 puan.',
+  league: 'Soruları ve ödülleri seç, maç ekle, bitince sonucu gir. Lig ödülleri ve teslim bekleyen ödüller de burada.',
 }
 
 export function CommunityHint({ tab }: { tab: CommunityTab }) {
