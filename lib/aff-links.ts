@@ -28,7 +28,7 @@ export type AffLink = {
 export type AffStats = { total: number; day: number; week: number; uniques: number; members: number; daily: number[]; sources: { src: string; n: number }[] }
 export type AffLinkView = AffLink & { target: string | null; siteName: string | null; currentHost: string | null; stats: AffStats }
 
-const RESERVED = new Set(['panel', 'api', 'git', 'r', 'admin', 'giris', 'kayit'])
+const RESERVED = new Set(['panel', 'api', 'git', 'r', 'k', 'l', 'admin', 'giris', 'kayit'])
 
 let ready: Promise<unknown> | null = null
 function ensureAff() {
@@ -230,15 +230,15 @@ async function logAffClick(linkId: number, src: string, userId: string | null, i
   await rows(sql`INSERT INTO aff_clicks (link_id, src, user_id, ip_hash) VALUES (${linkId}, ${cleanSrc(src)}, ${userId}, ${hashNetwork(ip)})`)
 }
 
-/** Resolves a short code, records the click and returns where to send the visitor. */
-export async function hitByCode(code: string, ctx: { src: string; userId: string | null; ip: string | null }) {
+/** Resolves a short code, records the click and returns where to send the visitor. Link preview bots are sent on but not counted. */
+export async function hitByCode(code: string, ctx: { src: string; userId: string | null; ip: string | null; bot?: boolean }) {
   await ensureAff()
   const r = await rows(sql`SELECT * FROM aff_links WHERE code = ${cleanCode(code)} AND active LIMIT 1`)
   if (!r[0]) return null
   const link = mapLink(r[0])
   const target = buildTarget(link, await currentAddress(link.siteId))
   if (!target) return null
-  await logAffClick(link.id, ctx.src, ctx.userId, ctx.ip).catch((error) => console.error('[aff] tıklama kaydedilemedi', error))
+  if (!ctx.bot) await logAffClick(link.id, ctx.src, ctx.userId, ctx.ip).catch((error) => console.error('[aff] tıklama kaydedilemedi', error))
   return { link, target }
 }
 

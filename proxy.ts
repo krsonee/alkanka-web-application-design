@@ -35,6 +35,48 @@ function routeByHost(request: NextRequest): NextResponse | null {
   return null
 }
 
+const SHORT_TTL = 60_000
+let shortCache: { host: string; at: number } | null = null
+
+/**
+ * The panel-managed short link domain. Only asked for hosts that are neither the site, the panel,
+ * a Vercel deployment address nor localhost, so ordinary site traffic never pays for this query.
+ */
+async function shortDomain(): Promise<string> {
+  if (!process.env.DATABASE_URL) return ''
+  if (shortCache && Date.now() - shortCache.at < SHORT_TTL) return shortCache.host
+  try {
+    const query = neon(process.env.DATABASE_URL)
+    const found = (await query`SELECT value->>'host' AS host FROM mkt_settings WHERE key = 'short_domain'`) as { host: string | null }[]
+    shortCache = { host: String(found[0]?.host ?? '').toLowerCase(), at: Date.now() }
+  } catch {
+    shortCache = { host: '', at: Date.now() }
+  }
+  return shortCache.host
+}
+
+const SHORT_ROBOTS = 'User-agent: *\nDisallow: /\n'
+const SHORT_CODE = /^\/([A-Za-z0-9-]{2,40})\/?$/
+
+/** The short link domain only redirects: codes resolve, everything else goes to the same path on the site. */
+function routeShort(request: NextRequest): NextResponse {
+  const { pathname, search } = request.nextUrl
+  if (pathname === '/robots.txt') return new NextResponse(SHORT_ROBOTS, { headers: { 'Content-Type': 'text/plain' } })
+  const headers = new Headers(request.headers)
+  headers.set('x-alk-short', '1')
+  const code = pathname.match(SHORT_CODE)
+  if (code) return NextResponse.rewrite(new URL(`/l/${code[1]}${search}`, request.url), { request: { headers } })
+  if (/^\/[kl]\/[^/]+\/?$/.test(pathname)) return NextResponse.next({ request: { headers } })
+  return NextResponse.redirect(`${SITE_ORIGIN}${pathname === '/' ? '' : pathname}${search}`, 308)
+}
+
+async function isShortHost(request: NextRequest) {
+  const host = (request.headers.get('host') ?? '').split(':')[0].toLowerCase()
+  if (!host || SITE_HOSTS.has(host) || PANEL_HOSTS.has(host) || host === 'localhost' || host.endsWith('.vercel.app')) return false
+  const short = await shortDomain()
+  return Boolean(short) && (host === short || host === `www.${short}`)
+}
+
 const SITE_KEY_TTL = 60_000
 const siteKeyCache = new Map<string, { ok: boolean; at: number }>()
 
@@ -105,6 +147,8 @@ async function findRedirect(pathname: string): Promise<string | null> {
 export async function proxy(request: NextRequest) {
   const routed = routeByHost(request)
   if (routed) return routed
+
+  if (await isShortHost(request)) return routeShort(request)
 
   const target = await findRedirect(request.nextUrl.pathname)
   if (target) return NextResponse.redirect(new URL(target, request.url), 301)

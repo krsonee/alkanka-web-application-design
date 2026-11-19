@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { hitByCode } from '@/lib/aff-links'
+import { BOT_UA } from '@/lib/marketing-shared'
 import { getMember } from '@/lib/member'
 
 export const dynamic = 'force-dynamic'
@@ -9,7 +10,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const member = await getMember().catch(() => null)
   const src = request.nextUrl.searchParams.get('src') ?? request.cookies.get('alk_src')?.value ?? 'direkt'
   const ip = request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip')
-  const hit = await hitByCode(code, { src, userId: member?.id ?? null, ip }).catch((error) => {
+  const bot = BOT_UA.test(request.headers.get('user-agent') ?? '')
+  const hit = await hitByCode(code, { src, userId: member?.id ?? null, ip, bot }).catch((error) => {
     console.error('[r] kısa link çözülemedi', error)
     return null
   })
