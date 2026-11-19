@@ -739,7 +739,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       return <TourSettingsEditor settings={settings} stats={stats} />
     }),
     section(ctx, 'sponsors', 'Sponsorlar', async () => (
-      <SitesManager sites={await listSites()} today={istanbulToday()} legacyLogos={(content['logos:sponsors'] as Record<string, string> | undefined) ?? {}} />
+      <SitesManager sites={await listSites()} today={istanbulToday()} siteUrl={SITE_URL} legacyLogos={(content['logos:sponsors'] as Record<string, string> | undefined) ?? {}} />
     )),
     section(ctx, 'growth', 'Büyüme', async () => {
       const [ambient, options, allSites, links, followers, report, flagged, accounts, affLinks, allLinks] = await Promise.all([
