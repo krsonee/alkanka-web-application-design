@@ -1,7 +1,11 @@
-export type RecordKind = 'turnuva' | 'tahmin' | 'market'
+/** `kampanya` covers both sponsor campaigns and sponsor bonuses: they share the `/kampanyalar/[id]` page. */
+export type RecordKind = 'turnuva' | 'tahmin' | 'market' | 'kampanya'
 
-const BASE: Record<RecordKind, string> = { turnuva: '/turnuvalar', tahmin: '/tahminler', market: '/market' }
-const CODE: Record<RecordKind, string> = { turnuva: 'turnuva', tahmin: 'mac', market: 'urun' }
+const BASE: Record<RecordKind, string> = { turnuva: '/turnuvalar', tahmin: '/tahminler', market: '/market', kampanya: '/kampanyalar' }
+const CODE: Record<RecordKind, string> = { turnuva: 'turnuva', tahmin: 'mac', market: 'urun', kampanya: 'kampanya' }
+
+/** Tournaments and league matches are numbered; products, campaigns and bonuses carry a text id. */
+export const hasNumericId = (kind: RecordKind) => kind === 'turnuva' || kind === 'tahmin'
 
 export const isRecordKind = (value: unknown): value is RecordKind => typeof value === 'string' && value in BASE
 

@@ -15,6 +15,7 @@ import { LeagueAdmin } from '@/components/panel/league-admin'
 import { PickList } from '@/components/panel/pick-list'
 import { cn } from '@/lib/utils'
 import { HideButton } from '@/components/panel/hide-button'
+import { RecordLink } from '@/components/panel/record-link'
 import type { HiddenMap, HiddenScope } from '@/lib/hidden-shared'
 
 type Kind = 'events' | 'predictions' | 'campaigns' | 'bonuses'
@@ -524,6 +525,12 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder,
                       <PickList cacheKey={`prediction-picks-${id}`} load={() => loadPredictionPicks(id)} pickLabel="Seçtiği" />
                     </div>
                   )}
+                  {(kind === 'campaigns' || kind === 'bonuses') &&
+                    (initial.some((x) => String(x.id) === id) ? (
+                      <RecordLink kind="kampanya" id={id} name={String(name)} />
+                    ) : (
+                      <p className="text-xs leading-relaxed text-muted-foreground">Linki kaydettikten sonra buradan kopyalarsın.</p>
+                    ))}
                   <button type="button" onClick={() => remove(i)} className="inline-flex items-center gap-1.5 self-start rounded-lg px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10">
                     <Trash2 className="size-3.5" aria-hidden />
                     Sil

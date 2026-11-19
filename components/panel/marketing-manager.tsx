@@ -555,7 +555,7 @@ function claimText(e: EarningView) {
   ].join('\n')
 }
 
-function EarningRow({ e, sites }: { e: EarningView; sites: MarketingSite[] }) {
+function EarningRow({ e, sites, linksHref }: { e: EarningView; sites: MarketingSite[]; linksHref: string | null }) {
   const [editing, setEditing] = useState(false)
   const [msg, setMsg] = useState<Msg>(null)
   const [pending, start] = useTransition()
@@ -581,6 +581,12 @@ function EarningRow({ e, sites }: { e: EarningView; sites: MarketingSite[] }) {
           <h4 className="font-semibold text-foreground">{e.siteName}</h4>
           <span className="font-mono text-xs text-muted-foreground">{e.period}</span>
           <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', STATUS_STYLE[e.status])}>{status?.label}</span>
+          {linksHref ? (
+            <a href={`${linksHref}&sponsor=${e.siteId}`} className="text-xs font-semibold text-primary underline-offset-2 hover:underline">
+              Linklerini gör
+              <span className="sr-only">: {e.siteName}</span>
+            </a>
+          ) : null}
         </div>
         <span className="text-lg font-bold tabular-nums text-foreground">{money(e.amount, e.currency)}</span>
       </div>
@@ -631,7 +637,7 @@ function EarningRow({ e, sites }: { e: EarningView; sites: MarketingSite[] }) {
   )
 }
 
-export function EarningsManager({ earnings, sites }: { earnings: EarningView[]; sites: MarketingSite[] }) {
+export function EarningsManager({ earnings, sites, linksHref = null }: { earnings: EarningView[]; sites: MarketingSite[]; /** The Linkler tab, for an account that may open it. */ linksHref?: string | null }) {
   const [filter, setFilter] = useState<EarningStatus | 'all'>('all')
   const summary = useMemo(() => {
     const out = new Map<string, Record<EarningStatus, number>>()
@@ -687,7 +693,7 @@ export function EarningsManager({ earnings, sites }: { earnings: EarningView[]; 
       {shown.length ? (
         <ul className="flex flex-col gap-3">
           {shown.map((e) => (
-            <EarningRow key={e.id} e={e} sites={sites} />
+            <EarningRow key={e.id} e={e} sites={sites} linksHref={linksHref} />
           ))}
         </ul>
       ) : (

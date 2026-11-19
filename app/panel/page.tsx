@@ -98,7 +98,7 @@ import { SocialManager } from '@/components/panel/social-manager'
 import { adminEntries, adminSocialAccounts, getSocialLinks, listSocialEvents, type SocialLinks } from '@/lib/social'
 import { affLinkViews } from '@/lib/aff-links'
 import { linkReport } from '@/lib/links'
-import type { LinkReport } from '@/lib/links-shared'
+import { earningsBySite, type LinkReport, type SiteEarning } from '@/lib/links-shared'
 import { LinksTable } from '@/components/panel/links-table'
 import { adminSponsorAccounts, currentPeriod, flaggedMembers, followerCounts, getSiteLinks, trafficReport } from '@/lib/growth'
 import { listSites } from '@/lib/sites'
@@ -549,7 +549,7 @@ async function staffPanel() {
 
 export const metadata: Metadata = { title: { absolute: 'Yönetim paneli | AL KANKA' }, robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } } }
 
-export default async function PanelPage({ searchParams }: { searchParams: Promise<{ b?: string; s?: string; r?: string; from?: string; to?: string }> }) {
+export default async function PanelPage({ searchParams }: { searchParams: Promise<{ b?: string; s?: string; r?: string; from?: string; to?: string; sponsor?: string }> }) {
   const [session, params] = await Promise.all([getPanelSession(), searchParams])
   if (!session) {
     return (
@@ -742,7 +742,8 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       <SitesManager sites={await listSites()} today={istanbulToday()} siteUrl={SITE_URL} legacyLogos={(content['logos:sponsors'] as Record<string, string> | undefined) ?? {}} />
     )),
     section(ctx, 'growth', 'Büyüme', async () => {
-      const [ambient, options, allSites, links, followers, report, flagged, accounts, affLinks, allLinks] = await Promise.all([
+      const focusSite = /^[1-9]\d{0,8}$/.test(params.sponsor ?? '') ? Number(params.sponsor) : null
+      const [ambient, options, allSites, links, followers, report, flagged, accounts, affLinks, allLinks, siteEarnings] = await Promise.all([
         tabHome('ambient', can) === 'growth' ? getAmbientSettings() : null,
         siteOptions(),
         listSites().catch(miss([])),
@@ -752,8 +753,10 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         flaggedMembers().catch(miss([])),
         adminSponsorAccounts().catch(miss([])),
         affLinkViews().catch(miss([])),
-        linkReport({ campaigns: can('marketing') }).catch(miss<LinkReport | null>(null)),
+        linkReport({ campaigns: can('marketing'), siteId: focusSite }).catch(miss<LinkReport | null>(null)),
+        can('marketing') ? listEarnings().then(earningsBySite).catch(miss<SiteEarning[]>([])) : ([] as SiteEarning[]),
       ])
+      const linksHref = allLinks ? '/panel?b=growth&s=links' : null
       const traffic = (
         <GrowthManager
           sites={options.map((s) => ({ id: s.id, name: s.name }))}
@@ -766,6 +769,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           period={currentPeriod()}
           siteUrl={SITE_URL}
           campaignsHref={can('marketing') ? '/panel?b=marketing&s=campaigns' : null}
+          linksHref={linksHref}
           affLinks={affLinks}
           affSites={allSites.map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active }))}
         />
@@ -778,6 +782,8 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
                 label: `Linkler (${allLinks.rows.length})`,
                 content: (
                   <LinksTable
+                    key={focusSite ?? 'all'}
+                    earnings={siteEarnings}
                     report={allLinks}
                     sites={allSites.map((s) => ({ id: s.id, name: s.name }))}
                     siteUrl={SITE_URL}
@@ -821,7 +827,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
                 content: (
                   <div className="flex flex-col gap-5">
                     <SponsorReminders items={earningReminders} title="Hakediş hatırlatmaları" linked={false} />
-                    <EarningsManager earnings={earnings} sites={opts} />
+                    <EarningsManager earnings={earnings} sites={opts} linksHref={can('growth') ? '/panel?b=growth&s=links' : null} />
                   </div>
                 ),
               },

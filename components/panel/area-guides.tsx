@@ -785,6 +785,7 @@ const MARKETING_STEPS: GuideStep[] = [
         <ol className={ol}>
           <li>Her ayın 1–5'i arasında sponsorun affiliate paneline gir ve önceki ayın FTD sayısını ve kazancını not al.</li>
           <li><b>Hakediş</b> sekmesinde sponsoru, ayı, modeli (CPA, RevShare) ve tutarı gir.</li>
+          <li>Kayıttaki <b>Linklerini gör</b> o sponsorun bütün linklerini ve tıklamalarını <b>Büyüme → Linkler</b> ekranında açar (Büyüme yetkin varsa görünür).</li>
           <li><b>Bizden giden tıklama</b> rakamına bak. Biz 1.000 tıklama göndermişken sponsor 2 FTD gösteriyorsa sorgula, bu durum eksik sayıma işaret edebilir.</li>
           <li><b>Talep mesajını kopyala</b> butonuna bas ve mesajı sponsorun affiliate yöneticisine gönder. Durumu “Talep edildi” yap.</li>
           <li>Para geldiğinde durumu “Ödendi” yap. Üstteki özet, bekleyen ve tahsil edilen parayı ayrı ayrı gösterir.</li>
