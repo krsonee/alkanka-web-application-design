@@ -4,6 +4,7 @@
 import { askConfirm, askReason } from '@/components/panel/confirm-dialog'
 import { MarketGuide } from '@/components/panel/area-guides'
 import { HideButton } from '@/components/panel/hide-button'
+import { RecordLink } from '@/components/panel/record-link'
 import { useState, useTransition } from 'react'
 import { useUrlTab } from '@/components/panel/use-url-tab'
 import { Check, PackageOpen, Pencil, Plus, Trash2, X } from 'lucide-react'
@@ -131,6 +132,7 @@ export function MarketManager({ products, requests, sponsors }: { products: Mark
                     {p.stock > 0 ? 'Stok azaldı' : 'Stok bitti'}
                   </span>
                 )}
+                <RecordLink kind="market" id={p.id} name={p.name} compact className="contents" />
                 <HideButton key={`${p.id}-${p.active}`} kind="market" id={p.id} hidden={!p.active} label={p.name} />
                 <button type="button" aria-label={`${p.name} düzenle`} onClick={() => setEditing({ ...p })} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
                   <Pencil className="size-4" aria-hidden="true" />

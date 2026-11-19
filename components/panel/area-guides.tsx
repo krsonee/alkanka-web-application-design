@@ -108,6 +108,16 @@ const MARKET_STEPS: GuideStep[] = [
       </ol>
     ),
   },
+  {
+    title: 'Ürünün kendi linki',
+    body: (
+      <ol className={ol}>
+        <li>Her ürünün sitede kendi adresi var. Ürün satırındaki zincir simgesi bu adresi kopyalar; açan kişi marketi o ürünün ayrıntısı açık halde görür.</li>
+        <li>Makas simgesi ürüne bir <b>kısa link</b> üretir ve kopyalar. Aynı ürün için tekrar basarsan yeni link açılmaz, eskisi verilir. Tıklamaları <b>Büyüme → Linkler</b> ekranında görünür.</li>
+        <li>Markette gösterilmeyen ürünün linki &quot;sayfa bulunamadı&quot; açar. Paylaşmadan önce ürünün açık olduğuna bak.</li>
+      </ol>
+    ),
+  },
 ]
 
 const TOURNAMENT_STEPS: GuideStep[] = [
@@ -202,6 +212,15 @@ const TOURNAMENT_STEPS: GuideStep[] = [
         <li>Yenisini açarken <b>Yeni turnuva</b>ya bas ve açılan pencerenin üstündeki şablonu seç. Form dolar, başlangıç yarın şablondaki saate, bitiş şablondaki süre kadar sonrasına ayarlanır. Bu güncellemeden önce kaydedilmiş şablonlarda süre yoktur; onlar 3 saatle açılır, bir kez yeniden kaydedersen süreyi de saklar. Tarihleri kontrol edip son adımda <b>Turnuvayı oluştur</b> de.</li>
         <li><b>İçerik Takvimi</b>nde her turnuva iki satırla görünür: <b>Turnuva</b> (başlangıç saati) ve <b>Turnuva biter</b> (en geç kapanacağı saat). Biten turnuvada ikinci satır gerçekten kapandığı anı gösterir; iptal edilen turnuvanın bitiş satırı olmaz.</li>
         <li>Şablon sadece formu doldurur. Şablonu silmek ya da değiştirmek, daha önce açılmış turnuvalara dokunmaz.</li>
+      </ol>
+    ),
+  },
+  {
+    title: 'Turnuvanın kendi linki',
+    body: (
+      <ol className={ol}>
+        <li>Turnuvayı listeden aç. <b>Özet</b> sekmesinin üstündeki <b>Linki kopyala</b> turnuvanın sitedeki kendi sayfasının adresini verir; açan kişi sadece o turnuvayı görür.</li>
+        <li><b>Kısa link üret</b> turnuvaya kısa bir adres açar ve kopyalar. Aynı turnuva için tekrar basarsan yeni link açılmaz, eskisi verilir. Tıklamaları <b>Büyüme → Linkler</b> ekranında görünür.</li>
       </ol>
     ),
   },

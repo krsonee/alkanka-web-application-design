@@ -1,28 +1,13 @@
 import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
-import { Events } from '@/components/alkanka/events'
-import { League } from '@/components/alkanka/predictions/league'
-import type { PeriodView } from '@/components/alkanka/predictions/standings'
-import { getMember } from '@/lib/member'
-import { getLeagueSettings, lastPaidPeriods, leagueTable, listLeagueMatches } from '@/lib/predictions'
-import { periodBounds, type Award, type PeriodKind } from '@/lib/predictions-shared'
+import { LeagueView } from '@/components/alkanka/predictions/league-view'
+import { LEAGUE_TAB_PARAM } from '@/lib/record-links'
 
 export const metadata = pageMeta('tahminler')
 export const dynamic = 'force-dynamic'
 
-export default async function PredictionsPage() {
-  const member = await getMember()
-  const [matches, week, month, all, settings, paid, awards] = await Promise.all([
-    listLeagueMatches(member?.id ?? null, { crowd: true }),
-    leagueTable('week'),
-    leagueTable('month'),
-    leagueTable('all'),
-    getLeagueSettings(),
-    lastPaidPeriods().catch(() => ({})),
-    member ? import('@/lib/prediction-awards').then((m) => m.myAwards(member.id)).catch(() => [] as Award[]) : ([] as Award[]),
-  ])
-  const now = Date.now()
-  const period = (kind: PeriodKind): PeriodView => ({ on: settings[kind].on, places: settings[kind].places, label: periodBounds(kind, now).label })
+export default async function PredictionsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const tab = (await searchParams)[LEAGUE_TAB_PARAM]
   return (
     <>
       <EditableHero
@@ -36,19 +21,7 @@ export default async function PredictionsPage() {
         pose="dusunen"
         speech="Bence bu maç gollü geçer kanka..."
       />
-      {matches.length > 0 || awards.length > 0 ? (
-        <League
-          matches={matches}
-          tables={{ week, month, all }}
-          periods={{ week: period('week'), month: period('month') }}
-          paid={paid}
-          awards={awards}
-          meId={member?.id ?? null}
-          serverNow={now}
-        />
-      ) : (
-        <Events view="tahminler" />
-      )}
+      <LeagueView tab={typeof tab === 'string' ? tab : undefined} />
     </>
   )
 }

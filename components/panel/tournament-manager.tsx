@@ -5,6 +5,7 @@ import { BookmarkPlus, ChevronRight, EyeOff, Loader2, Play, Plus, Search, Trash2
 import { cn } from '@/lib/utils'
 import { askConfirm } from '@/components/panel/confirm-dialog'
 import { HideButton } from '@/components/panel/hide-button'
+import { RecordLink } from '@/components/panel/record-link'
 import { SideSheet } from '@/components/panel/side-sheet'
 import { TournamentGuide } from '@/components/panel/area-guides'
 import { Feedback, RunningForm, TournamentForm, field, labelCls, lengthText } from '@/components/panel/tournament-form'
@@ -171,6 +172,7 @@ function Summary({ t, hidden }: { t: Tournament; hidden: boolean }) {
   const length = matchLengthOf(t.game, t.matchLength)
   return (
     <div className="flex flex-col gap-5">
+      <RecordLink kind="turnuva" id={t.id} name={t.title} />
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2.5 rounded-xl border border-border p-4">
         <Fact name="Oyun">{ARENA_META[t.game].title}</Fact>
         <Fact name="Düzen">{`${FORMAT_SHORT[t.format]} · ${shapeText(t)}`}</Fact>

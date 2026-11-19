@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { savePickAction } from '@/app/actions/community'
 import type { LeagueMatch } from '@/lib/predictions'
@@ -88,10 +88,28 @@ function facts(m: LeagueMatch, state: MatchState, ids: MarketId[], now: number, 
   ]
 }
 
-export function MatchRow({ m, state, now, signedIn, onSaved }: { m: LeagueMatch; state: MatchState; now: number; signedIn: boolean; onSaved: () => void }) {
+export function MatchRow({
+  m,
+  state,
+  now,
+  signedIn,
+  onSaved,
+  defaultOpen = false,
+}: {
+  m: LeagueMatch
+  state: MatchState
+  now: number
+  signedIn: boolean
+  onSaved: () => void
+  defaultOpen?: boolean
+}) {
+  const root = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (defaultOpen) root.current?.scrollIntoView({ block: 'center' })
+  }, [defaultOpen])
   const { requireLogin } = usePoints()
   const { pending, status, run } = useAction()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(defaultOpen)
   const [picks, setPicks] = useState<Answers>({})
   const [score, setScore] = useState<ScoreDraft>({ home: null, away: null })
   const panelId = useId()
@@ -105,7 +123,7 @@ export function MatchRow({ m, state, now, signedIn, onSaved }: { m: LeagueMatch;
   const awayLost = m.settled && m.homeGoals !== null && m.awayGoals !== null && m.awayGoals < m.homeGoals
 
   return (
-    <article className={cn('overflow-hidden rounded-xl border bg-card transition-colors', open ? 'border-primary/40' : 'border-border')}>
+    <article ref={root} className={cn('overflow-hidden rounded-xl border bg-card transition-colors', open ? 'border-primary/40' : 'border-border')}>
       <button
         type="button"
         aria-expanded={open}

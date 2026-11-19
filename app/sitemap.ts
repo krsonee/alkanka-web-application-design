@@ -2,6 +2,9 @@ import type { MetadataRoute } from 'next'
 import { listPosts } from '@/lib/blog'
 import { latestDealByBrand, listDeals } from '@/lib/deals'
 import { LANDING_PAGES } from '@/lib/landing-pages'
+import { listProducts } from '@/lib/market'
+import { recordPath } from '@/lib/record-links'
+import { siteTournaments } from '@/lib/tournaments-site'
 import { PAGE_SEO, SITE_URL } from '@/lib/seo'
 import { listPublicSponsors } from '@/lib/sites'
 
@@ -11,11 +14,13 @@ const DAILY = new Set(['/'])
 const MEMBERS_ONLY_PATHS = new Set(['/sponsorlar', '/kampanyalar', '/bonuslar', '/ozel-oranlar'])
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [posts, deals, sponsors, brandDates] = await Promise.all([
+  const [posts, deals, sponsors, brandDates, tournaments, products] = await Promise.all([
     listPosts().catch(() => []),
     listDeals(1).catch(() => []),
     listPublicSponsors().catch(() => []),
     latestDealByBrand(),
+    siteTournaments().catch(() => []),
+    listProducts().catch(() => []),
   ])
 
   const latestDeal = deals[0] ? new Date(deals[0].createdAt) : undefined
@@ -42,5 +47,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...['cark', 'sandik', 'zar'].map((g) => ({ url: `${SITE_URL}/oyunlar/${g}`, changeFrequency: 'weekly' as const, priority: 0.5 })),
     ...LANDING_PAGES.map((p) => ({ url: `${SITE_URL}/oyna/${p.slug}`, changeFrequency: 'monthly' as const, priority: 0.7 })),
     ...posts.map((p) => ({ url: `${SITE_URL}/rehber/${p.slug}`, lastModified: new Date(p.updatedAt), changeFrequency: 'monthly' as const, priority: 0.7 })),
+    ...tournaments
+      .filter((t) => t.status !== 'iptal')
+      .map((t) => ({ url: `${SITE_URL}${recordPath('turnuva', t.id)}`, changeFrequency: t.status === 'bitti' ? ('monthly' as const) : ('daily' as const), priority: t.status === 'bitti' ? 0.3 : 0.6 })),
+    ...products.map((p) => ({ url: `${SITE_URL}${recordPath('market', p.id)}`, changeFrequency: 'weekly' as const, priority: 0.4 })),
   ]
 }
