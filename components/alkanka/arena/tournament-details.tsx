@@ -145,16 +145,11 @@ function RunningBlock({ t, view }: { t: Tournament; view: TournamentView }) {
       </p>
       {points ? (
         joined && (
-          <>
-            <p className={cn(noteBox, 'mt-1')} role="status">
-              {mine && mine.played > 0
-                ? `Sıran ${place + 1}. · ${mine.points} puan · ${mine.played} oyun${t.league.maxGames ? ` (en fazla ${t.league.maxGames} sayılır)` : ''}`
-                : 'Henüz sayılan bir oyunun yok. İlk oyununu bitirince tabloya girersin.'}
-            </p>
-            <Link href={`/oyunlar/${t.game}`} className="rounded-xl bg-primary px-5 py-3 text-center text-sm font-bold uppercase tracking-wide text-primary-foreground">
-              {meta.title} oyna, puan topla
-            </Link>
-          </>
+          <p className={cn(noteBox, 'mt-1')} role="status">
+            {mine && mine.played > 0
+              ? `Sıran ${place + 1}. · ${mine.points} puan · ${mine.played} oyun${t.league.maxGames ? ` (en fazla ${t.league.maxGames} sayılır)` : ''}`
+              : `Henüz sayılan bir oyunun yok. İlk ${meta.title} oyununu bitirince tabloya girersin.`}
+          </p>
         )
       ) : myMatch ? (
         <>
