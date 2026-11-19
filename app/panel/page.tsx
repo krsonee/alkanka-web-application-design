@@ -97,6 +97,9 @@ import { getTracking, listCampaigns, listEarnings } from '@/lib/marketing'
 import { SocialManager } from '@/components/panel/social-manager'
 import { adminEntries, adminSocialAccounts, getSocialLinks, listSocialEvents, type SocialLinks } from '@/lib/social'
 import { affLinkViews } from '@/lib/aff-links'
+import { linkReport } from '@/lib/links'
+import type { LinkReport } from '@/lib/links-shared'
+import { LinksTable } from '@/components/panel/links-table'
 import { adminSponsorAccounts, currentPeriod, flaggedMembers, followerCounts, getSiteLinks, trafficReport } from '@/lib/growth'
 import { listSites } from '@/lib/sites'
 import { listProducts, listRequests, stockReminders } from '@/lib/market'
@@ -739,7 +742,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       <SitesManager sites={await listSites()} today={istanbulToday()} legacyLogos={(content['logos:sponsors'] as Record<string, string> | undefined) ?? {}} />
     )),
     section(ctx, 'growth', 'Büyüme', async () => {
-      const [ambient, options, allSites, links, followers, report, flagged, accounts, affLinks] = await Promise.all([
+      const [ambient, options, allSites, links, followers, report, flagged, accounts, affLinks, allLinks] = await Promise.all([
         tabHome('ambient', can) === 'growth' ? getAmbientSettings() : null,
         siteOptions(),
         listSites().catch(miss([])),
@@ -749,6 +752,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         flaggedMembers().catch(miss([])),
         adminSponsorAccounts().catch(miss([])),
         affLinkViews().catch(miss([])),
+        linkReport({ campaigns: can('marketing') }).catch(miss<LinkReport | null>(null)),
       ])
       const traffic = (
         <GrowthManager
@@ -766,16 +770,31 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           affSites={allSites.map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active }))}
         />
       )
-      if (!ambient) return traffic
-      return (
-        <TelegramTabs
-          label="Büyüme bölümleri"
-          tabs={[
-            { id: 'traffic', label: 'Trafik & hesaplar', content: traffic },
-            { id: 'ambient', label: 'Masa doluluğu', content: <AmbientEditor settings={ambient} /> },
-          ]}
-        />
-      )
+      const tabs = [
+        ...(allLinks
+          ? [
+              {
+                id: 'links',
+                label: `Linkler (${allLinks.rows.length})`,
+                content: (
+                  <LinksTable
+                    report={allLinks}
+                    sites={allSites.map((s) => ({ id: s.id, name: s.name }))}
+                    siteUrl={SITE_URL}
+                    editHrefs={{
+                      sponsor: '/panel?b=growth&s=traffic',
+                      campaigns: can('marketing') ? '/panel?b=marketing&s=campaigns' : null,
+                      earnings: can('marketing') ? '/panel?b=marketing&s=earnings' : null,
+                    }}
+                  />
+                ),
+              },
+            ]
+          : []),
+        { id: 'traffic', label: 'Trafik & hesaplar', content: traffic },
+        ...(ambient ? [{ id: 'ambient', label: 'Masa doluluğu', content: <AmbientEditor settings={ambient} /> }] : []),
+      ]
+      return tabs.length > 1 ? <TelegramTabs label="Büyüme bölümleri" legend={false} tabs={tabs} /> : traffic
     }),
     section(ctx, 'referral', 'Davet sistemi', async () => <ReferralEditor settings={await getReferralSettings()} />),
     section(ctx, 'marketing', 'Pazarlama', async () => {

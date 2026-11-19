@@ -60,6 +60,8 @@ const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row
   { title: 'Kampanya linkleri', words: 'utm takip linki', row: 'marketing', query: 's=campaigns' },
   { title: 'Affiliate hakediş', words: 'komisyon ödeme vade', row: 'marketing', query: 's=earnings' },
   { title: 'Ölçüm etiketleri', words: 'piksel analytics gtm meta tiktok', row: 'marketing', query: 's=tracking' },
+  { title: 'Linkler', words: 'kısa link tıklama tekil kayıt sponsor linki kampanya linki git düğmesi excel rapor', row: 'growth', query: 's=links' },
+  { title: 'Kısa link alan adı', words: 'alan adı domain kısa adres yönlendirme', row: 'growth', query: 's=links' },
   { title: 'Trafik & hesaplar', words: 'sponsor hesabı eşleştirme tıklama', row: 'growth', query: 's=traffic' },
   { title: 'Davet sistemi', words: 'referans arkadaşını getir davet ödülü', row: 'referral' },
   { title: 'Sponsor anlaşma tarihi ve bedeli', words: 'anlaşma bitiş sözleşme süre aylık bedel ücret kayıt başı maliyet', row: 'sponsors' },

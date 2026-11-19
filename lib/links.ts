@@ -22,6 +22,12 @@ export function cleanRange(from?: string | null, to?: string | null) {
   return { from: start, to: end }
 }
 
+/** The last N Istanbul days, today included. */
+export function rangeForDays(days: number) {
+  const n = Math.min(MAX_RANGE_DAYS, Math.max(1, Math.trunc(days) || 30))
+  return { from: istanbulDay(-(n - 1)), to: istanbulDay() }
+}
+
 export async function getShortDomain(): Promise<string> {
   if (!process.env.DATABASE_URL) return ''
   await ensureMarketing()
@@ -54,7 +60,9 @@ function statMap(list: Record<string, unknown>[], key: string) {
  * Every short link in one list: sponsor/outside links (/r), campaign links (/k) and the on-site "Git" buttons (/git).
  * Clicks and uniques are counted inside the range; the last click is over all time so a dead link stays visible.
  */
-export async function linkReport(input: { from?: string | null; to?: string | null; siteId?: number | null } = {}): Promise<LinkReport> {
+export async function linkReport(
+  input: { from?: string | null; to?: string | null; siteId?: number | null; campaigns?: boolean } = {},
+): Promise<LinkReport> {
   await ensureMarketing()
   const { from, to } = cleanRange(input.from, input.to)
   const siteId = input.siteId && Number.isInteger(Number(input.siteId)) ? Number(input.siteId) : null
@@ -116,7 +124,8 @@ export async function linkReport(input: { from?: string | null; to?: string | nu
     })
   }
 
-  for (const c of campaigns) {
+  // Campaign links belong to the marketing screen: an account without that permission does not get their rows.
+  for (const c of input.campaigns === false ? [] : campaigns) {
     const code = String(c.code)
     const target = String(c.target)
     const owner = sites.find((s) => s.slug && (target === `/git/${s.slug}` || target.startsWith(`/git/${s.slug}?`) || target === `/siteler/${s.slug}`)) ?? null
