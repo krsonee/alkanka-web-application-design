@@ -106,7 +106,7 @@ export function EventCardsEditor({ cards, library, canManage, canOpenCalendar }:
                   <img src={card.image || '/placeholder.svg'} alt="" loading="lazy" className="size-full object-cover" />
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-sm font-medium text-foreground">{card.title}</span>
+                  <span className="text-sm font-medium text-foreground max-sm:line-clamp-2 sm:truncate">{card.title}</span>
                   <span className="truncate text-xs text-muted-foreground">{[card.subtitle, card.prize].filter(Boolean).join(' · ') || 'Alt yazı ve ödül yazısı yok'}</span>
                 </span>
               </button>
@@ -120,7 +120,7 @@ export function EventCardsEditor({ cards, library, canManage, canOpenCalendar }:
                 <button type="button" onClick={() => setEditing(card.id)} className={rowButton} aria-label={`${card.title}: düzenle`} title="Düzenle">
                   <Pencil className="size-4" aria-hidden="true" />
                 </button>
-                {canManage && <HideButton key={`${card.id}-${card.hidden}`} kind="event" id={card.id} hidden={card.hidden} label={card.title} />}
+                {canManage && <HideButton key={`${card.id}-${card.hidden}`} kind="event" id={card.id} hidden={card.hidden} label={card.title} className="min-w-[5.5rem] justify-center" />}
                 {canManage && (
                   <button type="button" disabled={pending} onClick={() => void remove(card)} className={cn(rowButton, 'hover:text-destructive')} aria-label={`${card.title}: sil`} title="Sil">
                     <Trash2 className="size-4" aria-hidden="true" />
@@ -226,15 +226,15 @@ function CardEditor({
         </div>
         <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
           Başlık
-          <input value={v.title} onChange={(event) => set('title', event.target.value)} maxLength={LIMITS.title} required placeholder="Bilet Çekilişi" className={input} />
+          <input value={v.title} onChange={(event) => set('title', event.target.value)} maxLength={LIMITS.title} required placeholder="Örnek: Hafta Sonu Çekilişi" className={input} />
         </label>
         <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
           Alt yazı
-          <input value={v.subtitle} onChange={(event) => set('subtitle', event.target.value)} maxLength={LIMITS.subtitle} placeholder="250.000 Kanka Coin havuz" className={input} />
+          <input value={v.subtitle} onChange={(event) => set('subtitle', event.target.value)} maxLength={LIMITS.subtitle} placeholder="Örnek: 250.000 Kanka Coin havuz" className={input} />
         </label>
         <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
           Ödül yazısı
-          <input value={v.prize} onChange={(event) => set('prize', event.target.value)} maxLength={LIMITS.prize} placeholder="1. ödül 50.000 KC" className={input} />
+          <input value={v.prize} onChange={(event) => set('prize', event.target.value)} maxLength={LIMITS.prize} placeholder="Örnek: 1. ödül 50.000 KC" className={input} />
           <span className="font-normal leading-relaxed text-muted-foreground">Kartın sağ altında görünen kısa yazı. Ödülün kendisini değiştirmez.</span>
         </label>
         <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">

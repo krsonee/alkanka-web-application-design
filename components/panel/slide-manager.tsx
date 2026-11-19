@@ -182,14 +182,19 @@ export function SlideManager({ slides, library, audience }: { slides: EditorItem
         </button>
       </div>
       {note && (
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
-          <span className="min-w-0">{note}</span>
-          {layoutTab && (
-            <button type="button" onClick={() => tabs?.open('layout')} className="font-semibold text-primary hover:underline">
-              Ana sayfa düzenini aç
-            </button>
-          )}
+        <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
+          <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
+          <span className="min-w-0">
+            {note}
+            {layoutTab && (
+              <>
+                {' '}
+                <button type="button" onClick={() => tabs?.open('layout')} className="font-semibold text-primary hover:underline">
+                  Ana sayfa düzenini aç
+                </button>
+              </>
+            )}
+          </span>
         </p>
       )}
       <SortableList
@@ -216,7 +221,7 @@ export function SlideManager({ slides, library, audience }: { slides: EditorItem
               >
                 <Thumb src={imageOf(slide)} />
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-sm font-medium text-foreground">{titleOf(slide)}</span>
+                  <span className="text-sm font-medium text-foreground max-sm:line-clamp-2 sm:truncate">{titleOf(slide)}</span>
                   {sub && <span className="truncate text-xs text-muted-foreground">{sub}</span>}
                 </span>
               </button>
@@ -253,7 +258,7 @@ export function SlideManager({ slides, library, audience }: { slides: EditorItem
                 >
                   <Copy className="size-4" aria-hidden="true" />
                 </button>
-                <HideButton key={`${slide.id}-${!!slide.hidden}`} kind="slide" id={slide.id} hidden={!!slide.hidden} label={titleOf(slide)} />
+                <HideButton key={`${slide.id}-${!!slide.hidden}`} kind="slide" id={slide.id} hidden={!!slide.hidden} label={titleOf(slide)} className="min-w-[5.5rem] justify-center" />
                 {slide.custom ? (
                   <button type="button" disabled={busy} onClick={() => void remove(slide)} className={cn(rowButton, 'hover:text-destructive')} aria-label={`${titleOf(slide)}: sil`} title="Sil">
                     <Trash2 className="size-4" aria-hidden="true" />
@@ -431,13 +436,13 @@ function ItemEditor({ item, library, onDone }: { item: EditorItem; library: stri
       }
     >
       <form id={formId} data-no-guard onSubmit={submit} className="flex flex-col gap-4">
-        <div className="relative aspect-[16/6] overflow-hidden rounded-xl border border-border bg-secondary">
+        <div className="relative aspect-video overflow-hidden rounded-xl border border-border bg-secondary sm:aspect-[16/6]">
           <Image src={preview} alt="" fill sizes="720px" className="object-cover" />
           <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/50 to-transparent" />
           <div className="absolute inset-y-0 left-0 flex w-3/4 flex-col justify-end gap-1 p-4">
             {shown('eyebrow') && <span className="truncate text-xs font-bold uppercase tracking-wider text-primary">{shown('eyebrow')}</span>}
-            <span className="line-clamp-2 text-balance font-display text-lg font-bold leading-tight text-foreground">{shown('title') || 'Başlık burada görünür'}</span>
-            {shown('description') && <span className="line-clamp-2 text-xs leading-relaxed text-foreground/80">{shown('description')}</span>}
+            <span className="line-clamp-2 shrink-0 text-balance font-display text-lg font-bold leading-tight text-foreground">{shown('title') || 'Başlık burada görünür'}</span>
+            {shown('description') && <span className="line-clamp-2 shrink-0 text-xs leading-relaxed text-foreground/80">{shown('description')}</span>}
             {isSlide && shown('cta') && <span className="mt-1 w-fit rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground">{shown('cta')}</span>}
             {!isSlide && shown('speech') && <span className="mt-1 w-fit max-w-full truncate rounded-lg bg-card/90 px-2.5 py-1 text-xs text-foreground">{`Jako: ${shown('speech')}`}</span>}
           </div>
