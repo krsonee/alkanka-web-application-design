@@ -3,7 +3,8 @@ import Link from 'next/link'
 import { ArrowRight, CircleCheck, CircleDot, Coins, Crown, Flame, Gamepad2, Gift, ListChecks, Send, ShoppingBag, Target, Trophy } from 'lucide-react'
 import type { MarketProduct } from '@/lib/market'
 import { productImage } from '@/lib/market-image'
-import type { LeagueMatch } from '@/lib/community'
+import type { LeagueMatch } from '@/lib/predictions'
+import { setCeiling } from '@/lib/predictions-shared'
 import type { CemberMe, CemberStatus } from '@/lib/cember-shared'
 import { publicRankName } from '@/lib/kanka-puan-shared'
 import type { PodiumRow } from '@/components/alkanka/top-three'
@@ -27,7 +28,6 @@ export type HubData = {
   cemberMe: CemberMe | null
   goal: MarketProduct | null
   match: LeagueMatch | null
-  exactReward: number
 }
 
 const fmt = (n: number) => n.toLocaleString('tr-TR')
@@ -56,19 +56,24 @@ function Crest({ name, src }: { name: string; src: string | null }) {
   )
 }
 
-function PredictionTile({ match, reward }: { match: LeagueMatch | null; reward: number }) {
+/** The headline prize of a match, short enough for the tile. */
+function topReward(match: LeagueMatch) {
+  const c = setCeiling(match.set)
+  if (c.kc > 0) return `+${fmt(c.kc)} KC`
+  if (c.kp > 0) return `+${fmt(c.kp)} KP`
+  return `+${c.pts} puan`
+}
+
+function PredictionTile({ match }: { match: LeagueMatch | null }) {
+  const myScore = match?.myPick?.answers.score
   return (
-    <Tile href="/tahminler" label="Skor tahminine git" icon={Trophy} title="Skor tahmini" delay="-8s">
+    <Tile href="/tahminler" label="Maç tahminine git" icon={Trophy} title="Maç tahmini" delay="-8s">
       {match ? (
         <>
           <div className="flex items-center gap-1.5">
             <Crest name={match.home} src={match.homeLogo} />
-            {match.myPick ? (
-              <span className="flex-1 text-center font-display text-base font-bold leading-none text-primary tabular-nums md:text-lg">
-                {match.myPick.home}
-                <span className="px-0.5 text-muted-foreground">-</span>
-                {match.myPick.away}
-              </span>
+            {myScore ? (
+              <span className="flex-1 text-center font-display text-base font-bold leading-none text-primary tabular-nums md:text-lg">{myScore}</span>
             ) : (
               <span className="flex-1 text-center font-display text-[11px] font-bold tracking-widest text-muted-foreground">VS</span>
             )}
@@ -83,7 +88,7 @@ function PredictionTile({ match, reward }: { match: LeagueMatch | null; reward: 
               <span className="shrink-0 font-semibold text-live">Tahmin verildi</span>
             ) : (
               <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 font-bold text-primary ring-1 ring-primary/30">
-                +{fmt(reward)} KC
+                {topReward(match)}
               </span>
             )}
           </p>
@@ -415,7 +420,7 @@ export function MemberHub({
           )}
         </Tile>
 
-        <PredictionTile match={data.match} reward={data.exactReward} />
+        <PredictionTile match={data.match} />
       </div>
     </section>
   )

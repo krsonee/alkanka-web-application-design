@@ -146,7 +146,7 @@ export function movedAddress(b: string | undefined, s: string | undefined, can: 
 /** What a permission opens besides its own menu row, shown where permissions are handed out. */
 export const PERMISSION_EXTRAS: Partial<Record<PanelModule, string>> = {
   logo: 'Ana sayfa & Masa aç ile Reklam alanlarını da açar.',
-  community: 'Çekim paylaşımlarını ve Skor tahmin ligini de açar.',
+  community: 'Çekim paylaşımlarını ve Tahmin ligini de açar.',
   growth: 'Davet sistemini ve Masa doluluğunu da açar.',
   market: 'Masa temalarını da açar.',
 }

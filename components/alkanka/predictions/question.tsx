@@ -27,8 +27,8 @@ const chipOn = 'border-primary bg-primary text-primary-foreground'
 function GoalPicker({ team, value, onChange, disabled }: { team: string; value: number | null; onChange: (n: number) => void; disabled: boolean }) {
   const more = value !== null && value >= MORE_FROM
   return (
-    <div className="flex flex-col gap-1.5 @lg:flex-row @lg:items-center @lg:gap-3">
-      <span className="truncate text-xs font-semibold text-muted-foreground @lg:w-28 @lg:shrink-0">{team}</span>
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <span className="truncate text-xs font-semibold text-muted-foreground">{team}</span>
       <div role="group" aria-label={`${team} gol sayısı`} className="flex min-w-0 flex-1 gap-1">
         {QUICK_GOALS.map((n) => (
           <button key={n} type="button" disabled={disabled} aria-pressed={value === n} onClick={() => onChange(n)} className={cn(chip, value === n ? chipOn : chipIdle)}>
@@ -53,6 +53,15 @@ function GoalPicker({ team, value, onChange, disabled }: { team: string; value: 
       </div>
     </div>
   )
+}
+
+/** The score question is the wide one: it takes the whole row wherever the questions sit two abreast. */
+const WIDE = '@2xl:col-span-2'
+
+/** The order the questions are laid out in, with the wide score question placed where it leaves no gap beside it. */
+export function layoutOrder(ids: MarketId[]): MarketId[] {
+  const rest = ids.filter((id) => id !== 'score')
+  return rest.length === ids.length || rest.length < 2 ? ids : [...rest.slice(0, 2), 'score', ...rest.slice(2)]
 }
 
 export type ScoreDraft = { home: number | null; away: number | null }
@@ -104,10 +113,10 @@ export function QuestionInput({
 }) {
   const options = marketOptions(id, teams, rule)
   return (
-    <div className="flex flex-col gap-2">
+    <div className={cn('@container flex flex-col gap-2', id === 'score' && WIDE)}>
       <Head id={id} rule={rule} />
       {id === 'score' ? (
-        <div className="flex flex-col gap-2">
+        <div className="grid gap-x-6 gap-y-2 @xl:grid-cols-2">
           <GoalPicker team={teams.home} value={score.home} disabled={disabled} onChange={(home) => onScore({ ...score, home })} />
           <GoalPicker team={teams.away} value={score.away} disabled={disabled} onChange={(away) => onScore({ ...score, away })} />
         </div>
@@ -120,9 +129,9 @@ export function QuestionInput({
               disabled={disabled}
               aria-pressed={value === o.value}
               onClick={() => onPick(o.value)}
-              className={cn('flex h-11 min-w-0 items-center justify-center rounded-md border px-2 text-sm font-semibold transition-colors disabled:opacity-50', value === o.value ? 'border-primary bg-primary/15 text-primary' : chipIdle)}
+              className={cn('flex min-h-11 min-w-0 items-center justify-center rounded-md border px-2 py-1 text-center text-sm font-semibold leading-tight transition-colors disabled:opacity-50', value === o.value ? 'border-primary bg-primary/15 text-primary' : chipIdle)}
             >
-              <span className="truncate">{o.label}</span>
+              <span className="line-clamp-2 text-balance">{o.label}</span>
             </button>
           ))}
         </div>
@@ -160,7 +169,7 @@ export function QuestionResult({
       .sort((a, b) => b[1] - a[1])
       .slice(0, 4)
     return (
-      <div className="flex flex-col gap-2">
+      <div className={cn('flex flex-col gap-2', WIDE)}>
         <Head id={id} rule={rule} outcome={outcome} />
         <dl className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
           <div className="flex items-baseline gap-1.5">
@@ -206,13 +215,13 @@ export function QuestionResult({
               )}
             >
               {total > 0 && <span aria-hidden="true" className="absolute inset-y-0 left-0 bg-foreground/5" style={{ width: `${share}%` }} />}
-              <span className="relative flex w-full items-center justify-center gap-1 text-sm font-semibold">
+              <span className="relative flex w-full items-center justify-center gap-1 text-sm font-semibold leading-tight">
                 {isRight && <Check className="size-3.5 shrink-0" aria-label="Doğru cevap" />}
                 {isMine && right && !isRight && <X className="size-3.5 shrink-0" aria-hidden="true" />}
-                <span className="truncate">{o.label}</span>
+                <span className="line-clamp-2 text-balance">{o.label}</span>
               </span>
               <span className="relative text-xs text-muted-foreground">
-                {isMine ? 'Senin seçimin' : ''}
+                {isMine ? 'Seçimin' : ''}
                 {isMine && total > 0 ? ' · ' : ''}
                 {total > 0 ? `%${share}` : ''}
               </span>

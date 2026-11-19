@@ -28,7 +28,7 @@ import { getTelegramAddresses } from '@/lib/telegram-channels'
 import { MemberHomeV2 } from '@/components/alkanka/home/member-home-v2'
 import { GuestHomeV2, MemberHomeV2Page } from '@/components/alkanka/home/v2/home-v2'
 import { getMiniStatus } from '@/app/actions/wallet'
-import { EXACT_REWARD, listLeagueMatches, type LeagueMatch } from '@/lib/community'
+import { listLeagueMatches, type LeagueMatch } from '@/lib/predictions'
 
 export async function generateMetadata(): Promise<Metadata> {
   const base = pageMeta('anasayfa')
@@ -93,7 +93,6 @@ async function loadHub(member: Member, products: MarketProduct[]): Promise<HubDa
     cemberMe,
     goal,
     match,
-    exactReward: EXACT_REWARD,
   }
 }
 

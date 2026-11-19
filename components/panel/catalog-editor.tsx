@@ -10,9 +10,8 @@ import { ArrowDown, ArrowUp, ChevronDown, Loader2, Plus, RotateCcw, Save, Trash2
 import { loadEventBoard, loadPredictionPicks, resetCatalog, saveCatalogList, saveCategoryOrder, settleEventNow } from '@/app/panel/catalog-actions'
 import { EVENT_GAME_OPTIONS, EVENT_RANKS, RANK_LABEL, RANK_SHORT, cleanPayouts, eventGameLabel, lastPrizePlace, parseKc, payoutTotal, type EventRank } from '@/lib/event-rules'
 import { BONUS_TYPES, EVENT_KINDS, PREDICTION_PAYOUT, predictionPayout, sortByOrder, type Catalog, type CategoryOrder } from '@/lib/catalog-shared'
-import { EXACT_POINTS, EXACT_REWARD, OUTCOME_POINTS, OUTCOME_REWARD } from '@/lib/community-limits'
-import type { LeagueMatch } from '@/lib/community'
-import { LeagueAdmin } from '@/components/panel/community'
+import type { LeagueMatch } from '@/lib/predictions'
+import { LeagueAdmin } from '@/components/panel/league-admin'
 import { PickList } from '@/components/panel/pick-list'
 import { cn } from '@/lib/utils'
 import { HideButton } from '@/components/panel/hide-button'
@@ -520,7 +519,7 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder,
                     <div className="flex flex-col gap-2 rounded-xl border border-border p-3">
                       <p className="text-xs leading-relaxed text-muted-foreground">
                         Tahmin başına ödenen: <span className="font-bold text-foreground">{`${predictionPayout(Number(item.reward))} KC`}</span>
-                        {`, tahmin yapıldığı an (günde ${PREDICTION_PAYOUT.perDay} tahmine kadar). Bu tahmin türünde sonuç girilmez ve doğru bilene ayrıca ödül verilmez; sonuçlu, puanlı tahmin için Skor tahmin ligini kullan.`}
+                        {`, tahmin yapıldığı an (günde ${PREDICTION_PAYOUT.perDay} tahmine kadar). Bu tahmin türünde sonuç girilmez ve doğru bilene ayrıca ödül verilmez; sonuçlu, puanlı tahmin için Tahmin ligini kullan.`}
                       </p>
                       <PickList cacheKey={`prediction-picks-${id}`} load={() => loadPredictionPicks(id)} pickLabel="Seçtiği" />
                     </div>
@@ -556,7 +555,7 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder,
   )
 }
 
-/** `league` is the score league: it lives under the Tahminler tab, next to the option predictions. */
+/** `league` is the prediction league: it lives under the Tahminler tab, next to the option predictions. */
 type Tab = Kind | 'calendar' | 'league'
 
 const TABS: { id: Exclude<Tab, 'league'>; label: string }[] = [
@@ -575,8 +574,8 @@ const PREDICTION_KINDS = [
   },
   {
     id: 'league',
-    label: 'Skor tahmin ligi',
-    about: `Üye maçın skorunu yazar. Sonuç girilince tam skor ${EXACT_POINTS} puan + ${EXACT_REWARD} KC, doğru sonuç ${OUTCOME_POINTS} puan + ${OUTCOME_REWARD} KC kazandırır; puanlar /tahminler sayfasındaki sıralamaya yazılır.`,
+    label: 'Tahmin ligi',
+    about: `Üye maçın sorularını cevaplar: maç sonucu, tam skor, gol, korner, kart gibi. Hangi soruların sorulacağını ve her doğru cevabın ödülünü sen seçersin. Sonuç girilince puanlar ve ödüller dağıtılır; puanlar /tahminler sayfasındaki haftalık ve aylık lig tablosuna yazılır.`,
   },
 ] as const
 
@@ -593,7 +592,7 @@ export function CatalogEditor({
   library: string[]
   hidden?: HiddenMap
   tournaments?: CalendarTournament[]
-  /** Score-league matches, when this account may manage them here. */
+  /** Prediction-league matches, when this account may manage them here. */
   league?: LeagueMatch[] | null
 }) {
   const [tab, setTab] = useUrlTab<Tab>(league ? ['events', 'predictions', 'league', 'campaigns', 'bonuses', 'calendar'] : ['events', 'predictions', 'campaigns', 'bonuses', 'calendar'], 'events')

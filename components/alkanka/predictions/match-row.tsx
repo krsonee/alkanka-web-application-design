@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { TeamLogo } from '../logo-context'
 import { usePoints } from '../points-context'
 import { StatusLine, useAction } from '../community/use-action'
-import { QuestionInput, QuestionResult, scoreAnswer, type ScoreDraft } from './question'
+import { QuestionInput, QuestionResult, layoutOrder, scoreAnswer, type ScoreDraft } from './question'
 
 export type MatchState = 'open' | 'waiting' | 'done'
 
@@ -58,7 +58,7 @@ function earnedText(pick: NonNullable<LeagueMatch['myPick']>) {
 type Fact = { text: string; tone?: string }
 
 /** The one line under the teams: what is asked and what it pays, or how the member did. */
-function facts(m: LeagueMatch, state: MatchState, ids: MarketId[], now: number): Fact[] {
+function facts(m: LeagueMatch, state: MatchState, ids: MarketId[], now: number, signedIn: boolean): Fact[] {
   const league: Fact = { text: m.league }
   if (state === 'open') {
     const closing = closingText(m, now)
@@ -66,10 +66,10 @@ function facts(m: LeagueMatch, state: MatchState, ids: MarketId[], now: number):
       league,
       { text: `${ids.length} soru` },
       { text: `Ödül: ${ceilingText(m.set)}`, tone: 'font-semibold text-primary' },
-      ...(closing ? [{ text: closing.text, tone: closing.soon ? 'font-semibold text-live' : undefined }] : []),
+      ...(closing ? [{ text: closing.text, tone: closing.soon ? 'font-semibold text-destructive' : undefined }] : []),
     ]
   }
-  if (!m.myPick) return [league, { text: 'Tahmin yapmadın' }]
+  if (!m.myPick) return [league, { text: signedIn ? 'Tahmin yapmadın' : `${fmt(m.picks)} tahmin` }]
   if (state === 'waiting') {
     const teams = { home: m.home, away: m.away }
     return [
@@ -88,7 +88,7 @@ function facts(m: LeagueMatch, state: MatchState, ids: MarketId[], now: number):
   ]
 }
 
-export function MatchRow({ m, state, now, onSaved }: { m: LeagueMatch; state: MatchState; now: number; onSaved: () => void }) {
+export function MatchRow({ m, state, now, signedIn, onSaved }: { m: LeagueMatch; state: MatchState; now: number; signedIn: boolean; onSaved: () => void }) {
   const { requireLogin } = usePoints()
   const { pending, status, run } = useAction()
   const [open, setOpen] = useState(false)
@@ -131,20 +131,24 @@ export function MatchRow({ m, state, now, onSaved }: { m: LeagueMatch; state: Ma
             </span>
           )}
         </span>
-        <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pl-14 text-xs text-muted-foreground">
-          {facts(m, state, ids, now).map((f, i) => (
-            <span key={i} className="flex min-w-0 items-center gap-1.5">
-              {i > 0 && <span aria-hidden="true">·</span>}
-              <span className={cn('min-w-0 break-words', f.tone)}>{f.text}</span>
+        <span className="block pl-14 text-xs text-muted-foreground">
+          {/* Each fact carries its separator in its own left padding; the clip hides it wherever a line starts. */}
+          <span className="block overflow-hidden">
+            <span className="-ml-3 flex flex-wrap gap-y-0.5">
+              {facts(m, state, ids, now, signedIn).map((f, i) => (
+                <span key={i} className="relative min-w-0 pl-3 before:absolute before:left-1 before:text-muted-foreground before:content-['·']">
+                  <span className={cn('break-words', f.tone)}>{f.text}</span>
+                </span>
+              ))}
             </span>
-          ))}
+          </span>
         </span>
       </button>
 
       {open && state === 'open' && (
         <div id={panelId} className="flex flex-col gap-4 border-t border-border p-3 @2xl:p-4">
-          <div className="grid gap-x-6 gap-y-4 @3xl:grid-cols-2">
-            {ids.map((id) => (
+          <div className="grid gap-x-6 gap-y-4 @2xl:grid-cols-2">
+            {layoutOrder(ids).map((id) => (
               <QuestionInput
                 key={id}
                 id={id}
@@ -182,8 +186,8 @@ export function MatchRow({ m, state, now, onSaved }: { m: LeagueMatch; state: Ma
 
       {open && state !== 'open' && (
         <div id={panelId} className="flex flex-col gap-4 border-t border-border p-3 @2xl:p-4">
-          <div className="grid gap-x-6 gap-y-4 @3xl:grid-cols-2">
-            {ids.map((id) => (
+          <div className="grid gap-x-6 gap-y-4 @2xl:grid-cols-2">
+            {layoutOrder(ids).map((id) => (
               <QuestionResult
                 key={id}
                 id={id}

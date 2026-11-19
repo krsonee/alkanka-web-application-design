@@ -59,7 +59,7 @@ export const RULE_FIELDS: { key: keyof PointRules; label: string; hint: string; 
   { key: 'task', label: 'Tamamlanan görev', hint: 'Görevler sayfasındaki her görev', unit: 'KP / görev' },
   { key: 'chat', label: 'Sohbet mesajı', hint: 'Sohbet kanalına yazılan her mesaj', unit: 'KP / mesaj' },
   { key: 'chatDailyCap', label: 'Günlük mesaj sınırı', hint: 'Spamı önler, günde en fazla bu kadar mesaj sayılır', unit: 'mesaj' },
-  { key: 'leaguePoint', label: 'Tahmin ligi puanı', hint: 'Doğru sonuç 1, tam skor 3 lig puanıdır', unit: 'KP / lig puanı' },
+  { key: 'leaguePoint', label: 'Tahmin ligi puanı', hint: 'Her doğru cevabın lig puanı maçın sorularında belirlenir', unit: 'KP / lig puanı' },
   { key: 'tournamentWin', label: 'Turnuva şampiyonluğu', hint: 'Turnuva bitince şampiyona otomatik', unit: 'KP' },
   { key: 'review', label: 'Onaylanan site yorumu', hint: 'Güven merkezinde yayınlanan yorum', unit: 'KP / yorum' },
   { key: 'referral', label: 'Getirilen arkadaş', hint: 'Davet ödülü onaylanan her arkadaş', unit: 'KP / kişi' },

@@ -115,6 +115,7 @@ export function League({
   const week = tables.week
   const myIndex = meId ? week.findIndex((r) => r.userId === meId) : -1
   const myRow = myIndex >= 0 ? week[myIndex] : null
+  const stillOpen = matches.some((m) => !m.settled && m.myPick && new Date(m.closesAt ?? m.kickoff).getTime() > now)
   const waitingAwards = awards.filter((a) => a.status === 'beklemede' && a.needsUsername && !a.siteUsername).length
 
   return (
@@ -137,8 +138,10 @@ export function League({
                 <>
                   <b className="text-foreground">{groups.open.length} maç</b> tahminini bekliyor.
                 </>
-              ) : (
+              ) : stillOpen ? (
                 'Açık maçların hepsini tahmin ettin.'
+              ) : (
+                'Şu an tahmine açık maç yok.'
               )}
             </>
           ) : (
@@ -232,7 +235,7 @@ export function League({
                   <span className="font-normal normal-case tracking-normal">{day.items.length} maç</span>
                 </h2>
                 {day.items.map((m) => (
-                  <MatchRow key={m.id} m={m} state={tab} now={now} onSaved={() => setSaved(true)} />
+                  <MatchRow key={m.id} m={m} state={tab} now={now} signedIn={meId !== null} onSaved={() => setSaved(true)} />
                 ))}
               </section>
             ))
