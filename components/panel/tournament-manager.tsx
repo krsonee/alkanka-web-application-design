@@ -252,7 +252,9 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
           >
             {games.map((g) => (
               <option key={g} value={g}>
-                {ARENA_META[g].title} · {(tournamentSeats(g) ?? 2) > 2 ? `${tournamentSeats(g)} kişilik masa` : 'birebir'}
+                {ARENA_META[g].title}
+                {/* A points league seats nobody, so the table size says nothing there. */}
+                {pointsLeague ? '' : ` · ${(tournamentSeats(g) ?? 2) > 2 ? `${tournamentSeats(g)} kişilik masa` : 'birebir'}`}
               </option>
             ))}
           </select>
@@ -260,7 +262,7 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
             {!canHostTournament(game)
               ? 'Bu oyunda artık turnuva açılmıyor. Listeden başka bir oyun seç.'
               : pointsLeague
-                ? `Puan liginde turnuva masası açılmaz: oyuncular ${ARENA_META[game].title} oyunlarını her zamanki gibi oynar, sonuçlar puan tablosuna yazılır.`
+                ? `Puan liginde turnuva masası açılmaz, 2 kişi şartı da yoktur: oyuncular ${ARENA_META[game].title} oyunlarını her zamanki masalarda oynar, masa kaç kişilik olursa olsun sonuç puan tablosuna yazılır. Sadece ${ARENA_META[game].title} sayılır; başka oyunlar bu lige puan yazmaz.`
                 : shared
                   ? `${ARENA_META[game].title} turnuvası ${seats} kişilik ortak masalarda oynanır: her masanın ilk ${TABLE_PASS} oyuncusu tur atlar, final masasının birincisi şampiyon olur.`
                   : `${ARENA_META[game].title} turnuvasında maçlar birebir oynanır.`}
@@ -288,7 +290,7 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
               ? 'Kaybeden elenir, tur tur finale gidilir. Kısa sürede biten, tek oturumluk turnuva.'
               : fixtures
                 ? `Herkes herkesle oynar, galibiyet 3 puan; en çok puanı toplayan şampiyon olur. En fazla ${MAX_LEAGUE_PLAYERS} oyuncu. Turların ne sıklıkla açılacağını aşağıdan seç.`
-                : 'Eşleşme ve fikstür yok. Lig süresince kayıtlı oyuncuların kendi oynadığı oyunlar sayılır: galibiyet 3, beraberlik 1 puan. Bitiş saatinde ilk sıralar ödülü alır.'}
+                : `Eşleşme ve fikstür yok. Lig süresince kayıtlı oyuncuların kendi oynadığı ${ARENA_META[game].title} oyunları sayılır: galibiyet 3, beraberlik 1 puan. Bitiş saatinde ilk sıralar ödülü alır. Günlerce süren lig için uygun olan budur.`}
             {shared && ' Ortak masalarda oynanan oyunlarda fikstürlü lig yok.'}
             {legacyFormat && ' Bu kayıt lig düzenindeydi; bu oyunda fikstürlü lig olmadığı için eleme seçildi.'}
           </span>
@@ -331,7 +333,7 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
         {pointsLeague && (
           <>
             <label className={labelCls}>
-              Sayılan oyunlar
+              Sayılan {ARENA_META[game].title} masaları
               <select name="source" value={league.source} onChange={(e) => setLeague({ ...league, source: e.target.value as PointSource })} className={field}>
                 {POINT_SOURCES.map((s) => (
                   <option key={s} value={s}>
@@ -341,23 +343,24 @@ function TournamentForm({ t, preset, onCreated }: { t?: Tournament; preset?: Tou
               </select>
               <span className={cn('font-normal', league.source === 'hepsi' && 'text-destructive')} aria-live="polite">
                 {league.source === 'pvp'
-                  ? 'Üyelerin birbirine karşı oynadığı masalar sayılır; bu masaların sonucunu sunucu yazar. Bota karşı oyunlar ve turnuva maçları sayılmaz.'
-                  : 'Bota karşı oyunlar da sayılır. Bot maçlarının bir kısmında sonucu oyuncunun tarayıcısı bildirir; ödüllü ligde bu seçenek hileye açıktır.'}
+                  ? `Masada en az iki üye varsa ${ARENA_META[game].title} oyunu sayılır; masa 2 ya da 4 kişilik olabilir, boş koltuklara bot oturmuş olabilir. Tek üyenin sadece botlarla oynadığı masa ve turnuva maçları sayılmaz. Sonucu sunucu yazar.`
+                  : 'Sadece botlara karşı oynanan oyunlar da sayılır. Bot maçlarının bir kısmında sonucu oyuncunun tarayıcısı bildirir; ödüllü ligde bu seçenek hileye açıktır.'}
               </span>
             </label>
             <label className={labelCls}>
-              Oyuncu başına sayılacak oyun
+              Oyuncu başına sayılacak {ARENA_META[game].title} oyunu
               <select name="maxGames" value={league.maxGames} onChange={(e) => setLeague({ ...league, maxGames: Number(e.target.value) })} className={field}>
                 {POINT_GAME_CAPS.map((n) => (
                   <option key={n} value={n}>
-                    {n ? `İlk ${n} oyun` : 'Sınır yok: bütün oyunlar sayılır'}
+                    {n ? `İlk ${n} ${ARENA_META[game].title} oyunu` : `Sınır yok: oynadığı her ${ARENA_META[game].title} oyunu sayılır`}
                   </option>
                 ))}
               </select>
               <span className="font-normal" aria-live="polite">
                 {league.maxGames
-                  ? `Her oyuncunun lig başladıktan sonraki ilk ${league.maxGames} oyunu sayılır, sonrakiler puan getirmez. Herkes aynı sayıda oyunla yarışır.`
-                  : 'Sınır yoksa çok oynayan öne geçer. İki hesabın birbirine oyun vermesini de sınırlamak istersen bir sınır seç.'}
+                  ? `Her oyuncunun lig başladıktan sonraki ilk ${league.maxGames} ${ARENA_META[game].title} oyunu sayılır, sonrakiler puan getirmez. Herkes aynı sayıda oyunla yarışır.`
+                  : `Sayı sınırı yok: çok ${ARENA_META[game].title} oynayan öne geçer. İki hesabın birbirine oyun vermesini de sınırlamak istersen bir sınır seç.`}{' '}
+                Başka oyunlar hiçbir durumda sayılmaz.
               </span>
             </label>
           </>
@@ -950,7 +953,7 @@ export function TournamentManager({ tournaments, templates = [], hidden = [] }: 
         <div className="flex flex-col gap-1">
           <h2 className="font-display text-xl font-bold uppercase text-foreground">Yeni turnuva oluştur</h2>
           <p className="text-sm text-muted-foreground">
-            Oluşturduğun turnuva hemen /turnuvalar sayfasında kayda açılır. Başlangıç saatinde kendiliğinden başlar, bitiş saatinde kesin kapanır. Eşleşmeler kura ile çekilir. Okey, Tavla, Bilardo, Kafa Topu ve Kafa Basketbolu birebir; 101 Okey, Batak, Pişti ve Jakopoly 4 kişilik ortak masalarda oynanır.
+            Oluşturduğun turnuva hemen /turnuvalar sayfasında kayda açılır. Başlangıç saatinde kendiliğinden başlar, bitiş saatinde kesin kapanır. Eşleşmeler kura ile çekilir. Elemede ve fikstürlü ligde Okey, Tavla, Bilardo, Kafa Topu ve Kafa Basketbolu birebir; 101 Okey, Batak, Pişti ve Jakopoly 4 kişilik ortak masalarda oynanır. Puan liginde masa açılmaz: oyuncuların o oyunda oynadığı masalar, kaç kişilik olursa olsun, puan tablosuna yazılır.
           </p>
         </div>
         <TemplatePicker templates={templates} picked={picked} onPick={pick} />

@@ -11,9 +11,21 @@ type Queryable = { query: (text: string, params?: unknown[]) => Promise<QueryRes
 export type PointWindow = { id: number; game: string; from: Date; to: Date; league: Pick<LeagueSettings, 'source' | 'maxGames'> }
 
 /**
- * The league table of a points league, read from the entrants' own game history. Fees, prizes and
- * tournament matches are logged under other modes, so only ordinary finished games are counted.
- * With a game cap, a player's first games in the window count and the later ones do not.
+ * Members who sat down at a table: the ones still seated, plus the ones a bot took over from when
+ * they left. A table whose empty seats were filled by bots is logged as a member table like any other,
+ * so this is what tells a game against another member from a game against bots only.
+ */
+const MEMBERS_AT_TABLE = `(
+  (SELECT count(*) FROM jsonb_array_elements(g.players) p WHERE COALESCE(p->>'bot', 'false') <> 'true')
+  + COALESCE((g.options->>'forfeits')::int, 0)
+)`
+
+/**
+ * The league table of a points league, read from the entrants' own game history. Only the league's
+ * own game counts, at tables of any size. Fees, prizes and tournament matches are logged under other
+ * modes, so only ordinary finished games are counted. With the `pvp` source a game counts only when
+ * another member sat at the table. With a game cap, a player's first games in the window count and
+ * the later ones do not.
  * `order` is the registration order: it breaks ties and lists the entrants who have not played.
  */
 export async function pointStandings(db: Queryable, w: PointWindow, order: string[]): Promise<PointRow[]> {
@@ -25,13 +37,15 @@ export async function pointStandings(db: Queryable, w: PointWindow, order: strin
      FROM (
        SELECT h.user_id, h.result, row_number() OVER (PARTITION BY h.user_id ORDER BY h.created_at, h.id) AS n
        FROM game_history h
+       LEFT JOIN game_tables g ON g.id = h.table_id
        WHERE h.game = $2 AND h.mode = ANY($3::text[]) AND h.result IN ('win', 'loss', 'draw')
          AND h.created_at >= $4 AND h.created_at < $5
          AND h.user_id IN (SELECT user_id FROM tournament_entries WHERE tournament_id = $1 AND user_id IS NOT NULL)
+         AND ($7::boolean OR ${MEMBERS_AT_TABLE} >= 2)
      ) g
      WHERE $6::int = 0 OR n <= $6::int
      GROUP BY user_id`,
-    [w.id, w.game, SOURCE_MODES[w.league.source], w.from, w.to, w.league.maxGames],
+    [w.id, w.game, SOURCE_MODES[w.league.source], w.from, w.to, w.league.maxGames, w.league.source !== 'pvp'],
   )
   const rows: PointRow[] = r.rows.map((x) => {
     const played = Number(x.played)

@@ -7,14 +7,13 @@ import { cn } from '@/lib/utils'
 import { ARENA_META } from '@/lib/arena'
 import { isDecided, isRealMatch, passedOn } from '@/lib/bracket'
 import { FORMAT_SHORT, PACE_MS, SOURCE_LABEL, TABLE_PASS, leagueRounds, matchHref, matchLengthOf, type LiveMatch, type Tournament } from '@/lib/tournaments-shared'
-import { formatAC } from '../points-context'
 import { BracketView } from './bracket-view'
 import { LeagueView } from './league-view'
 import { PlayerStats } from './player-stats'
 import { PointsView } from './points-view'
 import { PrizeList } from './prize-list'
 import { Countdown } from './tournament-countdown'
-import { closeNote, formatTR, runningLine, tournamentRules } from './tournament-text'
+import { closeNote, formatTR, runningLine, tournamentRules, tournamentSteps } from './tournament-text'
 
 /** What the card already worked out about the viewer, so the details ask for nothing twice. */
 export type TournamentView = {
@@ -43,6 +42,31 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
+const sectionTitle = 'flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground'
+
+/** The tournament in three steps. Shown while it can still be joined or is being played. */
+function Steps({ t }: { t: Tournament }) {
+  return (
+    <section className="flex flex-col gap-2">
+      <h4 className={sectionTitle}>Nasıl oynanır</h4>
+      <ol className="grid gap-px overflow-hidden rounded-xl border border-border bg-border @2xl:grid-cols-3">
+        {tournamentSteps(t, ARENA_META[t.game].title).map((step, i) => (
+          <li key={step.title} className="flex gap-3 bg-card p-3 @2xl:flex-col @2xl:gap-2.5 @2xl:p-4">
+            <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary font-display text-sm font-bold text-primary-foreground">
+              {i + 1}
+            </span>
+            <div className="flex min-w-0 flex-col gap-1">
+              <span className="text-sm font-bold text-foreground">{step.title}</span>
+              <span className="text-sm leading-relaxed text-muted-foreground text-pretty">{step.text}</span>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+  )
+}
+
+/** What the card above does not already say: prize, fee, start and field are on the card. */
 function Facts({ t }: { t: Tournament }) {
   const meta = ARENA_META[t.game]
   const length = matchLengthOf(t.game, t.matchLength)
@@ -51,7 +75,6 @@ function Facts({ t }: { t: Tournament }) {
   const rounds = league ? (t.bracket?.rounds.length ?? leagueRounds(t.maxPlayers, t.league.legs)) : 0
   return (
     <dl className="flex flex-col divide-y divide-border rounded-xl border border-border">
-      <Fact label="Oyun">{meta.title}</Fact>
       <Fact label="Düzen">
         {FORMAT_SHORT[t.format]}
         {t.format === 'eleme' && (t.tableSize > 2 ? ` · ${t.tableSize} kişilik masalar` : ' · birebir')}
@@ -63,8 +86,9 @@ function Facts({ t }: { t: Tournament }) {
           {t.league.pace === 'gunluk' ? 'her gün 1 tur' : t.league.pace === 'haftalik' ? 'her hafta 1 tur' : 'art arda, aynı oturumda'}
         </Fact>
       )}
-      {points && <Fact label="Sayılan oyunlar">{SOURCE_LABEL[t.league.source]}</Fact>}
-      {points && <Fact label="Oyun sınırı">{t.league.maxGames ? `Oyuncu başına ilk ${t.league.maxGames} oyun` : 'Sınır yok'}</Fact>}
+      {points && <Fact label="Sayılan oyun">Sadece {meta.title}; masa kaç kişilik olursa olsun</Fact>}
+      {points && <Fact label="Sayılan masalar">{SOURCE_LABEL[t.league.source]}</Fact>}
+      {points && <Fact label="Oyun sınırı">{t.league.maxGames ? `Oyuncu başına ilk ${t.league.maxGames} ${meta.title} oyunu` : 'Sınır yok'}</Fact>}
       <Fact label="Başlangıç">
         <span className="capitalize">{formatTR(t.startsAt)}</span>
       </Fact>
@@ -73,11 +97,6 @@ function Facts({ t }: { t: Tournament }) {
           <span className="capitalize">{formatTR(t.endsAt)}</span>
         </Fact>
       )}
-      <Fact label="Katılım">{t.entryFee ? `${formatAC(t.entryFee)} KC` : 'Ücretsiz'}</Fact>
-      <Fact label="Ödül havuzu">{formatAC(t.prizePool)} KC</Fact>
-      <Fact label="Kayıtlı oyuncu">
-        {t.entries.length} / {t.maxPlayers}
-      </Fact>
       {!points && length && <Fact label="Maç uzunluğu">{length.label}</Fact>}
       {!points && <Fact label="Maça giriş süresi">{t.joinMinutes} dakika</Fact>}
     </dl>
@@ -126,16 +145,11 @@ function RunningBlock({ t, view }: { t: Tournament; view: TournamentView }) {
       </p>
       {points ? (
         joined && (
-          <>
-            <p className={cn(noteBox, 'mt-1')} role="status">
-              {mine && mine.played > 0
-                ? `Sıran ${place + 1}. · ${mine.points} puan · ${mine.played} oyun${t.league.maxGames ? ` (en fazla ${t.league.maxGames} sayılır)` : ''}`
-                : 'Henüz sayılan bir oyunun yok. İlk oyununu bitirince tabloya girersin.'}
-            </p>
-            <Link href={`/oyunlar/${t.game}`} className="rounded-xl bg-primary px-5 py-3 text-center text-sm font-bold uppercase tracking-wide text-primary-foreground">
-              {meta.title} oyna, puan topla
-            </Link>
-          </>
+          <p className={cn(noteBox, 'mt-1')} role="status">
+            {mine && mine.played > 0
+              ? `Sıran ${place + 1}. · ${mine.points} puan · ${mine.played} oyun${t.league.maxGames ? ` (en fazla ${t.league.maxGames} sayılır)` : ''}`
+              : `Henüz sayılan bir oyunun yok. İlk ${meta.title} oyununu bitirince tabloya girersin.`}
+          </p>
         )
       ) : myMatch ? (
         <>
@@ -169,7 +183,7 @@ function RunningBlock({ t, view }: { t: Tournament; view: TournamentView }) {
 
 function EntryBlock({ t, view }: { t: Tournament; view: TournamentView }) {
   const meta = ARENA_META[t.game]
-  const { joined, pending, error, canJoin, joinLabel, toggleEntry } = view
+  const { joined, pending, error, toggleEntry } = view
   const shared = t.tableSize > 2 && t.format === 'eleme'
   const left = Math.max(0, t.maxPlayers - t.entries.length)
   return (
@@ -198,19 +212,22 @@ function EntryBlock({ t, view }: { t: Tournament; view: TournamentView }) {
         </p>
       )}
       <div className="flex flex-col gap-2 @md:flex-row @md:items-center">
-        <button
-          type="button"
-          onClick={toggleEntry}
-          disabled={pending || (!joined && !canJoin)}
-          className={cn(
-            'rounded-xl px-5 py-2.5 text-sm font-bold uppercase tracking-wide disabled:opacity-50',
-            joined ? 'border border-border bg-card text-foreground hover:bg-background' : 'bg-primary text-primary-foreground hover:brightness-110',
-          )}
+        {/* The card above already carries the join button; down here only a registered member has something to do. */}
+        {joined && (
+          <button
+            type="button"
+            onClick={toggleEntry}
+            disabled={pending}
+            className="rounded-xl border border-border bg-card px-5 py-2.5 text-sm font-bold uppercase tracking-wide text-foreground hover:bg-background disabled:opacity-50"
+          >
+            {pending ? 'İşleniyor...' : 'Kaydımı iptal et'}
+          </button>
+        )}
+        <Link
+          href={`/oyunlar/${t.game}`}
+          className={cn('rounded-xl text-sm font-bold text-foreground hover:bg-background', joined ? 'px-3 py-2.5 text-center' : 'border border-border bg-card px-5 py-2.5 text-center')}
         >
-          {pending ? 'İşleniyor...' : joined ? 'Kaydımı iptal et' : joinLabel}
-        </button>
-        <Link href={`/oyunlar/${t.game}`} className="px-2 py-1.5 text-center text-xs font-semibold text-muted-foreground hover:text-foreground">
-          Turnuvadan önce {meta.title.toLowerCase()} masasında ısın
+          Turnuvadan önce {meta.title} masasında ısın
         </Link>
       </div>
     </div>
@@ -302,10 +319,12 @@ export function TournamentDetails({ t, id, view }: { t: Tournament; id: string; 
       )}
       {t.status === 'basladi' && <RunningBlock t={t} view={view} />}
       {t.status === 'kayit' && <EntryBlock t={t} view={view} />}
+      {t.description && <p className="text-sm leading-relaxed text-foreground text-pretty">{t.description}</p>}
+      {(t.status === 'kayit' || t.status === 'basladi') && <Steps t={t} />}
 
       <div className="grid gap-5 @3xl:grid-cols-2">
-        <div className="flex flex-col gap-4">
-          {t.description && <p className="text-sm leading-relaxed text-muted-foreground text-pretty">{t.description}</p>}
+        <div className="flex flex-col gap-2">
+          <h4 className={sectionTitle}>Turnuva bilgileri</h4>
           <Facts t={t} />
         </div>
         <div className="flex flex-col gap-4">

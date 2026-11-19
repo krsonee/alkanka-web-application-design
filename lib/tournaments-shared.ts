@@ -55,13 +55,23 @@ export const PACE_SHORT: Record<LeaguePace, string> = { ardarda: 'turlar art ard
 const DAY_MS = 86_400_000
 export const PACE_MS: Record<LeaguePace, number> = { ardarda: 0, gunluk: DAY_MS, haftalik: 7 * DAY_MS }
 
-/** Which finished games earn points in a points league: tables against members only, or games against the bot too. */
+/**
+ * Which finished games of the league's own game earn points in a points league. `pvp`: tables another
+ * member sat at, whatever their size, even when bots filled the seats left over. `hepsi`: games
+ * against bots only as well. No other game ever counts.
+ */
 export const POINT_SOURCES = ['pvp', 'hepsi'] as const
 export type PointSource = (typeof POINT_SOURCES)[number]
 
 export const SOURCE_LABEL: Record<PointSource, string> = {
   pvp: 'Sadece üyelere karşı oynanan masalar',
   hepsi: 'Üyelere ve bota karşı oynanan oyunlar',
+}
+
+/** What each source means, for the people who read the rules. */
+export const SOURCE_TEXT: Record<PointSource, string> = {
+  pvp: 'Masada senden başka en az bir üye olmalı; boş kalan koltuklara bot oturmuş olabilir. Sadece botlarla oynanan masa sayılmaz.',
+  hepsi: 'Üyelere karşı ve sadece botlara karşı oynanan oyunların ikisi de sayılır.',
 }
 
 /** The `mode` values of the history rows each source counts. */

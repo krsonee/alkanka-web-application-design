@@ -30,18 +30,27 @@ export function PointsView({
   const head = all ? ranked : ranked.slice(0, FOLD)
   const shown = mine && !head.includes(mine) ? [...head, mine] : head
   return (
-    <div className="overflow-hidden rounded-xl border border-border">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[420px] text-sm">
+    <div className="@container overflow-hidden rounded-xl border border-border">
+      {/* On a phone the draw and loss columns give way so the points column never slides out of view. */}
+      <div>
+        <table className="w-full text-sm">
           <caption className="sr-only">Puan durumu</caption>
           <thead className="bg-secondary text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th scope="col" className="w-10 px-3 py-2.5 text-left">#</th>
               <th scope="col" className="px-3 py-2.5 text-left">Oyuncu</th>
-              <th scope="col" className="px-2 py-2.5 text-center" title="Sayılan oyun">O</th>
-              <th scope="col" className="px-2 py-2.5 text-center" title="Galibiyet">G</th>
-              <th scope="col" className="px-2 py-2.5 text-center" title="Beraberlik">B</th>
-              <th scope="col" className="px-2 py-2.5 text-center" title="Mağlubiyet">M</th>
+              <th scope="col" className="px-2 py-2.5 text-center">
+                <abbr title="Sayılan oyun" className="no-underline">O</abbr>
+              </th>
+              <th scope="col" className="px-2 py-2.5 text-center">
+                <abbr title="Galibiyet" className="no-underline">G</abbr>
+              </th>
+              <th scope="col" className="hidden px-2 py-2.5 text-center @md:table-cell">
+                <abbr title="Beraberlik" className="no-underline">B</abbr>
+              </th>
+              <th scope="col" className="hidden px-2 py-2.5 text-center @md:table-cell">
+                <abbr title="Mağlubiyet" className="no-underline">M</abbr>
+              </th>
               <th scope="col" className="px-3 py-2.5 text-right">Puan</th>
             </tr>
           </thead>
@@ -52,8 +61,8 @@ export function PointsView({
               return (
                 <tr key={row.key} className={cn(place === 1 && row.points > 0 && 'bg-primary/10', self && 'bg-secondary')}>
                   <td className="px-3 py-2.5 font-bold tabular-nums text-muted-foreground">{place}</td>
-                  <td className="px-3 py-2.5 font-semibold text-foreground">
-                    <span className="flex items-center gap-1.5">
+                  <td className="w-full max-w-0 px-3 py-2.5 font-semibold text-foreground">
+                    <span className="flex min-w-0 items-center gap-1.5">
                       {champion && <Crown className="size-4 shrink-0 text-primary" aria-label="Şampiyon" />}
                       <span className="truncate">{names[row.key] ?? row.key}</span>
                       {self && <span className="shrink-0 rounded bg-primary px-1.5 py-0.5 text-[10px] font-bold uppercase text-primary-foreground">Sen</span>}
@@ -64,8 +73,8 @@ export function PointsView({
                     {maxGames > 0 && <span className="text-xs">/{maxGames}</span>}
                   </td>
                   <td className="px-2 py-2.5 text-center tabular-nums text-foreground">{row.wins}</td>
-                  <td className="px-2 py-2.5 text-center tabular-nums text-muted-foreground">{row.draws}</td>
-                  <td className="px-2 py-2.5 text-center tabular-nums text-muted-foreground">{row.losses}</td>
+                  <td className="hidden px-2 py-2.5 text-center tabular-nums text-muted-foreground @md:table-cell">{row.draws}</td>
+                  <td className="hidden px-2 py-2.5 text-center tabular-nums text-muted-foreground @md:table-cell">{row.losses}</td>
                   <td className="px-3 py-2.5 text-right font-display text-base font-bold tabular-nums text-foreground">{row.points}</td>
                 </tr>
               )

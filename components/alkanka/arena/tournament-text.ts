@@ -4,6 +4,7 @@ import {
   CANCEL_TEXT,
   PACE_MS,
   PACE_SHORT,
+  SOURCE_TEXT,
   TABLE_PASS,
   entrantsNeeded,
   matchLengthOf,
@@ -22,6 +23,11 @@ export function formatShortTR(iso: string) {
   return new Intl.DateTimeFormat('tr-TR', { timeZone: ISTANBUL, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
 }
 
+/** The day alone, for a tournament that is over: the hour it closed at tells nobody anything. */
+export function formatDayTR(iso: string) {
+  return new Intl.DateTimeFormat('tr-TR', { timeZone: ISTANBUL, day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(iso))
+}
+
 const clockTR = (iso: string) => new Intl.DateTimeFormat('tr-TR', { timeZone: ISTANBUL, hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
 const weekdayTR = (iso: string) => new Intl.DateTimeFormat('tr-TR', { timeZone: ISTANBUL, weekday: 'long' }).format(new Date(iso))
 
@@ -30,6 +36,58 @@ export function formatLine(t: Tournament) {
   if (t.format === 'puan') return 'Puan ligi'
   if (t.format === 'lig') return `Lig · ${PACE_SHORT[t.league.pace]}${t.league.legs === 2 ? ' · çift devre' : ''}`
   return t.tableSize > 2 ? `Eleme · ${t.tableSize} kişilik masa` : 'Eleme · birebir'
+}
+
+/** How this tournament is played, in one sentence a newcomer can follow. */
+export function formatPitch(t: Tournament, gameTitle: string) {
+  if (t.format === 'puan') return `Eşleşme yok: lig süresince oynadığın ${gameTitle} oyunları puan getirir, bitişte ilk sıralar ödülü alır.`
+  if (t.format === 'lig') {
+    return `Herkes herkesle ${t.league.legs === 2 ? 'iki kez' : 'bir kez'} oynar${PACE_MS[t.league.pace] ? `, ${PACE_SHORT[t.league.pace]} açılır` : ''}; en çok puanı toplayan şampiyon olur.`
+  }
+  return t.tableSize > 2
+    ? `${t.tableSize} kişilik masalarda oynanır: her masanın ilk ${t.bracket?.pass ?? TABLE_PASS} oyuncusu tur atlar, final masasının birincisi şampiyon olur.`
+    : 'Birebir eleme: kaybeden elenir, kazanan tur atlar; finali kazanan şampiyon olur.'
+}
+
+export type TournamentStep = { title: string; text: string }
+
+/** The same in three steps, from signing up to the prize. */
+export function tournamentSteps(t: Tournament, gameTitle: string): TournamentStep[] {
+  const entry: TournamentStep = {
+    title: 'Kaydol',
+    text: `${t.entryFee ? `Katılım ${formatAC(t.entryFee)} KC, kayıtta bir kez kesilir.` : 'Katılım ücretsiz.'} Kayıtlar başlangıç saatinde kapanır.`,
+  }
+  const sit = `açılınca bildirim gelir; ${t.joinMinutes} dakika içinde masana gir.`
+  if (t.format === 'puan') {
+    return [
+      entry,
+      { title: `${gameTitle} oyna`, text: `Turnuva masası açılmaz. ${gameTitle} masalarında her zamanki gibi oynarsın; masa kaç kişilik olursa olsun bitirdiğin oyun sayılır.` },
+      {
+        title: 'Puan topla, ödülü al',
+        text: `Galibiyet ${LEAGUE_WIN_POINTS}, beraberlik ${LEAGUE_DRAW_POINTS} puan. ${t.endsAt ? `Lig ${formatTR(t.endsAt)} biter;` : 'Lig bitince'} ilk sıralar ödülü alır.`,
+      },
+    ]
+  }
+  if (t.format === 'lig') {
+    const pace = t.league.pace === 'gunluk' ? 'Her gün bir tur açılır' : t.league.pace === 'haftalik' ? 'Her hafta bir tur açılır' : 'Turlar art arda oynanır'
+    return [
+      entry,
+      { title: 'Maçına gir', text: `${pace}, her turda tek maçın olur. Maçın ${sit}` },
+      { title: 'Puan topla', text: `Galibiyet ${LEAGUE_WIN_POINTS} puan. Bütün turlar bitince en çok puanı toplayan şampiyon olur.` },
+    ]
+  }
+  if (t.tableSize > 2) {
+    return [
+      entry,
+      { title: 'Masana gir', text: `Oyuncular kura ile ${t.tableSize} kişilik masalara dağıtılır. Masan ${sit}` },
+      { title: 'Tur atla', text: `Her masanın ilk ${t.bracket?.pass ?? TABLE_PASS} oyuncusu sonraki tura geçer. Final masasının birincisi şampiyon olur.` },
+    ]
+  }
+  return [
+    entry,
+    { title: 'Maçına gir', text: `Eşleşmeler kura ile çekilir. Maçın ${sit}` },
+    { title: 'Kazan, tur atla', text: 'Kaybeden elenir, kazanan sonraki tura geçer. Finali kazanan şampiyon olur.' },
+  ]
 }
 
 /** What is going on in a running tournament right now, in one short line. */
@@ -59,9 +117,8 @@ function pointsRules(t: Tournament, gameTitle: string) {
   const { source, maxGames } = t.league
   return [
     `Puan ligi: turnuva masası açılmaz, kimse eşleştirilmez. Lig süresince ${gameTitle} oyunlarını her zamanki gibi oynarsın; bitirdiğin her oyun puan tablosuna yazılır.`,
-    source === 'pvp'
-      ? 'Sadece üyelere karşı oynadığın masalar sayılır. Bota karşı oynanan oyunlar ve başka turnuvaların maçları sayılmaz.'
-      : 'Üyelere ve bota karşı oynadığın oyunlar sayılır. Başka turnuvaların maçları sayılmaz.',
+    `Sadece ${gameTitle} sayılır; başka oyunlar bu lige puan yazmaz. Masanın kaç kişilik olduğu fark etmez.`,
+    `${SOURCE_TEXT[source]} Bahissiz deneme masaları ve başka turnuvaların maçları sayılmaz.`,
     `Galibiyet ${LEAGUE_WIN_POINTS} puan, beraberlik ${LEAGUE_DRAW_POINTS} puan, yenilgi 0 puan.`,
     maxGames
       ? `Her oyuncunun lig başladıktan sonraki ilk ${maxGames} oyunu sayılır; sonraki oyunlar puan getirmez. Herkes aynı sayıda oyunla yarışır.`
