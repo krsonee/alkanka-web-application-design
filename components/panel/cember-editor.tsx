@@ -423,7 +423,7 @@ export function CemberEditor({
           <button
             type="button"
             onClick={() => set({ conditions: [...cfg.conditions, { id: uid(), kind: 'oyun', target: 1, window: 'gun', param: null, label: '' }] })}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-3 text-sm font-semibold"
           >
             <Plus className="size-4" aria-hidden /> Şart ekle
           </button>
@@ -534,7 +534,7 @@ export function CemberEditor({
           <button
             type="button"
             onClick={() => set({ prizes: [...cfg.prizes, { id: uid(), type: 'coin', amount: 25, ref: null, label: '' }] })}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-3 text-sm font-semibold"
           >
             <Plus className="size-4" aria-hidden /> Ödül ekle
           </button>

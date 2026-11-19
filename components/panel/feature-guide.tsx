@@ -20,7 +20,7 @@ export function FeatureGuide({
     <details id={id} className="group scroll-mt-24 rounded-2xl border border-primary/40 bg-card">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 [&::-webkit-details-marker]:hidden">
         <span className="flex items-center gap-2">
-          <BookOpen className="size-5 text-primary" aria-hidden />
+          <BookOpen className="size-5 shrink-0 text-primary" aria-hidden />
           <span className="flex flex-col">
             <span className="font-display text-lg font-bold uppercase text-foreground">{title}</span>
             <span className="text-xs text-muted-foreground">{subtitle}</span>

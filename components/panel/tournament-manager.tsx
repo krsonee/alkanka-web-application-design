@@ -201,10 +201,7 @@ function Summary({ t, hidden }: { t: Tournament; hidden: boolean }) {
         )}
       </dl>
       {t.description && <p className="text-sm leading-relaxed text-muted-foreground">{t.description}</p>}
-      <div className="flex flex-col gap-2">
-        <h3 className="text-sm font-bold text-foreground">Sıralama ödülleri</h3>
-        <PrizeList t={t} />
-      </div>
+      <PrizeList t={t} />
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-bold text-foreground">İşlemler</h3>
         <div className="flex flex-wrap gap-2">
