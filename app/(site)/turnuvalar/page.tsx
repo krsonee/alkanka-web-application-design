@@ -20,7 +20,7 @@ export default async function TournamentsPage() {
         highlights={['Tavla · Okey · Bilardo', 'Canlı eşleşme ağacı', 'Ödül havuzu']}
         eyebrow="Turnuvalar"
         title="Kanka turnuvaları"
-        description="Tavla, okey ve bilardo turnuvalarına kaydol. Ücret kayıtta bir kez kesilir, maçın açılınca tek tıkla masana girersin; eşleşmeler canlı güncellenir, ödüller sıralamaya göre dağıtılır."
+        description="Kaydol, masana gir, ödülünü al. Eleme, lig ve puan ligi turnuvaları bu sayfada açılır."
         pose="kazandi"
         speech="Masada görüşürüz kanka!"
       />
