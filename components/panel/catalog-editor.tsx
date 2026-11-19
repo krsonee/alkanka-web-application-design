@@ -363,7 +363,7 @@ function CategoryOrderEditor({ title, values, order, onSave }: { title: string; 
   )
 }
 
-function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder, focusId }: { kind: Kind; initial: Item[]; sponsors: Option[]; library: string[]; hidden: string[]; order: CategoryOrder; setOrder: (o: CategoryOrder) => void; focusId?: string }) {
+function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder, focusId, onSaved }: { kind: Kind; initial: Item[]; sponsors: Option[]; library: string[]; hidden: string[]; order: CategoryOrder; setOrder: (o: CategoryOrder) => void; focusId?: string; onSaved: (items: Item[]) => void }) {
   const schema = SCHEMAS[kind]
   const [items, setItems] = useState<Item[]>(initial)
   const [open, setOpen] = useState<number | null>(() => {
@@ -390,6 +390,7 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder,
     start(async () => {
       const r = await saveCatalogList(kind, items)
       setStatus(r.ok ? { ok: true, text: r.message } : { ok: false, text: r.error })
+      if (r.ok) onSaved(items)
     })
   const reset = () => {
     void askConfirm('Bu liste varsayılana dönsün mü? Yaptığın değişiklikler silinir.').then((ok) => {
@@ -611,6 +612,9 @@ export function CatalogEditor({
   const [tab, setTab] = useUrlTab<Tab>(league ? ['events', 'predictions', 'league', 'goal', 'campaigns', 'bonuses', 'calendar'] : ['events', 'predictions', 'campaigns', 'bonuses', 'calendar'], 'events')
   const [order, setOrder] = useState<CategoryOrder>(catalog.order ?? { campaignTags: [], bonusTypes: [] })
   const [focus, setFocus] = useState<{ kind: Kind; id: string } | null>(null)
+  // One copy of the lists for every tab: what the calendar saves shows in the list and the other way round.
+  const [lists, setLists] = useState(() => ({ events: catalog.events, predictions: catalog.predictions, campaigns: catalog.campaigns, bonuses: catalog.bonuses }))
+  const keep = (kind: Kind, items: Item[]) => setLists((all) => ({ ...all, [kind]: items }))
   const top = tab === 'league' || tab === 'goal' ? 'predictions' : tab
   return (
     <div className="flex flex-col gap-4">
@@ -652,19 +656,31 @@ export function CatalogEditor({
         league && <GoalAdmin />
       ) : tab === 'calendar' ? (
         <CatalogCalendar
-          catalog={catalog}
+          catalog={lists}
           tournaments={tournaments}
+          league={league}
           hidden={hidden}
+          blank={(kind) => SCHEMAS[kind].blank()}
+          renderFields={(kind, item, set) => (
+            <div className="grid gap-3 md:grid-cols-2">
+              {SCHEMAS[kind].fields.map((f) => (
+                <FieldInput key={f.key} field={f} item={item} set={set} sponsors={sponsors} library={library} />
+              ))}
+            </div>
+          )}
+          onSaved={keep}
           onOpen={(kind, id) => {
             setFocus({ kind, id })
             setTab(kind)
           }}
+          onJump={setTab}
         />
       ) : (
         <ListEditor
           key={tab}
           kind={tab}
-          initial={catalog[tab] as unknown as Item[]}
+          initial={lists[tab] as unknown as Item[]}
+          onSaved={(items) => keep(tab, items)}
           sponsors={sponsors}
           library={library}
           hidden={hidden[SCOPE[tab]] ?? []}
