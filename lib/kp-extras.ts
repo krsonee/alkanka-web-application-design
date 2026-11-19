@@ -8,10 +8,12 @@ import {
   levelTier,
   readLeaderboard,
   publicRankName,
+  roleBlocks,
   type AutoKind,
   type BadgeTier,
 } from '@/lib/kanka-puan'
-import { DEFAULT_QUEST, QUEST_METRICS, type QuestMetric, type WeeklyQuestConfig } from '@/lib/kanka-puan-shared'
+import { DEFAULT_QUEST, QUEST_GROUPS, QUEST_METRICS, questUnit, type QuestMetric, type WeeklyQuestConfig } from '@/lib/kanka-puan-shared'
+import { ARENA_GAMES, isArenaGame } from '@/lib/arena'
 
 const exists = async (name: string) => Boolean((await rows<{ t: string | null }>(sql`SELECT to_regclass(${name}) AS t`))[0]?.t)
 const TODAY = sql`(now() AT TIME ZONE 'Europe/Istanbul')::date`
@@ -149,7 +151,7 @@ export async function questProgress(userId: string, cfg: Pick<WeeklyQuestConfig,
   const wins = cfg.game ? [cfg.game] : [...ARENA_GAMES]
   const q: Record<Exclude<QuestMetric, 'seri'>, ReturnType<typeof sql>> = {
     tahmin: sql`SELECT count(*) AS n FROM league_picks WHERE user_id = ${userId} AND created_at >= ${WEEK_START}`,
-    oyun: sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND mode <> 'odul' AND game <> 'turnuva' AND mode <> 'admin' AND created_at >= ${WEEK_START}`,
+    oyun: sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND game <> 'turnuva' AND ${PLAYED}`,
     'oyun-tek': sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND game = ${cfg.game} AND ${PLAYED}`,
     'oyun-grup': games.length ? sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND game IN ${games} AND ${PLAYED}` : sql`SELECT 0 AS n`,
     galibiyet: sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND game IN ${wins} AND result = 'win' AND ${PLAYED}`,
@@ -166,20 +168,9 @@ export async function questProgress(userId: string, cfg: Pick<WeeklyQuestConfig,
   return Number(r?.n ?? 0)
 }
 
-/** What the member has to do, as it reads after the target number: "Tavla oyunu", "galibiyet", "spor oyunu". */
-export function questUnit(cfg: Pick<WeeklyQuestConfig, 'metric' | 'game' | 'group'>): string {
-  const metric = QUEST_METRICS.find((m) => m.id === cfg.metric)
-  const title = isArenaGame(cfg.game) ? ARENA_META[cfg.game].title : ''
-  if (cfg.metric === 'oyun-tek' && title) return `${title} oyunu`
-  if (cfg.metric === 'galibiyet' && title) return `${title} galibiyeti`
-  if (cfg.metric === 'oyun-grup') return QUEST_GROUPS.find((g) => g.id === cfg.group)?.unit ?? 'oyun'
-  return metric?.unit ?? ''
-}
-
 /** Extra KP and KC on top of the badge. The week is part of the ref, so a second call in the same week pays nothing. */
 async function payQuestExtra(userId: string, period: string, cfg: WeeklyQuestConfig) {
   if (cfg.kp <= 0 && cfg.coin <= 0) return
-  const { roleBlocks } = await import('@/lib/kanka-puan')
   if (await roleBlocks(userId, 'kp')) return
   await rows(sql`ALTER TABLE kp_events ADD COLUMN IF NOT EXISTS coins int NOT NULL DEFAULT 0`)
   const paid = await rows(sql`INSERT INTO kp_events (user_id, source, points, coins, ref, note)
@@ -200,6 +191,8 @@ export type WeeklyQuest = {
   winners: number
   daysLeft: number
   badge: { id: string; name: string; icon: string; tier: BadgeTier; bonus: number }
+  /** Paid once on top of the badge and its own bonus. */
+  extra: { kp: number; coin: number }
 }
 
 /** This week's quest. Reaching the target hands out the badge right away, once per ISO week. */
@@ -213,10 +206,13 @@ export async function getWeeklyQuest(userId: string | null): Promise<WeeklyQuest
   let progress: number | null = null
   let done = false
   if (userId) {
-    progress = await questProgress(userId, cfg.metric)
+    progress = await questProgress(userId, cfg)
     const [had] = await rows(sql`SELECT 1 FROM kp_awards WHERE badge_id = ${b.id} AND user_id = ${userId} AND period = ${period}`)
     done = Boolean(had)
-    if (!done && progress >= cfg.target) done = (await awardBadge(b.id, userId, period, cfg.title).catch(() => false)) || false
+    if (!done && progress >= cfg.target) {
+      done = (await awardBadge(b.id, userId, period, cfg.title).catch(() => false)) || false
+      if (done) await payQuestExtra(userId, period, cfg).catch((error) => console.error('[alkanka] haftalık görev ek ödülü yazılamadı', userId, period, error))
+    }
   }
   const [{ n }] = await rows<{ n: string }>(sql`SELECT count(*) AS n FROM kp_awards WHERE badge_id = ${b.id} AND period = ${period}`)
   const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Istanbul', weekday: 'short' }).format(new Date())
@@ -224,11 +220,12 @@ export async function getWeeklyQuest(userId: string | null): Promise<WeeklyQuest
   return {
     title: cfg.title,
     metric: cfg.metric,
-    unit: m.unit,
+    unit: questUnit(cfg),
     label: m.label,
     target: cfg.target,
     progress,
     done,
+    extra: { kp: cfg.kp, coin: cfg.coin },
     winners: Number(n),
     daysLeft: 7 - (['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(weekday) + 1),
     badge: { ...b, bonus: Number(b.bonus) },

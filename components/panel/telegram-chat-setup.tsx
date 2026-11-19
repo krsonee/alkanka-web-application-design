@@ -41,7 +41,7 @@ export function TelegramChatSetup({ bots, status }: { bots: MirrorBot[]; status:
           </h2>
           <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
             Gruptaki mesajlar sitedeki canlı sohbette görünür. Telegram hesabını bağlayan üyeler siteden de yazabilir, mesajları bot
-            aracılığıyla gruba {'"isim (site): mesaj"'} şeklinde düşer. Moderatör ya da Sponsor Destek rolündeki üyenin adının yanına rolü de yazılır.
+            aracılığıyla gruba iki satır halinde düşer: üstte kalın yazıyla adı, altında mesajı. Rolü ya da taktığı rozet varsa adının yanına simgesiyle birlikte yazılır.
             Moderatör rolündeki üye sitedeki sohbette isme tıklayarak mesajı silebilir ve kişiyi susturabilir.
           </p>
         </div>

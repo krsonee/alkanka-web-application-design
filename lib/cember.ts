@@ -1017,13 +1017,21 @@ async function payRound(row: RoundRow) {
   const list = winners.map((w) => w.name).join(', ')
   await import('@/lib/telegram-chat')
     .then(({ announceToChat }) =>
-      announceToChat(
-        svTeam
-          ? `${row.title} bitti! ${players} kanka sahaya çıktı, ${teamName} Takım kazandı: ${list}. Ödül: ${row.prize_text}${split && winners.length > 1 ? ' (takım arasında bölüşüldü)' : ' (kişi başı)'}`
+      announceToChat({
+        kind: 'kazanan',
+        title: `${row.title} bitti`,
+        lines: svTeam
+          ? [
+              `${players} kanka sahaya çıktı, ${teamName} Takım kazandı: ${list}.`,
+              `Ödül: ${row.prize_text}${split && winners.length > 1 ? ' (takım arasında bölüşüldü)' : ' (kişi başı)'}`,
+            ]
           : isKd || isSv
-            ? `${row.title} bitti! ${players} kanka arenaya girdi, ${isSv ? 'ayakta kalanlar' : 'kara delikten sağ çıkanlar'}: ${list}. Ödül: ${row.prize_text}${split && winners.length > 1 ? ' (kazananlar arasında bölüşüldü)' : ' (kişi başı)'}`
-            : `${row.title} bitti! ${players} kanka çembere girdi, son kalan ${list} oldu. Ödül: ${row.prize_text}`,
-      ),
+            ? [
+                `${players} kanka arenaya girdi, ${isSv ? 'ayakta kalanlar' : 'kara delikten sağ çıkanlar'}: ${list}.`,
+                `Ödül: ${row.prize_text}${split && winners.length > 1 ? ' (kazananlar arasında bölüşüldü)' : ' (kişi başı)'}`,
+              ]
+            : [`${players} kanka çembere girdi, son kalan ${list} oldu.`, `Ödül: ${row.prize_text}`],
+      }),
     )
     .catch(() => {})
 }
@@ -1138,13 +1146,13 @@ export async function sendUpcomingNotices() {
     const instant = s.ev.extraSlots.some((x) => Date.parse(x) === s.at)
     const lead = instant ? 'Anlık etkinlik! ' : ''
     const where = s.ev.game === 'cember' ? 'çemberde' : 'arenada'
-    const conditionPart = conditions ? ` Şartlar: ${conditions}.` : ''
     await Promise.allSettled([
       import('@/lib/telegram-chat').then(({ announceToChat }) =>
-        announceToChat(
-          `${lead}${s.ev.title} (${GAME_META[s.ev.game].label}) ${mins} dakika sonra (${trClock(s.at)}) başlıyor! Ödül: ${prize}.${conditionPart} ` +
-            `Şu an ${ids.length} kanka ${where}, siteye gir canlı izle.`,
-        ),
+        announceToChat({
+          kind: 'hatirlatma',
+          title: `${lead}${s.ev.title} (${GAME_META[s.ev.game].label}) ${mins} dakika sonra (${trClock(s.at)}) başlıyor`,
+          lines: [`Ödül: ${prize}.`, conditions && `Şartlar: ${conditions}.`, `Şu an ${ids.length} kanka ${where}, siteye gir canlı izle.`],
+        }),
       ),
       ids.length
         ? import('@/lib/push').then(({ sendToUsers }) =>

@@ -28,14 +28,17 @@ import {
   BADGE_ICONS,
   BADGE_TIERS,
   DEFAULT_LEVELS,
+  QUEST_GROUPS,
   QUEST_METRICS,
   RULE_FIELDS,
+  questReward,
+  questUnit,
   type BadgeTier,
   type LevelDef,
   type PointRules,
-  type QuestMetric,
   type WeeklyQuestConfig,
 } from '@/lib/kanka-puan-shared'
+import { ARENA_GAMES, ARENA_META, isArenaGame } from '@/lib/arena'
 import { StatusLine, useAction } from '@/components/alkanka/community/use-action'
 import { ICONS, LevelEmblem, SpecialEmblem } from '@/components/alkanka/kp/emblem'
 import { cn } from '@/lib/utils'
@@ -114,6 +117,12 @@ function QuestEditor({ initial, badges, winners }: { initial: WeeklyQuestConfig;
   const { pending, status, run } = useAction()
   const manual = badges.filter((b) => b.active && !b.auto)
   const metric = QUEST_METRICS.find((m) => m.id === cfg.metric)
+  const maxTarget = metric?.max ?? 10000
+  const unit = questUnit(cfg)
+  const prize = manual.find((b) => b.id === cfg.badgeId)
+  const reward = questReward(cfg, prize?.bonus ?? 0)
+  const extra = (raw: string) => Math.min(100000, Math.max(0, Math.floor(Number(raw) || 0)))
+  const problem = metric?.pick === 'game' && !isArenaGame(cfg.game) ? 'Hangi oyunun sayılacağını seç.' : ''
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
@@ -146,25 +155,84 @@ function QuestEditor({ initial, badges, winners }: { initial: WeeklyQuestConfig;
         </label>
         <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
           Ne yapılacak
-          <select value={cfg.metric} onChange={(e) => setCfg((c) => ({ ...c, metric: e.target.value as QuestMetric }))} className={field}>
+          <select
+            value={cfg.metric}
+            onChange={(e) => {
+              const next = QUEST_METRICS.find((m) => m.id === e.target.value)
+              if (next) setCfg((c) => ({ ...c, metric: next.id, target: Math.min(c.target, next.max ?? 10000) }))
+            }}
+            className={field}
+          >
             {QUEST_METRICS.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.label}
               </option>
             ))}
           </select>
+          <span className="font-normal leading-relaxed">{metric?.hint}</span>
         </label>
+        {(metric?.pick === 'game' || metric?.pick === 'game-optional') && (
+          <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
+            Hangi oyun
+            <select value={cfg.game} onChange={(e) => setCfg((c) => ({ ...c, game: e.target.value }))} className={field}>
+              <option value="">{metric.pick === 'game' ? 'Oyun seç' : 'Bütün oyunlar'}</option>
+              {ARENA_GAMES.map((g) => (
+                <option key={g} value={g}>
+                  {ARENA_META[g].title}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {metric?.pick === 'group' && (
+          <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
+            Hangi oyun grubu
+            <select value={cfg.group} onChange={(e) => setCfg((c) => ({ ...c, group: e.target.value }))} className={field}>
+              {QUEST_GROUPS.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
           Hedef
           <span className="flex items-center gap-2">
-            <input type="number" min={1} max={10000} value={cfg.target} onChange={(e) => setCfg((c) => ({ ...c, target: Math.max(1, Math.floor(Number(e.target.value) || 1)) }))} className={cn(field, 'tabular-nums')} />
-            <span className="shrink-0 text-sm text-muted-foreground">{metric?.unit}</span>
+            <input
+              type="number"
+              min={1}
+              max={maxTarget}
+              value={cfg.target}
+              onChange={(e) => setCfg((c) => ({ ...c, target: Math.min(maxTarget, Math.max(1, Math.floor(Number(e.target.value) || 1))) }))}
+              className={cn(field, 'tabular-nums')}
+            />
+            <span className="shrink-0 text-sm text-muted-foreground">{unit}</span>
           </span>
         </label>
       </div>
+      <div className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2">
+        <p className="text-sm leading-relaxed text-muted-foreground sm:col-span-2">
+          Ek ödül: rozetin ve rozetin kendi KP bonusunun üstüne, görevi tamamlayan her üyeye haftada bir kez yatar. İstemiyorsan 0 bırak. Rolü &quot;KP kazanmaz&quot; olan üye ek ödül almaz.
+        </p>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
+          Ek KP
+          <input type="number" min={0} max={100000} value={cfg.kp} onChange={(e) => setCfg((c) => ({ ...c, kp: extra(e.target.value) }))} className={cn(field, 'tabular-nums')} />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
+          Ek KC
+          <input type="number" min={0} max={100000} value={cfg.coin} onChange={(e) => setCfg((c) => ({ ...c, coin: extra(e.target.value) }))} className={cn(field, 'tabular-nums')} />
+        </label>
+      </div>
+      <p role="status" className="rounded-xl border border-border bg-card p-4 text-sm leading-relaxed text-foreground">
+        Üye şunu görür: Bu hafta <b>{cfg.target.toLocaleString('tr-TR')} {unit}</b> tamamla, <b>{prize?.name ?? 'seçtiğin'}</b> rozeti
+        {reward.kp > 0 ? `, +${reward.kp.toLocaleString('tr-TR')} KP` : ''}
+        {reward.coin > 0 ? `, +${reward.coin.toLocaleString('tr-TR')} KC` : ''} senin olsun.
+      </p>
+      {problem && <p role="alert" className="text-sm text-destructive">{problem}</p>}
       {!manual.length && <p className="text-sm text-muted-foreground">Önce Değerli rozetler sekmesinden otomatik olmayan bir rozet oluştur.</p>}
       <div className="flex flex-wrap items-center gap-3">
-        <button disabled={pending} onClick={() => run(() => updateWeeklyQuest(cfg))} className="h-10 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-50">
+        <button disabled={pending || Boolean(problem)} onClick={() => run(() => updateWeeklyQuest(cfg))} className="h-10 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-50">
           Kaydet
         </button>
         <StatusLine status={status} />

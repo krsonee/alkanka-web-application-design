@@ -3,6 +3,7 @@ import { rows, sql } from '@/lib/db'
 import { credit } from '@/lib/member'
 import { ensureCommunity } from '@/lib/community'
 import { trDay } from '@/lib/task-period'
+import { bold, type TgLine, type TgNotice } from '@/lib/tg-format'
 
 export const PROOF_KP = 30
 export const HELPFUL_KP = 150
@@ -264,16 +265,13 @@ async function settleSponsorMonth() {
   const result: SponsorOfMonth = { month, siteId: top.siteId, name: names[top.siteId] ?? 'Sponsor', votes: top.votes }
   await rows(sql`UPDATE trust_runs SET result = ${JSON.stringify(result)}::jsonb WHERE kind = 'ayin-sponsoru' AND period = ${month}`)
   const { broadcastPodium } = await import('@/lib/telegram-bots')
-  await broadcastPodium((origin) =>
-    [
-      `${monthLabel(month)} · Ayın Güvenilir Sponsoru`,
-      '',
-      `${result.name} · ${result.votes} üye oyu`,
-      '',
-      'Oyunu veren tüm kankalara teşekkürler. Yeni ayın oylaması başladı.',
-      `${origin}/guven#ayin-sponsoru`,
-    ].join('\n'),
-  ).catch(() => 0)
+  await broadcastPodium((origin) => ({
+    kind: 'kazanan',
+    title: `${monthLabel(month)} · Ayın Güvenilir Sponsoru`,
+    lines: [[bold(result.name), ` · ${result.votes} üye oyu`]],
+    foot: 'Oyunu veren tüm kankalara teşekkürler. Yeni ayın oylaması başladı.',
+    link: `${origin}/guven#ayin-sponsoru`,
+  })).catch(() => 0)
   return result
 }
 
@@ -334,22 +332,23 @@ export async function weeklyKarne(): Promise<KarneRow[]> {
     .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0) || b.withdrawals - a.withdrawals)
 }
 
-export function karneText(list: KarneRow[], origin: string, helpful?: HelpfulLeader | null) {
-  return [
-    'Haftalık Sponsor Karnesi',
-    '',
-    ...list.slice(0, 10).map((k, i) => {
-      const parts = [k.rating === null ? 'puan yok' : `${k.rating.toFixed(1)}/5 (${k.reviews} yorum)`]
-      if (k.withdrawals) parts.push(`${k.withdrawals} onaylı çekim`)
-      if (k.complaints) parts.push(`${k.resolved}/${k.complaints} şikâyet çözüldü`)
-      if (k.support?.total) parts.push(`destek ${k.support.resolved}/${k.support.total}${k.support.avgMin != null ? ` (ort. ${k.support.avgMin} dk)` : ''}`)
-      return `${i + 1}. ${k.name} · ${parts.join(' · ')}`
-    }),
-    ...(helpful ? ['', `Haftanın en faydalı yorumcusu: ${helpful.name} (${helpful.votes} oy)`] : []),
-    '',
-    'Sen de karneye katıl: yorum yaz, çekimini paylaş, KP kazan.',
-    `${origin}/guven`,
-  ].join('\n')
+export function karneNotice(list: KarneRow[], origin: string, helpful?: HelpfulLeader | null): TgNotice {
+  return {
+    kind: 'duyuru',
+    title: 'Haftalık Sponsor Karnesi',
+    lines: [
+      ...list.slice(0, 10).map((k, i): TgLine => {
+        const parts = [k.rating === null ? 'puan yok' : `${k.rating.toFixed(1)}/5 (${k.reviews} yorum)`]
+        if (k.withdrawals) parts.push(`${k.withdrawals} onaylı çekim`)
+        if (k.complaints) parts.push(`${k.resolved}/${k.complaints} şikâyet çözüldü`)
+        if (k.support?.total) parts.push(`destek ${k.support.resolved}/${k.support.total}${k.support.avgMin != null ? ` (ort. ${k.support.avgMin} dk)` : ''}`)
+        return [`${i + 1}. `, bold(k.name), ` · ${parts.join(' · ')}`]
+      }),
+      helpful && ['Haftanın en faydalı yorumcusu: ', bold(helpful.name), ` (${helpful.votes} oy)`],
+    ],
+    foot: 'Sen de karneye katıl: yorum yaz, çekimini paylaş, KP kazan.',
+    link: `${origin}/guven`,
+  }
 }
 
 async function postWeeklyKarne(helpful: HelpfulLeader | null) {
@@ -357,7 +356,7 @@ async function postWeeklyKarne(helpful: HelpfulLeader | null) {
   const list = await weeklyKarne()
   if (!list.length) return 0
   const { broadcastPodium } = await import('@/lib/telegram-bots')
-  return broadcastPodium((origin) => karneText(list, origin, helpful)).catch(() => 0)
+  return broadcastPodium((origin) => karneNotice(list, origin, helpful)).catch(() => 0)
 }
 
 /** Daily cron entry. Weekly jobs run on the first call of each week, monthly ones on the first call of each month. */

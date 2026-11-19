@@ -1,3 +1,5 @@
+import { ARENA_META, isArenaGame } from '@/lib/arena'
+
 export type LevelDef = { name: string; badge: string; min: number }
 
 /** Lives here (not in a client component) so server components get real strings, not a client reference. */
@@ -61,6 +63,20 @@ export type WeeklyQuestConfig = {
 }
 
 export const DEFAULT_QUEST: WeeklyQuestConfig = { enabled: false, title: 'Hafta Kâhini', badgeId: '', metric: 'tahmin', target: 10, game: '', group: 'masa', kp: 0, coin: 0 }
+
+/** What the member has to do, as it reads after the target number: "Tavla oyunu", "galibiyet", "spor oyunu". */
+export function questUnit(cfg: Pick<WeeklyQuestConfig, 'metric' | 'game' | 'group'>): string {
+  const title = isArenaGame(cfg.game) ? ARENA_META[cfg.game].title : ''
+  if (cfg.metric === 'oyun-tek' && title) return `${title} oyunu`
+  if (cfg.metric === 'galibiyet' && title) return `${title} galibiyeti`
+  if (cfg.metric === 'oyun-grup') return QUEST_GROUPS.find((g) => g.id === cfg.group)?.unit ?? 'oyun'
+  return QUEST_METRICS.find((m) => m.id === cfg.metric)?.unit ?? ''
+}
+
+/** Everything a member who finishes the quest is paid, the badge's own bonus included. */
+export function questReward(cfg: Pick<WeeklyQuestConfig, 'kp' | 'coin'>, badgeBonus: number): { kp: number; coin: number } {
+  return { kp: Math.max(0, Number(badgeBonus) || 0) + Math.max(0, Number(cfg.kp) || 0), coin: Math.max(0, Number(cfg.coin) || 0) }
+}
 
 export const DEFAULT_RULES: PointRules = {
   minute: 1,

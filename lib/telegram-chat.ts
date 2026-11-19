@@ -2,6 +2,7 @@ import 'server-only'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
 import { botToken, callBot, ensureTables, entitiesToCleanText } from '@/lib/telegram-mirror'
+import { TG_HTML, escapeHtml, noticePlain, tgMemberMessage, tgNotice, type TgMark, type TgNotice } from '@/lib/tg-format'
 
 export type ChatMessage = {
   id: number
@@ -122,7 +123,7 @@ export async function getChatConfig(): Promise<ChatConfig | null> {
   }
 }
 
-export const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+export { escapeHtml }
 
 export function displayName(u?: TgUser) {
   if (!u) return 'Telegram'
@@ -418,7 +419,7 @@ export async function sendFromSite(userId: string, rawText: string) {
   const link = await rows<{ tg_id: string; tg_name: string }>(sql`SELECT tg_id, tg_name FROM tg_links WHERE user_id = ${userId}`)
   if (!link[0]) throw new Error('Yazmak için önce Telegram hesabını bağla.')
 
-  const { mutedUntil, staffRoleName } = await import('@/lib/chat-mod')
+  const { mutedUntil } = await import('@/lib/chat-mod')
   const until = await mutedUntil(Number(link[0].tg_id))
   if (until) {
     const minutes = Math.max(1, Math.ceil((until.getTime() - Date.now()) / 60_000))
@@ -453,31 +454,35 @@ export async function sendFromSite(userId: string, rawText: string) {
   if (member.status === 'restricted' && member.can_send_messages === false) throw new Error('Bu grupta yazma iznin kısıtlanmış.')
 
   const author = link[0].tg_name
-  const role = await staffRoleName(userId)
   const sent = await callBot<{ message_id: number }>(token, 'sendMessage', {
     chat_id: config.chatId,
-    text: `<b>${escapeHtml(author)}</b>${role ? ` [${escapeHtml(role)}]` : ''} <i>(site)</i>: ${escapeHtml(text)}`,
-    parse_mode: 'HTML',
-    link_preview_options: { is_disabled: true },
+    text: tgMemberMessage(author, await memberMark(userId), text),
+    ...TG_HTML,
   })
   await rows(sql`INSERT INTO tg_chat_messages (chat_id, tg_message_id, from_tg_id, user_id, author, text, origin)
     VALUES (${config.chatId}, ${sent.message_id}, ${Number(link[0].tg_id)}, ${userId}, ${author}, ${text}, 'site')
     ON CONFLICT DO NOTHING`)
 }
 
+/** The role or badge written next to the member's name in Telegram. A failed lookup sends the message without one. */
+export async function memberMark(userId: string): Promise<TgMark | null> {
+  try {
+    const { chatMarkOf } = await import('@/lib/badge-value')
+    return await chatMarkOf(userId)
+  } catch (error) {
+    console.error('[chat] rozet okunamadı, mesaj rozetsiz gidiyor', userId, error)
+    return null
+  }
+}
+
 /** System announcement posted by the bot into the group and the on-site chat feed. */
-export async function announceToChat(text: string, author = 'Jako') {
+export async function announceToChat(notice: TgNotice, author = 'Jako') {
   const config = await getChatConfig()
   if (!config) return
   await ensureChatTables()
   const token = await botToken(config.botId)
-  const sent = await callBot<{ message_id: number }>(token, 'sendMessage', {
-    chat_id: config.chatId,
-    text: `<b>${escapeHtml(author)}</b>: ${escapeHtml(text)}`,
-    parse_mode: 'HTML',
-    link_preview_options: { is_disabled: true },
-  }).catch(() => null)
+  const sent = await callBot<{ message_id: number }>(token, 'sendMessage', { chat_id: config.chatId, text: tgNotice(notice), ...TG_HTML }).catch(() => null)
   await rows(sql`INSERT INTO tg_chat_messages (chat_id, tg_message_id, from_tg_id, user_id, author, text, origin)
-    VALUES (${config.chatId}, ${sent?.message_id ?? null}, NULL, NULL, ${author}, ${text}, 'site')
+    VALUES (${config.chatId}, ${sent?.message_id ?? null}, NULL, NULL, ${author}, ${noticePlain(notice)}, 'site')
     ON CONFLICT DO NOTHING`)
 }

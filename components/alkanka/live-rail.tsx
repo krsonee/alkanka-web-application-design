@@ -38,7 +38,7 @@ import {
 } from '@/lib/telegram-channels-shared'
 import { useTelegramUrl } from './telegram-address'
 import { useChannelFeed, useChatFeed, type ChatResponse } from './use-chat-feed'
-import { MemberName, MemberRank } from './kp/member-rank'
+import { MemberBadge, MemberName, MemberRank } from './kp/member-rank'
 
 export const OPEN_CHAT_EVENT = 'alkanka:open-chat'
 
@@ -413,6 +413,7 @@ function ChatPanel({ data, onRefresh }: { data: ChatResponse | undefined; onRefr
                 ) : (
                   <MemberName userId={m.userId} className={m.origin === 'site' ? 'text-primary' : 'text-accent'}>{m.author}</MemberName>
                 )}
+                <MemberBadge userId={m.userId} />
                 <MemberRank userId={m.userId} />
                 {m.origin === 'site' && <SiteBadge />}
                 <time dateTime={m.createdAt} className="ml-auto text-[10px] text-muted-foreground tabular-nums">
@@ -469,6 +470,7 @@ function CommentList({ comments }: { comments: ChannelComment[] }) {
         <li key={c.id} className="flex flex-col gap-0.5 text-xs leading-relaxed">
           <span className="flex items-center gap-1.5">
             <MemberName userId={c.userId} className={c.origin === 'site' ? 'text-primary' : 'text-accent'}>{c.author}</MemberName>
+            <MemberBadge userId={c.userId} />
             <MemberRank userId={c.userId} />
             {c.origin === 'site' && <SiteBadge />}
             <time dateTime={c.createdAt} className="ml-auto text-[10px] text-muted-foreground tabular-nums">

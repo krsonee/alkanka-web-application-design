@@ -241,7 +241,7 @@ const MOD_STEPS: GuideStep[] = [
           Her silme ve susturma, kimin yaptığıyla birlikte <b>Telegram Merkezi → Kayıtlar</b>’a yazılır.
         </li>
         <li>
-          Moderatör ya da Sponsor Destek rolündeki üye siteden yazınca, mesajı Telegram grubuna adının yanında rolüyle düşer: <span className={code}>Ahmet [Moderatör] (site): …</span>
+          Üye siteden yazınca mesajı Telegram grubuna iki satır düşer: üstte kalın adı, altında mesajı. Rolü varsa (Moderatör, Sponsor Destek…) adının yanında simgesiyle rolü, yoksa taktığı rozet yazar: <span className={code}>Ahmet · Moderatör</span>
         </li>
       </ul>
     ),

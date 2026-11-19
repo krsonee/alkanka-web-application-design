@@ -3,6 +3,7 @@ import { pool } from '@/lib/db'
 import { ARENA_META, type ArenaGame } from '@/lib/arena'
 import { botToken, callBot, ensureTables, normalizeChat } from '@/lib/telegram-mirror'
 import { getTableRow } from '@/lib/pvp/tables'
+import { TG_HTML, bold, tgNotice } from '@/lib/tg-format'
 
 export const INVITE_COOLDOWN_SECONDS = 4 * 60
 
@@ -72,8 +73,6 @@ export async function inviteWaitSeconds(userId: string) {
   return r.rows[0]?.wait ?? 0
 }
 
-const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-
 export type InviteResult = { ok: true; wait: number } | { ok: false; error: string; wait?: number }
 
 export async function sendTableInvite(user: { id: string; name: string }, tableId: string, origin: string): Promise<InviteResult> {
@@ -104,14 +103,15 @@ export async function sendTableInvite(user: { id: string; name: string }, tableI
   const freeSeats = table.seats - table.options.bots - humans
   const link = `${origin}/oyunlar/${table.game}?masa=${table.id}`
   const mode = table.game === 'okey' ? (table.options.team ? ' · Takımlı' : ' · Tekli') : ''
-  const text = [
-    `<b>Oyuncu aranıyor!</b>`,
-    ``,
-    `<b>${escapeHtml(user.name)}</b> bir <b>${escapeHtml(gameTitle)}</b> masası açtı${mode}.`,
-    `Bahis: <b>${table.stake} KC</b> · Boş koltuk: <b>${Math.max(1, freeSeats)}</b>`,
-    ``,
-    `Masaya otur, oyun hemen başlasın.`,
-  ].join('\n')
+  const text = tgNotice({
+    kind: 'davet',
+    title: 'Oyuncu aranıyor',
+    lines: [
+      [bold(user.name), ' bir ', bold(gameTitle), ` masası açtı${mode}.`],
+      ['Bahis: ', bold(`${table.stake} KC`), ' · Boş koltuk: ', bold(Math.max(1, freeSeats))],
+      'Masaya otur, oyun hemen başlasın.',
+    ],
+  })
 
   let sentId: number | null = null
   try {
@@ -119,8 +119,7 @@ export async function sendTableInvite(user: { id: string; name: string }, tableI
     const sent = await callBot<{ message_id: number }>(token, 'sendMessage', {
       chat_id: config.chatId,
       text,
-      parse_mode: 'HTML',
-      link_preview_options: { is_disabled: true },
+      ...TG_HTML,
       reply_markup: { inline_keyboard: [[{ text: 'Oyuna katıl', url: link }]] },
     })
     sentId = sent.message_id

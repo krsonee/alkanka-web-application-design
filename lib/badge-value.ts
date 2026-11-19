@@ -2,6 +2,7 @@ import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { ensureKp, publicRankName, type BadgeTier } from '@/lib/kanka-puan'
 import { ALL_BADGES, MAX_RAFFLE_WINNERS, type RaffleRow } from '@/lib/badge-raffle-shared'
+import type { MemberRole } from '@/lib/kanka-puan-shared'
 
 export const MAX_PINS = 3
 
@@ -61,7 +62,9 @@ export async function savePins(userId: string, ids: string[]) {
     ? await rows<{ badge_id: string }>(sql`SELECT DISTINCT badge_id FROM kp_awards WHERE user_id = ${userId} AND badge_id IN ${wanted}`)
     : []
   const ok = wanted.filter((id) => owned.some((o) => o.badge_id === id))
-  await rows(sql`INSERT INTO kp_pins (user_id, badge_ids) VALUES (${userId}, ${ok}) ON CONFLICT (user_id) DO UPDATE SET badge_ids = EXCLUDED.badge_ids, updated_at = now()`)
+  // A list placed straight into the query is written as "(a, b)", which is not an array: the column needs ARRAY[...] spelled out.
+  const list = ok.length ? sql`ARRAY[${sql.join(ok.map((id) => sql`${id}`), sql`, `)}]::text[]` : sql`'{}'::text[]`
+  await rows(sql`INSERT INTO kp_pins (user_id, badge_ids) VALUES (${userId}, ${list}) ON CONFLICT (user_id) DO UPDATE SET badge_ids = EXCLUDED.badge_ids, updated_at = now()`)
   return ok
 }
 
@@ -93,6 +96,40 @@ export async function frameTiers(userIds: string[]): Promise<Record<string, Badg
   const out: Record<string, BadgeTier> = {}
   for (const x of r) if (!out[x.user_id] || TIER_RANK[x.tier] > TIER_RANK[out[x.user_id]]) out[x.user_id] = x.tier
   return out
+}
+
+// --- Badge next to the name in chat ------------------------------------------
+
+/** The badge a member wears: the first one they pinned, otherwise their highest tier, newest first. */
+const WORN_ORDER = sql`COALESCE(array_position(p.badge_ids, b.id), 99),
+  CASE b.tier WHEN 'efsane' THEN 3 WHEN 'elmas' THEN 2 ELSE 1 END DESC, a.awarded_at DESC`
+
+const CHAT_BADGE_CACHE_MS = 60_000
+let chatBadgeCache: { at: number; data: Record<string, MemberRole> } | null = null
+
+/** userId → the badge shown beside the name in chat. Roles are left out: they already have their own chip. */
+export async function chatBadges(): Promise<Record<string, MemberRole>> {
+  if (chatBadgeCache && Date.now() - chatBadgeCache.at < CHAT_BADGE_CACHE_MS) return chatBadgeCache.data
+  await ensure()
+  const r = await rows<{ user_id: string; name: string; icon: string; tier: string }>(sql`SELECT DISTINCT ON (a.user_id) a.user_id, b.name, b.icon, b.tier
+    FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id LEFT JOIN kp_pins p ON p.user_id = a.user_id
+    WHERE b.active AND b.role_style IS NULL
+    ORDER BY a.user_id, ${WORN_ORDER}`)
+  const data: Record<string, MemberRole> = {}
+  for (const x of r) data[x.user_id] = { name: x.name, style: x.tier, icon: x.icon }
+  chatBadgeCache = { at: Date.now(), data }
+  return data
+}
+
+/** What is written next to one member's name in Telegram: their role if they hold one, otherwise the badge they wear. */
+export async function chatMarkOf(userId: string): Promise<{ name: string; icon: string; role: boolean } | null> {
+  await ensure()
+  const [x] = await rows<{ name: string; icon: string; role: boolean }>(sql`SELECT b.name, b.icon, (b.role_style IS NOT NULL) AS role
+    FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id LEFT JOIN kp_pins p ON p.user_id = a.user_id
+    WHERE a.user_id = ${userId} AND b.active
+    ORDER BY (b.role_style IS NOT NULL) DESC, CASE WHEN b.role_style IS NOT NULL THEN a.awarded_at END DESC NULLS LAST, ${WORN_ORDER}
+    LIMIT 1`)
+  return x ? { name: x.name, icon: x.icon, role: Boolean(x.role) } : null
 }
 
 // --- Collection sets (RZ5) -------------------------------------------------

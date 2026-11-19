@@ -1,7 +1,8 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { botToken, callBot, ensureTables, fetchChannel, normalizeChannel, scrapedHtmlToCleanText } from '@/lib/telegram-mirror'
-import { displayName, escapeHtml, getChatConfig, getLink, messageText, type TgMessage } from '@/lib/telegram-chat'
+import { displayName, getChatConfig, getLink, memberMark, messageText, type TgMessage } from '@/lib/telegram-chat'
+import { TG_HTML, tgMemberMessage } from '@/lib/tg-format'
 import {
   BROADCAST_CHANNELS,
   type BroadcastSlug,
@@ -281,10 +282,9 @@ export async function sendChannelComment(userId: string, slug: BroadcastSlug, po
   const author = link[0].tg_name
   const sent = await callBot<{ message_id: number }>(await botToken(chat.botId), 'sendMessage', {
     chat_id: config.discussionId,
-    text: `<b>${escapeHtml(author)}</b> <i>(site)</i>: ${escapeHtml(text)}`,
-    parse_mode: 'HTML',
+    text: tgMemberMessage(author, await memberMark(userId), text),
+    ...TG_HTML,
     reply_parameters: { message_id: Number(thread[0].thread_message_id), allow_sending_without_reply: false },
-    link_preview_options: { is_disabled: true },
   })
   await rows(sql`INSERT INTO tg_channel_comments (channel_id, post_id, discussion_id, tg_message_id, from_tg_id, user_id, author, text, origin)
     VALUES (${config.channelId}, ${postId}, ${config.discussionId}, ${sent.message_id}, ${Number(link[0].tg_id)}, ${userId},

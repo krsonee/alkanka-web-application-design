@@ -4,6 +4,7 @@ import { botToken, callBot, dropAutoFed, ensureTables, entitiesToCleanHtml, norm
 import { FILTER_PRESETS } from '@/lib/telegram-filters'
 import { decodeEntities } from '@/lib/html-entities'
 import type { TgMessage, TgUpdate } from '@/lib/telegram-chat'
+import { TG_HTML, tgNotice, type TgNotice } from '@/lib/tg-format'
 
 export type ApprovalKind = 'market' | 'task' | 'complaint'
 
@@ -647,14 +648,14 @@ export async function setOddsResult(dealId: number, result: 'won' | 'lost' | nul
 }
 
 /** Champion podium announcement: goes to every active channel/group the panel has connected. */
-export async function broadcastPodium(build: (origin: string) => string) {
+export async function broadcastPodium(build: (origin: string) => TgNotice) {
   await ensureSuiteTables()
   const suite = await getBotSuite()
-  const text = build(suite.siteOrigin || '').slice(0, MESSAGE_LIMIT)
+  const text = tgNotice(build(suite.siteOrigin || ''))
   let posted = 0
   for (const t of await dropAutoFed(await targetsFor([], true))) {
     try {
-      await callBot(t.token, 'sendMessage', { chat_id: t.chatId, text, disable_web_page_preview: true })
+      await callBot(t.token, 'sendMessage', { chat_id: t.chatId, text, ...TG_HTML })
       posted++
     } catch (error) {
       console.error('[kursu] paylaşılamadı', t.title, (error as Error).message)
