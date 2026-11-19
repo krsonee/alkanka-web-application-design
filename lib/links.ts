@@ -116,12 +116,11 @@ export async function linkReport(input: { from?: string | null; to?: string | nu
     })
   }
 
-  const picked = siteId === null ? null : siteById.get(siteId) ?? null
   for (const c of campaigns) {
     const code = String(c.code)
     const target = String(c.target)
     const owner = sites.find((s) => s.slug && (target === `/git/${s.slug}` || target.startsWith(`/git/${s.slug}?`) || target === `/siteler/${s.slug}`)) ?? null
-    if (siteId !== null && owner?.id !== picked?.id) continue
+    if (siteId !== null && owner?.id !== siteId) continue
     const s = visits.get(String(c.id)) ?? NONE
     const clash = affCodes.has(code)
     out.push({
