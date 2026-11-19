@@ -3,9 +3,13 @@
 import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/panel-auth'
-import { deleteContent, setContent } from '@/lib/content'
+import { deleteContent, getContent, setContent } from '@/lib/content'
+import { isAllowedImage } from '@/lib/site-registry'
+import { TEXTS_KEY, legacyEventTexts } from '@/lib/site-texts-shared'
+import type { EventCardInput } from '@/lib/event-cards'
 import {
   CATALOG_KEYS,
+  EVENT_KINDS,
   cleanBonuses,
   cleanCampaigns,
   cleanEvents,
@@ -230,12 +234,112 @@ export async function saveCatalogList(kind: ListKind, items: unknown): Promise<R
       })
     if (drift) return { ok: false, error: drift }
     await setContent(CATALOG_KEYS[kind], cleaned)
+    if (kind === 'events') await dropLegacyEventTexts()
     revalidatePath('/', 'layout')
     const prizes = kind === 'events' ? cleanEvents(items).reduce((sum, e) => sum + ((e.rank ?? 'none') === 'none' ? 0 : payoutTotal(e.payouts ?? [])), 0) : 0
     await logPanel('catalog', 'İçerik listesi kaydedildi', KIND_LABEL[kind] ?? kind, `${Array.isArray(items) ? items.length : 0} kayıt${prizes ? ` · otomatik etkinlik ödülleri en fazla ${kc(prizes)}` : ''}`)
     return { ok: true, message: 'Kaydedildi, sitede hemen geçerli.' }
   } catch (error) {
     console.error(`[catalog:${kind}] kaydedilemedi`, error)
+    return { ok: false, error: 'Kaydedilemedi.' }
+  }
+}
+
+/**
+ * The saved events already carry whatever the old per-event text rows said (the panel reads them
+ * laid over the list), so the rows are removed here; left in place they would undo the next edit.
+ */
+async function dropLegacyEventTexts() {
+  const saved = await getContent<Record<string, string>>(TEXTS_KEY)
+  const legacy = legacyEventTexts(saved)
+  if (!saved || !Object.keys(legacy).length) return
+  await setContent(TEXTS_KEY, Object.fromEntries(Object.entries(saved).filter(([key]) => !(key in legacy))))
+}
+
+const CARD_LIMITS = { title: 80, subtitle: 120, prize: 80 } as const
+const CARD_LABELS: Record<keyof typeof CARD_LIMITS, string> = { title: 'Başlık', subtitle: 'Alt yazı', prize: 'Ödül yazısı' }
+
+const trIso = (ms: number) => `${new Date(ms + 3 * 3_600_000).toISOString().slice(0, 16)}:00+03:00`
+
+/**
+ * The card face of every event, in site order: what "Site yazıları → Etkinlik kartları" edits.
+ * `known` is the list the screen was showing, so a save cannot wipe an event added elsewhere meanwhile.
+ * Texts, image and order need only the texts permission, as the old text rows did; adding or
+ * removing an event changes what members can join and stays with the content calendar permission.
+ */
+export async function saveEventCards(cards: EventCardInput[], known: string[]): Promise<Result> {
+  const [texts, catalog] = await Promise.all([canPanel('texts'), canPanel('catalog')])
+  if (!texts && !catalog) return { ok: false, error: 'Bu bölüm için yetkin yok.' }
+  try {
+    if (!Array.isArray(cards) || !Array.isArray(known)) return { ok: false, error: 'Geçersiz liste.' }
+    const { getCatalog } = await import('@/lib/catalog')
+    const stored = (await getCatalog({ includeHidden: true })).events
+    const before = new Set(known.map(String))
+    if (stored.length !== before.size || stored.some((e) => !before.has(e.id))) {
+      return { ok: false, error: 'Etkinlik listesi bu arada başka bir ekrandan değişmiş. Sayfayı yenileyip tekrar dene. Hiçbir şey kaydedilmedi.' }
+    }
+    const kept = new Set<string>()
+    const now = Date.now()
+    const next: unknown[] = []
+    let added = 0
+    for (const [i, raw] of cards.slice(0, 40).entries()) {
+      const card = (raw ?? {}) as Partial<EventCardInput>
+      const text = (key: keyof typeof CARD_LIMITS) => String(card[key] ?? '').trim()
+      const where = `${i + 1}. kart`
+      if (!text('title')) return { ok: false, error: `${where}: başlık boş olamaz. Hiçbir şey kaydedilmedi.` }
+      for (const key of Object.keys(CARD_LIMITS) as (keyof typeof CARD_LIMITS)[]) {
+        if (text(key).length > CARD_LIMITS[key]) {
+          return { ok: false, error: `${where}: ${CARD_LABELS[key]} en fazla ${CARD_LIMITS[key]} karakter olabilir (yazdığın ${text(key).length}). Hiçbir şey kaydedilmedi.` }
+        }
+      }
+      const image = String(card.image ?? '').trim()
+      if (image && !isAllowedImage(image)) return { ok: false, error: `${where}: görsel /images/ ile ya da https:// ile başlamalı. Hiçbir şey kaydedilmedi.` }
+      const face = {
+        kind: EVENT_KINDS.includes(card.kind as (typeof EVENT_KINDS)[number]) ? card.kind : 'Haftalık',
+        title: text('title'),
+        subtitle: text('subtitle'),
+        prize: text('prize'),
+        image: image || '/images/banner-events.png',
+      }
+      const id = String(card.id ?? '')
+      const current = id && !kept.has(id) ? stored.find((e) => e.id === id) : undefined
+      if (current) {
+        kept.add(id)
+        next.push({ ...current, ...face })
+        continue
+      }
+      added++
+      next.push({
+        ...face,
+        id: `etkinlik-${now.toString(36)}${added > 1 ? `-${added}` : ''}`,
+        startsAt: trIso(now),
+        endsAt: trIso(now + 7 * 86_400_000),
+        participants: 0,
+        entry: 0,
+        rank: 'none',
+        game: '',
+        payouts: [],
+        description: '',
+        steps: [],
+        rules: [],
+        prizes: [],
+      })
+    }
+    const removed = stored.filter((e) => !kept.has(e.id))
+    if ((added || removed.length) && !catalog) {
+      return { ok: false, error: 'Etkinlik eklemek ve silmek için "İçerik takvimi" yetkisi gerekir. Yazı, görsel ve sıra değişikliği yapabilirsin. Hiçbir şey kaydedilmedi.' }
+    }
+    const problem = await eventError(next)
+    if (problem) return { ok: false, error: problem }
+    await setContent(CATALOG_KEYS.events, cleanEvents(next))
+    await dropLegacyEventTexts()
+    revalidatePath('/', 'layout')
+    revalidatePath('/panel')
+    const detail = [`${next.length} kart`, added ? `${added} eklendi` : '', removed.length ? `silinen: ${removed.map((e) => e.title).join(', ').slice(0, 200)}` : ''].filter(Boolean).join(' · ')
+    await logPanel('texts', 'Etkinlik kartları kaydedildi', null, detail)
+    return { ok: true, message: added ? 'Etkinlik eklendi. Ücretsiz ve 7 günlük açıldı; tarih, ücret ve ödülleri İçerik takvimi → Etkinlik & bilet sekmesinden ayarla.' : removed.length ? 'Etkinlik silindi.' : 'Kaydedildi, sitede hemen geçerli.' }
+  } catch (error) {
+    console.error('[catalog:event-cards] kaydedilemedi', error)
     return { ok: false, error: 'Kaydedilemedi.' }
   }
 }

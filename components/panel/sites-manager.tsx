@@ -76,7 +76,12 @@ const BADGE_LABEL: Record<(typeof SITE_BADGES)[number], string> = {
   'Sponsor Değil': '5 · Sponsor değil (yalnızca güven merkezi ve özel oranlar)',
 }
 
-export function SitesManager({ sites, today }: { sites: SponsorSite[]; today: string }) {
+/**
+ * `legacyLogos` are logos uploaded on the old "Sponsor logoları" screen, keyed by address slug. The
+ * site still falls back to them; opening a sponsor puts its old logo in the form so the next save keeps it on the record.
+ */
+export function SitesManager({ sites, today, legacyLogos = {} }: { sites: SponsorSite[]; today: string; legacyLogos?: Record<string, string> }) {
+  const logoOf = (site: SponsorSite) => site.logoUrl.trim() || legacyLogos[site.slug] || ''
   const [selected, setSelected] = useState<Set<number>>(() => new Set())
   const [bulking, startBulk] = useTransition()
   const [checks, setChecks] = useState<Map<number, LinkCheck> | null>(null)
@@ -265,10 +270,21 @@ export function SitesManager({ sites, today }: { sites: SponsorSite[]; today: st
                   className="size-4 shrink-0 accent-primary"
                 />
                 <span className="w-6 shrink-0 text-xs tabular-nums text-muted-foreground">{i + 1}</span>
+                <span className={cn('flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background', !site.active && 'opacity-50')}>
+                  {logoOf(site) ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- sponsor logos can come from any https host set in the panel
+                    <img src={logoOf(site)} alt="" loading="lazy" className="size-full object-contain p-0.5" />
+                  ) : (
+                    <span className="text-xs font-bold text-muted-foreground" aria-hidden="true">
+                      {site.name.slice(0, 2).toLocaleUpperCase('tr')}
+                    </span>
+                  )}
+                </span>
                 <span className={cn('min-w-0 flex-1 basis-40 font-medium text-foreground', !site.active && 'opacity-50')}>
                   {site.name}
                   {site.slug ? <span className="ml-2 font-normal text-muted-foreground">/{site.slug}</span> : null}
                 </span>
+                {!logoOf(site) && <span className="rounded bg-secondary px-2 py-0.5 text-xs font-semibold text-muted-foreground">Logo yok</span>}
                 <span className="rounded bg-secondary px-2 py-0.5 text-xs font-bold uppercase text-foreground">{BADGE_LABEL[site.badge as (typeof SITE_BADGES)[number]] ?? site.badge}</span>
                 {site.featured && <span className="text-xs font-bold uppercase text-primary">Öne çıkan</span>}
                 {!site.active && <span className="text-xs font-bold uppercase text-muted-foreground">Gizli</span>}
@@ -287,7 +303,7 @@ export function SitesManager({ sites, today }: { sites: SponsorSite[]; today: st
                   Özet
                 </button>
                 <HideButton key={`${site.id}-${site.active}`} kind="sponsor" id={site.id} hidden={!site.active} label={site.name} />
-                <button type="button" aria-label={`${site.name} düzenle`} onClick={() => setEditing(site)} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
+                <button type="button" aria-label={`${site.name} düzenle`} onClick={() => setEditing({ ...site, logoUrl: logoOf(site) })} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
                   <Pencil className="size-4" aria-hidden="true" />
                 </button>
               </div>
@@ -377,7 +393,14 @@ function SiteForm({
       />
       <Field label="Kısa tanım" value={v.tagline} onChange={(tagline) => set('tagline', tagline)} />
       <div className="md:col-span-2">
-        <ImageField label="Logo" value={v.logoUrl} onChange={(logoUrl) => set('logoUrl', logoUrl)} uploadId="sponsor-logo" compact />
+        <ImageField
+          label="Logo"
+          value={v.logoUrl}
+          onChange={(logoUrl) => set('logoUrl', logoUrl)}
+          uploadId={`sponsor-logo-${v.id ?? 'yeni'}`}
+          compact
+          hint="Sponsor kartlarında baş harflerin yerine görünür. Kare ya da şeffaf arka planlı PNG/SVG en iyi sonucu verir; bilgisayardan yükle ya da link yapıştır."
+        />
       </div>
       <Field label="Bonus satırı" value={v.bonusText} onChange={(bonusText) => set('bonusText', bonusText)} />
       <Field label="Bonus türü" value={v.bonusType} onChange={(bonusType) => set('bonusType', bonusType)} placeholder="Deneme, hoş geldin…" />

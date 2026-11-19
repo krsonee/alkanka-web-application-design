@@ -20,8 +20,10 @@ import { CUSTOM_SLIDES_KEY, readCustomSlides, readSlideOrder, SLIDE_ORDER_KEY, s
 import { readPromoTotals } from '@/lib/promo-stats'
 import { LoginForm, LogoutButton } from '@/components/panel/login-form'
 import { ContentEditor } from '@/components/panel/content-editor'
-import { LogoEditor } from '@/components/panel/logo-editor'
-import { LOGO_TEAMS, listLogoSponsors } from '@/lib/logo-registry'
+import { HeroManager, SlideManager } from '@/components/panel/slide-manager'
+import { EventCardsEditor } from '@/components/panel/event-cards-editor'
+import { toEventCardRow } from '@/lib/event-cards'
+import { HIDDEN_KEY, isHidden, readHidden } from '@/lib/hidden-shared'
 import { ArenaSettingsEditor } from '@/components/panel/arena-settings-editor'
 import { OpenTables } from '@/components/panel/open-tables'
 import { GameStats } from '@/components/panel/game-stats'
@@ -574,43 +576,26 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
   })
   const active = params.b || 'dashboard'
   const ctx: SectionCtx = { session, active }
+  const hiddenMap = readHidden(content[HIDDEN_KEY])
 
-  const slideStats = can('slide') && active === 'slide' ? await readPromoTotals('slide') : {}
-  const homeDesign = mergeHomeV2(content[HOME_V2_KEY]).home
-  const slideAudience = { members: !(homeDesign.fullPage && homeDesign.enabled), guests: !(homeDesign.fullPage && homeDesign.guestEnabled) }
-  const slides = can('slide')
-    ? sortByOrder(SLIDES.map((s) => ({
-        kind: 'slide' as const,
-        id: s.id,
-        label: s.eyebrow,
-        path: '/',
-        defaults: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image },
-        saved: (content[`slide:${s.id}`] as SlideOverride | undefined) ?? null,
-      })).concat(
-        readCustomSlides(content[CUSTOM_SLIDES_KEY]).map((s) => ({
-          kind: 'slide' as const,
-          id: s.id,
-          label: s.eyebrow || s.title,
-          path: '/',
-          custom: true,
-          defaults: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image, href: s.href },
-          saved: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image, mobileImage: s.mobileImage, href: s.href, startAt: s.startAt, endAt: s.endAt },
-        })),
-      ), readSlideOrder(content[SLIDE_ORDER_KEY])).map((s) => ({ ...s, stats: slideStats[s.id] ?? { views: 0, clicks: 0 } }))
-    : []
-
-  const heroes = can('hero')
-    ? HERO_PAGES.map((p) => ({
-        kind: 'hero' as const,
-        id: p.slug,
-        label: p.label,
-        path: p.path,
-        defaults: { title: p.title, image: p.image },
-        saved: (content[`hero:${p.slug}`] as HeroOverride | undefined) ?? null,
-      }))
-    : []
+  const homeV2 = mergeHomeV2(content[HOME_V2_KEY])
+  /** Layout and wizard: tabs on the "Ana sayfa" screen for an account that also has the slider, their own row otherwise. */
+  const homeTabs = () => [
+    { id: 'layout', label: 'Ana sayfa düzeni', content: <HomeV2Editor initial={homeV2} part="home" /> },
+    { id: 'wizard', label: 'Masa açma sihirbazı', content: <HomeV2Editor initial={homeV2} part="setup" /> },
+  ]
+  /** Share preview and, for an account without the campaign section, the ad slots. */
+  const shareTabs = async () => {
+    const adStats = tabHome('ads', can) === 'logo' ? await readPromoTotals('ad') : null
+    return [
+      { id: 'share', label: 'Paylaşım görseli', content: <ShareEditor saved={(content[SHARE_KEY] as ShareSettings | undefined) ?? {}} /> },
+      ...(adStats ? [adsTab(adStats)] : []),
+    ]
+  }
 
   const [
+    slide,
+    hero,
     texts,
     branding,
     logos,
@@ -640,56 +625,88 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     home,
     withdrawals,
   ] = await Promise.all([
-    section(ctx, 'texts', 'Site yazıları', () => (
-      <TelegramTabs
-        label="Site yazıları"
-        tabs={[
-          { id: 'texts', label: 'Site yazıları', content: <TextsEditor saved={(content[TEXTS_KEY] as SiteTexts | undefined) ?? {}} /> },
-          { id: 'legal', label: 'Yasal metinler', content: <LegalEditor docs={mergeLegal(content[LEGAL_KEY] as LegalOverrides | undefined)} /> },
-        ]}
+    section(ctx, 'slide', 'Slider', async () => {
+      const stats = await readPromoTotals('slide')
+      const design = homeV2.home
+      const slides = sortByOrder(
+        SLIDES.map((s) => ({
+          kind: 'slide' as const,
+          id: s.id,
+          label: s.eyebrow,
+          path: '/',
+          defaults: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image },
+          saved: (content[`slide:${s.id}`] as SlideOverride | undefined) ?? null,
+        })).concat(
+          readCustomSlides(content[CUSTOM_SLIDES_KEY]).map((s) => ({
+            kind: 'slide' as const,
+            id: s.id,
+            label: s.eyebrow || s.title,
+            path: '/',
+            custom: true,
+            defaults: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image, href: s.href },
+            saved: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image, mobileImage: s.mobileImage, href: s.href, startAt: s.startAt, endAt: s.endAt },
+          })),
+        ),
+        readSlideOrder(content[SLIDE_ORDER_KEY]),
+      ).map((s) => ({ ...s, hidden: isHidden(hiddenMap, 'slide', s.id), stats: stats[s.id] ?? { views: 0, clicks: 0 } }))
+      const manager = (
+        <SlideManager
+          slides={slides}
+          library={IMAGE_LIBRARY}
+          audience={{ members: !(design.fullPage && design.enabled), guests: !(design.fullPage && design.guestEnabled) }}
+        />
+      )
+      if (!can('logo')) return manager
+      return <TelegramTabs label="Ana sayfa" legend={false} tabs={[{ id: 'slider', label: `Slider (${slides.length})`, content: manager }, ...homeTabs()]} />
+    }),
+    section(ctx, 'hero', 'Sayfa başlıkları', () => (
+      <HeroManager
+        library={IMAGE_LIBRARY}
+        heroes={HERO_PAGES.map((p) => ({
+          kind: 'hero' as const,
+          id: p.slug,
+          label: p.label,
+          path: p.path,
+          defaults: { title: p.title, image: p.image },
+          saved: (content[`hero:${p.slug}`] as HeroOverride | undefined) ?? null,
+        }))}
       />
     )),
-    section(ctx, 'branding', 'Logo ayarları', async () => {
-      const b = await getBranding()
-      return <BrandingEditor logoUrl={b.logoUrl ?? ''} logoHeight={b.logoHeight ?? 36} iconSrc={b.icons?.['192'] ? `/app-icon/192?v=${b.iconVersion ?? 0}` : '/icon-192.png'} hasCustomIcon={!!b.icons?.['192']} />
-    }),
-    section(ctx, 'logo', 'Logolar', async () => {
-      const [logoSponsors, adStats] = await Promise.all([listLogoSponsors(), tabHome('ads', can) === 'logo' ? readPromoTotals('ad') : null])
+    section(ctx, 'texts', 'Site yazıları', async () => {
+      const [events, faqs] = await Promise.all([getCatalog({ includeHidden: true }).then((c) => c.events), can('faqs') ? listFaqs() : null])
       return (
         <TelegramTabs
-          label="Paylaşım ve logolar"
+          label="Site yazıları"
+          legend={false}
           tabs={[
-            { id: 'share', label: 'Paylaşım görseli', content: <ShareEditor saved={(content[SHARE_KEY] as ShareSettings | undefined) ?? {}} /> },
-            ...(adStats ? [adsTab(adStats)] : []),
+            { id: 'texts', label: 'Site yazıları', content: <TextsEditor saved={(content[TEXTS_KEY] as SiteTexts | undefined) ?? {}} /> },
             {
-              id: 'sponsor-logos',
-              label: `Sponsor logoları (${logoSponsors.length})`,
+              id: 'event-cards',
+              label: `Etkinlik kartları (${events.length})`,
               content: (
-                <LogoEditor
-                  kind="sponsors"
-                  title={`Site logoları (${logoSponsors.length})`}
-                  hint="Sponsor kartlarında baş harflerin yerine görünür. Kare ya da şeffaf PNG/SVG logo linki yapıştır."
-                  items={logoSponsors}
-                  saved={(content['logos:sponsors'] as Record<string, string> | undefined) ?? {}}
+                <EventCardsEditor
+                  cards={events.map((e) => toEventCardRow(e, isHidden(hiddenMap, 'event', e.id)))}
+                  library={IMAGE_LIBRARY}
+                  canManage={can('catalog')}
+                  canOpenCalendar={can('catalog')}
                 />
               ),
             },
-            {
-              id: 'team-logos',
-              label: `Takım logoları (${LOGO_TEAMS.length})`,
-              content: (
-                <LogoEditor
-                  kind="teams"
-                  title={`Takım logoları (${LOGO_TEAMS.length})`}
-                  hint="Özel oranlar ve maç tahminlerinde takım adının yanında görünür."
-                  items={LOGO_TEAMS}
-                  saved={(content['logos:teams'] as Record<string, string> | undefined) ?? {}}
-                />
-              ),
-            },
+            { id: 'legal', label: 'Yasal metinler', content: <LegalEditor docs={mergeLegal(content[LEGAL_KEY] as LegalOverrides | undefined)} /> },
+            ...(faqs ? [{ id: 'faqs', label: `SSS (${faqs.length})`, content: <FaqsManager faqs={faqs} /> }] : []),
           ]}
         />
       )
+    }),
+    section(ctx, 'branding', 'Logo ayarları', async () => {
+      const [b, share] = await Promise.all([getBranding(), can('logo') ? shareTabs() : []])
+      const editor = <BrandingEditor logoUrl={b.logoUrl ?? ''} logoHeight={b.logoHeight ?? 36} iconSrc={b.icons?.['192'] ? `/app-icon/192?v=${b.iconVersion ?? 0}` : '/icon-192.png'} hasCustomIcon={!!b.icons?.['192']} />
+      if (!share.length) return editor
+      return <TelegramTabs label="Marka ve logolar" legend={false} tabs={[{ id: 'brand', label: 'Logo & uygulama ikonu', content: editor }, ...share]} />
+    }),
+    section(ctx, 'logo', 'Paylaşım görseli', async () => {
+      const tabs = await shareTabs()
+      return tabs.length > 1 ? <TelegramTabs label="Paylaşım görseli" legend={false} tabs={tabs} /> : tabs[0].content
     }),
     section(ctx, 'seo', 'SEO', async () => {
       const { seoHealth, list404, listRedirects, weeklyCare } = await import('@/lib/seo-health')
@@ -719,7 +736,9 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       ])
       return <TourSettingsEditor settings={settings} stats={stats} />
     }),
-    section(ctx, 'sponsors', 'Sponsorlar', async () => <SitesManager sites={await listSites()} today={istanbulToday()} />),
+    section(ctx, 'sponsors', 'Sponsorlar', async () => (
+      <SitesManager sites={await listSites()} today={istanbulToday()} legacyLogos={(content['logos:sponsors'] as Record<string, string> | undefined) ?? {}} />
+    )),
     section(ctx, 'growth', 'Büyüme', async () => {
       const [ambient, options, allSites, links, followers, report, flagged, accounts, affLinks] = await Promise.all([
         tabHome('ambient', can) === 'growth' ? getAmbientSettings() : null,
@@ -930,7 +949,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       )
     }),
     section(ctx, 'users', 'Tüm üyeler', usersPanel),
-    section(ctx, 'home', 'Ana sayfa ayarları', () => <HomeV2Editor initial={mergeHomeV2(content[HOME_V2_KEY])} />),
+    section(ctx, 'home', 'Ana sayfa ayarları', () => <TelegramTabs label="Ana sayfa düzeni ve masa açma" legend={false} tabs={homeTabs()} />),
     section(ctx, 'withdrawals', 'Çekim paylaşımları', async () => {
       const w = await import('@/lib/withdrawals')
       const [shares, settings, siteRewards, sites, blocks] = await Promise.all([
@@ -1009,10 +1028,8 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           dashboard={dashboard}
           moderation={moderation === undefined ? <></> : moderation}
           isOwner={session.isOwner}
-          slides={slides}
-          slideAudience={slideAudience}
-          heroes={heroes}
-          library={IMAGE_LIBRARY}
+          slide={slide}
+          hero={hero}
           texts={texts}
           rewards={rewards}
           catalog={catalog}

@@ -5,9 +5,9 @@ export const PANEL_GROUPS = [
     modules: [
       { id: 'slide', label: 'Slider', hint: 'Ana sayfadaki kayan bannerlar' },
       { id: 'hero', label: 'Sayfa başlıkları', hint: 'Her sayfanın üst başlığı ve görseli' },
-      { id: 'texts', label: 'Site yazıları', hint: 'Site genelindeki yazılar ve yasal metinler' },
+      { id: 'texts', label: 'Site yazıları', hint: 'Site genelindeki yazılar, etkinlik kartları ve yasal metinler' },
       { id: 'branding', label: 'Logo & uygulama ikonu', hint: 'Site logosu ve telefona eklenen uygulama ikonu' },
-      { id: 'logo', label: 'Paylaşım & logolar', hint: 'Paylaşım görseli, sponsor ve takım logoları' },
+      { id: 'logo', label: 'Paylaşım görseli', hint: 'Link paylaşılınca çıkan önizleme görseli ve yazısı' },
       { id: 'seo', label: 'SEO & Rehber', hint: 'Blog yazıları, fırsatlar ve arama motoru doğrulaması' },
       { id: 'faqs', label: 'SSS', hint: 'Sık sorulan sorular' },
       { id: 'tour', label: 'Site turu', hint: 'Yeni üyeye gösterilen tanıtım turu ve ödülü' },
@@ -101,7 +101,7 @@ type Can = (module: PanelModule) => boolean
  * of a crowded section adds no new permission to hand out. `was` is the tab they used to be.
  */
 export const PANEL_VIEWS = [
-  { id: 'home', group: 'site', after: 'hero', needs: 'logo', was: 'home-v2', label: 'Ana sayfa & Masa aç', hint: 'Ana sayfa düzeni, misafir ve üye bölümleri, masa açma sihirbazı' },
+  { id: 'home', group: 'site', after: 'slide', needs: 'logo', was: 'home-v2', label: 'Ana sayfa düzeni & Masa aç', hint: 'Ana sayfa düzeni, misafir ve üye bölümleri, masa açma sihirbazı' },
   { id: 'withdrawals', group: 'members', after: 'community', needs: 'community', was: 'cekim', label: 'Çekim paylaşımları', hint: 'Üyelerin çekim paylaşımları, ödülleri ve kuralları' },
   { id: 'referral', group: 'members', after: 'tasks', needs: 'growth', was: 'referral', label: 'Davet sistemi', hint: 'Arkadaşını getiren üyenin ödülü, davet kuralları ve sınırları' },
 ] as const satisfies readonly { id: string; group: string; after: PanelModule; needs: PanelModule; was: string; label: string; hint: string }[]
@@ -133,19 +133,68 @@ export function tabHome(id: MovedTab, can: Can): PanelModule | null {
   return can(home) ? home : needs
 }
 
-/** Where an address saved before the menu was rearranged leads now; null when it is still right. */
-export function movedAddress(b: string | undefined, s: string | undefined, can: Can): { b: string; s?: string } | null {
+/**
+ * Sections that became tabs on another section's screen. Each keeps its own permission: an account
+ * that can open both gets one menu row with the tabs inside, an account that holds only the folded
+ * one keeps its old row, so the merge neither grants nor takes away access. `tabs[0]` is where an
+ * old address lands.
+ */
+export const FOLDED = {
+  home: { into: 'slide', tabs: ['layout', 'wizard'] },
+  logo: { into: 'branding', tabs: ['share', 'ads'] },
+  faqs: { into: 'texts', tabs: ['faqs'] },
+} as const satisfies Record<string, { into: PanelModule; tabs: readonly string[] }>
+
+export type FoldedRow = keyof typeof FOLDED
+
+/** The section a folded row lives in for this account; null when it still has its own row. */
+export function foldedInto(id: string, can: Can): PanelModule | null {
+  if (!(id in FOLDED)) return null
+  const row = id as FoldedRow
+  return can(rowPermission(row)) && can(FOLDED[row].into) ? FOLDED[row].into : null
+}
+
+/** Menu names of the screens that hold folded sections; the permission list keeps the module's own name. */
+export const MERGED_ROWS: Partial<Record<PanelModule, { label: string; hint: string }>> = {
+  slide: { label: 'Ana sayfa', hint: 'Slider, ana sayfa düzeni ve masa açma sihirbazı' },
+  branding: { label: 'Marka & logolar', hint: 'Site logosu, uygulama ikonu ve paylaşım görseli' },
+  texts: { label: 'Site yazıları', hint: 'Site yazıları, etkinlik kartları, yasal metinler ve SSS' },
+}
+
+function moveOnce(b: string | undefined, s: string | undefined, can: Can): { b: string; s?: string } | null {
   const view = PANEL_VIEWS.find((v) => v.needs === b && v.was === s)
   if (view) return can(view.needs) ? { b: view.id } : null
   const id = (Object.keys(MOVED_TABS) as MovedTab[]).find((key) => key === s)
-  if (!id || MOVED_TABS[id].needs !== b) return null
-  const home = tabHome(id, can)
-  return home && home !== b ? { b: home, s: id } : null
+  if (id && MOVED_TABS[id].needs === b) {
+    const home = tabHome(id, can)
+    if (home && home !== b) return { b: home, s: id }
+  }
+  // Sponsor logos are uploaded on the sponsor's own form now and team logos are gone.
+  if (b === 'logo' && s === 'sponsor-logos' && can('sponsors')) return { b: 'sponsors' }
+  if (b === 'logo' && (s === 'sponsor-logos' || s === 'team-logos')) return { b: 'logo', s: 'share' }
+  const into = b ? foldedInto(b, can) : null
+  if (!into) return null
+  const tabs: readonly string[] = FOLDED[b as FoldedRow].tabs
+  return { b: into, s: s && tabs.includes(s) ? s : tabs[0] }
+}
+
+/** Where an address saved before the menu was rearranged leads now; null when it is still right. */
+export function movedAddress(b: string | undefined, s: string | undefined, can: Can): { b: string; s?: string } | null {
+  let at: { b: string; s?: string } | null = null
+  // A tab can move twice (out of a section that was itself folded later), so follow the trail to its end.
+  for (let hop = 0; hop < 4; hop++) {
+    const next = moveOnce(at ? at.b : b, at ? at.s : s, can)
+    if (!next) break
+    at = next
+  }
+  return at
 }
 
 /** What a permission opens besides its own menu row, shown where permissions are handed out. */
 export const PERMISSION_EXTRAS: Partial<Record<PanelModule, string>> = {
-  logo: 'Ana sayfa & Masa aç ile Reklam alanlarını da açar.',
+  slide: 'Menüde "Ana sayfa" ekranındaki Slider sekmesini açar.',
+  logo: 'Ana sayfa düzeni, Masa açma sihirbazı ve Reklam alanlarını da açar.',
+  faqs: 'Site yazıları yetkisi de varsa SSS o ekranda sekme olarak görünür.',
   community: 'Çekim paylaşımlarını ve Tahmin ligini de açar.',
   growth: 'Davet sistemini ve Masa doluluğunu da açar.',
   market: 'Masa temalarını da açar.',

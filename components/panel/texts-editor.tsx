@@ -11,8 +11,8 @@ export function TextsEditor({ saved }: { saved: SiteTexts }) {
     <form action={action} className="flex flex-col gap-6">
       <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
         Görsellerin üstündeki yazılar resmin içinde değil, sayfa metnidir. Buradan değiştirdiğin her şey web, mobil tarayıcı ve
-        uygulamada aynı anda güncellenir. Boş bıraktığın alan varsayılan metne döner. Slider ve sayfa başlığı yazıları kendi
-        sekmelerinden düzenlenir.
+        uygulamada aynı anda güncellenir. Boş bıraktığın alan varsayılan metne döner. Etkinlik kartları yandaki sekmede; slider
+        ve sayfa başlığı yazıları kendi ekranlarında düzenlenir.
       </p>
       {TEXT_GROUPS.map((group) => (
         <section key={group.id} className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5">

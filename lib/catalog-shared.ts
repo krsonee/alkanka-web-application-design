@@ -10,6 +10,7 @@ import {
 } from '@/components/alkanka/data'
 import { DEFAULT_REWARDS, mergeRewards, type RewardConfig } from './rewards-shared'
 import { EVENT_GAMES, EVENT_RANKS, cleanPayouts, type EventRank } from './event-rules'
+import { TEXTS_KEY, withLegacyEventTexts } from './site-texts-shared'
 
 export type Catalog = {
   rewards: RewardConfig
@@ -219,7 +220,7 @@ export function mergeCatalog(all: Record<string, unknown>): Catalog {
     Array.isArray(all[key]) ? clean(all[key]) : fallback
   return {
     rewards: mergeRewards(all[CATALOG_KEYS.rewards]),
-    events: pick(CATALOG_KEYS.events, cleanEvents, EVENTS),
+    events: withLegacyEventTexts(pick(CATALOG_KEYS.events, cleanEvents, EVENTS), all[TEXTS_KEY]),
     predictions: pick(CATALOG_KEYS.predictions, cleanPredictions, PREDICTIONS),
     campaigns: pick(CATALOG_KEYS.campaigns, cleanCampaigns, CAMPAIGNS),
     bonuses: pick(CATALOG_KEYS.bonuses, cleanBonuses, BONUSES),
