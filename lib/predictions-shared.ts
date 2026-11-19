@@ -1,6 +1,26 @@
 /** Everything the site, the panel and the server agree on about the prediction league. No server imports. */
 
-export const MARKET_IDS = ['side', 'score', 'goals', 'btts', 'half', 'corners', 'cards'] as const
+export const SPORT_IDS = ['football', 'basketball', 'volleyball', 'tennis', 'esports'] as const
+export type Sport = (typeof SPORT_IDS)[number]
+
+/** Every question the league knows, in the order they are asked. A sport only ever uses its own subset. */
+export const MARKET_IDS = [
+  'side',
+  'winner',
+  'score',
+  'setScore',
+  'mapScore',
+  'goals',
+  'points',
+  'sets',
+  'maps',
+  'btts',
+  'half',
+  'firstSet',
+  'firstMap',
+  'corners',
+  'cards',
+] as const
 export type MarketId = (typeof MARKET_IDS)[number]
 
 export type Coin = 'kc' | 'kp'
@@ -12,9 +32,11 @@ export type MarketRule = {
   amount: number
   /** Over/under threshold, always x.5 so an answer is never a push. */
   line?: number
-  /** Score only: what a wrong score on the right side still earns. */
+  /** Score questions only: what a wrong score on the right side still earns. */
   nearPts?: number
   nearAmount?: number
+  /** Set and map score only: how many sets or maps the match is played over, copied from the set. */
+  bestOf?: number
 }
 
 export type PrizeKind = 'kc' | 'kp' | 'market' | 'cash'
@@ -23,6 +45,10 @@ export type PrizeKind = 'kc' | 'kp' | 'market' | 'cash'
 export type Prize = { kind: PrizeKind; amount: number; ref: string; name: string }
 
 export type QuestionSet = {
+  /** Left out for football, so sets saved before other sports existed read the same. */
+  sport?: Sport
+  /** Sets or maps the match is played over; only for sports decided that way. */
+  bestOf?: number
   markets: Partial<Record<MarketId, MarketRule>>
   /** Paid on top when every question of the match is answered correctly. */
   bonus: { pts: number; prize: Prize | null } | null
@@ -31,6 +57,7 @@ export type QuestionSet = {
 export type Answers = Partial<Record<MarketId, string>>
 
 export type MatchResult = {
+  /** Goals, points, sets or maps, depending on the sport. */
   home: number
   away: number
   /** Null means the figure is unknown, which cancels the question that needs it. */
@@ -38,6 +65,8 @@ export type MatchResult = {
   htAway: number | null
   corners: number | null
   cards: number | null
+  /** Who took the first set or map. */
+  first?: '1' | '2' | null
 }
 
 export type Outcome = 'hit' | 'near' | 'miss' | 'void'
@@ -51,17 +80,92 @@ export type Grade = {
   bonus: boolean
 }
 
-type LineSpec = { def: number; min: number; max: number }
+export type LineSpec = { def: number; min: number; max: number }
 
-export const MARKETS: Record<MarketId, { label: string; short: string; ask: string; line?: LineSpec; needs?: 'half' | 'corners' | 'cards' }> = {
+export type ResultNeed = 'half' | 'corners' | 'cards' | 'first'
+
+export const MARKETS: Record<MarketId, { label: string; short: string; ask: string; line?: LineSpec; needs?: ResultNeed; series?: boolean }> = {
   side: { label: 'Maç sonucu', short: 'Taraf', ask: 'Maçı kim kazanır?' },
+  winner: { label: 'Kazanan', short: 'Kazanan', ask: 'Maçı kim kazanır?' },
   score: { label: 'Tam skor', short: 'Skor', ask: 'Maç kaç kaç biter?' },
+  setScore: { label: 'Set skoru', short: 'Set', ask: 'Maç setlerde kaç kaç biter?', series: true },
+  mapScore: { label: 'Harita skoru', short: 'Harita', ask: 'Seri haritalarda kaç kaç biter?', series: true },
   goals: { label: 'Toplam gol', short: 'Gol', ask: 'Toplam gol sayısı', line: { def: 2.5, min: 0.5, max: 6.5 } },
+  points: { label: 'Toplam sayı', short: 'Sayı', ask: 'İki takımın toplam sayısı', line: { def: 160.5, min: 100.5, max: 300.5 } },
+  sets: { label: 'Toplam set', short: 'Set sayısı', ask: 'Maç toplam kaç set sürer?', line: { def: 3.5, min: 2.5, max: 4.5 } },
+  maps: { label: 'Toplam harita', short: 'Harita sayısı', ask: 'Seri toplam kaç harita sürer?', line: { def: 2.5, min: 2.5, max: 6.5 } },
   btts: { label: 'Karşılıklı gol', short: 'KG', ask: 'İki takım da gol atar mı?' },
   half: { label: 'İlk yarı sonucu', short: 'İlk yarı', ask: 'İlk yarıyı kim önde kapatır?', needs: 'half' },
+  firstSet: { label: 'İlk set', short: 'İlk set', ask: 'İlk seti kim alır?', needs: 'first' },
+  firstMap: { label: 'İlk harita', short: 'İlk harita', ask: 'İlk haritayı kim alır?', needs: 'first' },
   corners: { label: 'Korner', short: 'Korner', ask: 'Toplam korner sayısı', line: { def: 9.5, min: 4.5, max: 15.5 }, needs: 'corners' },
   cards: { label: 'Kart', short: 'Kart', ask: 'Toplam kart sayısı (sarı + kırmızı)', line: { def: 4.5, min: 0.5, max: 10.5 }, needs: 'cards' },
 }
+
+export type SportInfo = {
+  label: string
+  /** The questions this sport can ask. */
+  markets: MarketId[]
+  /** The highest figure one side can finish on. */
+  maxScore: number
+  draw: boolean
+  /** Match lengths in sets or maps, the usual one first. Empty when the sport is not decided that way. */
+  bestOf: number[]
+  /** What the result form calls the final figure. */
+  scoreLabel: string
+  /** The unit of that figure. */
+  unit: string
+  /** Whether fixtures and results come from the calendar feed; otherwise both are entered by hand. */
+  feed: boolean
+}
+
+export const SPORTS: Record<Sport, SportInfo> = {
+  football: { label: 'Futbol', markets: ['side', 'score', 'goals', 'btts', 'half', 'corners', 'cards'], maxScore: 20, draw: true, bestOf: [], scoreLabel: 'Maç skoru (90 dk)', unit: 'gol', feed: true },
+  basketball: { label: 'Basketbol', markets: ['winner', 'points', 'half'], maxScore: 250, draw: false, bestOf: [], scoreLabel: 'Maç skoru (uzatma dahil)', unit: 'sayı', feed: true },
+  volleyball: { label: 'Voleybol', markets: ['winner', 'setScore', 'sets', 'firstSet'], maxScore: 3, draw: false, bestOf: [5], scoreLabel: 'Set skoru', unit: 'set', feed: true },
+  tennis: { label: 'Tenis', markets: ['winner', 'setScore', 'sets', 'firstSet'], maxScore: 3, draw: false, bestOf: [3, 5], scoreLabel: 'Set skoru', unit: 'set', feed: true },
+  esports: { label: 'E-spor', markets: ['winner', 'mapScore', 'maps', 'firstMap'], maxScore: 4, draw: false, bestOf: [3, 1, 5, 7], scoreLabel: 'Harita skoru', unit: 'harita', feed: false },
+}
+
+/** The games an e-sport match can be filed under; the panel can still type another. */
+export const ESPORT_GAMES = ['CS2', 'League of Legends', 'Valorant', 'Dota 2'] as const
+
+export const parseSport = (v: unknown): Sport => (SPORT_IDS.includes(v as Sport) ? (v as Sport) : 'football')
+
+export const sportOf = (set: Pick<QuestionSet, 'sport'> | null | undefined): Sport => parseSport(set?.sport)
+
+/** The match length a sport allows, falling back to its usual one. Undefined for sports without sets or maps. */
+export function cleanBestOf(sport: Sport, v: unknown): number | undefined {
+  const allowed = SPORTS[sport].bestOf
+  if (!allowed.length) return undefined
+  const n = Number(v)
+  return allowed.includes(n) ? n : allowed[0]
+}
+
+export const winsNeeded = (bestOf: number) => Math.floor(bestOf / 2) + 1
+
+/** Every way a series can end, home wins first and the clearest win at each end. */
+export function seriesScores(bestOf: number): string[] {
+  const need = winsNeeded(bestOf)
+  const lost = Array.from({ length: need }, (_, i) => i)
+  return [...lost.map((n) => `${need}-${n}`), ...lost.reverse().map((n) => `${n}-${need}`)]
+}
+
+/** A one-map series has nothing to ask beyond who wins it. */
+export function sportMarkets(sport: Sport, bestOf?: number): MarketId[] {
+  const ids = SPORTS[sport].markets
+  return bestOf === 1 ? ids.filter((id) => id === 'winner') : ids
+}
+
+/** The over/under range of a question; a set or map count is bounded by how long the match can run. */
+export function lineSpec(id: MarketId, bestOf?: number): LineSpec | undefined {
+  const spec = MARKETS[id].line
+  if (!spec || (id !== 'sets' && id !== 'maps') || !bestOf || bestOf < 3) return spec
+  const min = winsNeeded(bestOf) + 0.5
+  return { def: min, min, max: Math.max(min, bestOf - 0.5) }
+}
+
+const isScoreLike = (id: MarketId) => id === 'score' || Boolean(MARKETS[id].series)
 
 export const MAX_GOALS = 20
 export const MAX_MARKET_POINTS = 10
@@ -103,32 +207,79 @@ export function normalizePrize(raw: unknown): Prize | null {
   return { kind, amount, ref: '', name: '' }
 }
 
+/** What a question pays when the panel switches it on without touching the figures. */
+export const DEFAULT_RULES: Record<MarketId, MarketRule> = {
+  side: { pts: 1, coin: 'kc', amount: 40 },
+  winner: { pts: 1, coin: 'kc', amount: 40 },
+  score: { pts: 3, coin: 'kc', amount: 150, nearPts: 1, nearAmount: 40 },
+  setScore: { pts: 3, coin: 'kc', amount: 150, nearPts: 0, nearAmount: 0 },
+  mapScore: { pts: 3, coin: 'kc', amount: 150, nearPts: 0, nearAmount: 0 },
+  goals: { pts: 1, coin: 'kc', amount: 40, line: 2.5 },
+  points: { pts: 1, coin: 'kc', amount: 40, line: 160.5 },
+  sets: { pts: 1, coin: 'kc', amount: 40, line: 3.5 },
+  maps: { pts: 1, coin: 'kc', amount: 40, line: 2.5 },
+  btts: { pts: 1, coin: 'kc', amount: 40 },
+  half: { pts: 1, coin: 'kc', amount: 40 },
+  firstSet: { pts: 1, coin: 'kc', amount: 40 },
+  firstMap: { pts: 1, coin: 'kc', amount: 40 },
+  corners: { pts: 2, coin: 'kc', amount: 60, line: 9.5 },
+  cards: { pts: 2, coin: 'kc', amount: 60, line: 4.5 },
+}
+
+const sportTag = (sport: Sport, bestOf: number | undefined): Pick<QuestionSet, 'sport' | 'bestOf'> =>
+  sport === 'football' ? {} : bestOf ? { sport, bestOf } : { sport }
+
+/** A question's rule fitted to the match: its line inside the allowed range, the series length copied in. */
+function fitRule(id: MarketId, rule: MarketRule, bestOf: number | undefined): MarketRule {
+  const out: MarketRule = { pts: rule.pts, coin: rule.coin, amount: rule.amount }
+  const spec = lineSpec(id, bestOf)
+  if (spec) out.line = cleanLine(rule.line, spec)
+  if (isScoreLike(id)) {
+    out.nearPts = rule.nearPts ?? 0
+    out.nearAmount = rule.nearAmount ?? 0
+  }
+  if (MARKETS[id].series && bestOf) out.bestOf = bestOf
+  return out
+}
+
+/** The questions a match of this sport starts with: who wins, plus the sport's headline question. */
+export function defaultSet(sport: Sport, length?: number): QuestionSet {
+  if (sport === 'football') return LEGACY_SET
+  const bestOf = cleanBestOf(sport, length)
+  const markets: QuestionSet['markets'] = {}
+  for (const id of sportMarkets(sport, bestOf).slice(0, 2)) markets[id] = fitRule(id, DEFAULT_RULES[id], bestOf)
+  return { ...sportTag(sport, bestOf), markets, bonus: null }
+}
+
 export function normalizeSet(raw: unknown): QuestionSet {
   const input = (raw && typeof raw === 'object' ? raw : {}) as Partial<QuestionSet>
+  const sport = parseSport(input.sport)
+  const bestOf = cleanBestOf(sport, input.bestOf)
+  const allowed = sportMarkets(sport, bestOf)
   const markets: QuestionSet['markets'] = {}
   for (const id of MARKET_IDS) {
     const r = input.markets?.[id]
-    if (!r || typeof r !== 'object') continue
-    const rule: MarketRule = {
-      pts: int(r.pts, 0, MAX_MARKET_POINTS),
-      coin: r.coin === 'kp' ? 'kp' : 'kc',
-      amount: int(r.amount, 0, MAX_MARKET_AMOUNT),
-    }
-    const spec = MARKETS[id].line
-    if (spec) rule.line = cleanLine(r.line, spec)
-    if (id === 'score') {
-      rule.nearPts = int(r.nearPts, 0, MAX_MARKET_POINTS)
-      rule.nearAmount = int(r.nearAmount, 0, MAX_MARKET_AMOUNT)
-    }
-    markets[id] = rule
+    if (!r || typeof r !== 'object' || !allowed.includes(id)) continue
+    markets[id] = fitRule(
+      id,
+      {
+        pts: int(r.pts, 0, MAX_MARKET_POINTS),
+        coin: r.coin === 'kp' ? 'kp' : 'kc',
+        amount: int(r.amount, 0, MAX_MARKET_AMOUNT),
+        line: r.line,
+        nearPts: int(r.nearPts, 0, MAX_MARKET_POINTS),
+        nearAmount: int(r.nearAmount, 0, MAX_MARKET_AMOUNT),
+      },
+      bestOf,
+    )
   }
-  if (!marketList({ markets, bonus: null }).length) return LEGACY_SET
+  if (!marketList({ markets, bonus: null }).length) return defaultSet(sport, bestOf)
   const b = input.bonus
   const bonus =
     b && typeof b === 'object' && marketList({ markets, bonus: null }).length > 1
       ? { pts: int(b.pts, 0, MAX_BONUS_POINTS), prize: normalizePrize(b.prize) }
       : null
-  return { markets, bonus: bonus && (bonus.pts > 0 || bonus.prize) ? bonus : null }
+  return { ...sportTag(sport, bestOf), markets, bonus: bonus && (bonus.pts > 0 || bonus.prize) ? bonus : null }
 }
 
 /** The questions of a match, in the order they are asked. */
@@ -148,6 +299,12 @@ export function marketOptions(id: MarketId, teams: Teams, rule: MarketRule | und
       { value: '2', label: teams.away },
     ]
   }
+  if (id === 'winner' || id === 'firstSet' || id === 'firstMap') {
+    return [
+      { value: '1', label: teams.home },
+      { value: '2', label: teams.away },
+    ]
+  }
   if (id === 'btts') {
     return [
       { value: 'var', label: 'Var' },
@@ -155,6 +312,7 @@ export function marketOptions(id: MarketId, teams: Teams, rule: MarketRule | und
     ]
   }
   if (id === 'score') return []
+  if (MARKETS[id].series) return seriesScores(rule?.bestOf ?? 3).map((value) => ({ value, label: value.replace('-', ' - ') }))
   const line = lineText(rule?.line ?? MARKETS[id].line!.def)
   return [
     { value: 'alt', label: `${line} Alt` },
@@ -190,11 +348,21 @@ const overUnder = (total: number, line: number) => (total > line ? 'ust' : 'alt'
 export function correctAnswer(id: MarketId, rule: MarketRule | undefined, r: MatchResult): string | null {
   switch (id) {
     case 'score':
+    case 'setScore':
+    case 'mapScore':
       return `${r.home}-${r.away}`
     case 'side':
       return sideOf(r.home, r.away)
+    case 'winner':
+      return r.home === r.away ? null : sideOf(r.home, r.away)
     case 'goals':
-      return overUnder(r.home + r.away, rule?.line ?? MARKETS.goals.line!.def)
+    case 'points':
+    case 'sets':
+    case 'maps':
+      return overUnder(r.home + r.away, rule?.line ?? MARKETS[id].line!.def)
+    case 'firstSet':
+    case 'firstMap':
+      return r.first === '1' || r.first === '2' ? r.first : null
     case 'btts':
       return r.home > 0 && r.away > 0 ? 'var' : 'yok'
     case 'half':
@@ -247,10 +415,10 @@ export function gradePick(set: QuestionSet, result: MatchResult, answers: Answer
       grade.outcomes[id] = 'hit'
       grade.pts += rule.pts
       add(rule.coin, rule.amount)
-      if (id === 'score') grade.exact = true
+      if (isScoreLike(id)) grade.exact = true
       continue
     }
-    const guess = id === 'score' ? parseScore(mine) : null
+    const guess = isScoreLike(id) ? parseScore(mine) : null
     const near = guess && sideOf(guess[0], guess[1]) === sideOf(result.home, result.away) && ((rule.nearPts ?? 0) > 0 || (rule.nearAmount ?? 0) > 0)
     if (near) {
       grade.outcomes[id] = 'near'
@@ -327,16 +495,26 @@ export function resultNeeds(set: QuestionSet) {
     half: Boolean(set.markets.half),
     corners: Boolean(set.markets.corners),
     cards: Boolean(set.markets.cards),
+    first: Boolean(set.markets.firstSet || set.markets.firstMap),
   }
 }
 
 export function resultError(set: QuestionSet, r: MatchResult): string | null {
-  const goal = (n: number) => Number.isInteger(n) && n >= 0 && n <= MAX_GOALS
+  const sport = sportOf(set)
+  const info = SPORTS[sport]
+  const bestOf = cleanBestOf(sport, set.bestOf)
+  const max = bestOf ? winsNeeded(bestOf) : info.maxScore
+  const goal = (n: number) => Number.isInteger(n) && n >= 0 && n <= max
   const stat = (n: number | null) => n === null || (Number.isInteger(n) && n >= 0 && n <= MAX_STAT)
-  if (!goal(r.home) || !goal(r.away)) return `Skor 0-${MAX_GOALS} arasında olmalı.`
+  if (!goal(r.home) || !goal(r.away)) return `${info.scoreLabel} 0-${max} arasında olmalı.`
+  if (!info.draw && r.home === r.away) return `${info.label} maçı berabere bitmez. Kazananı belli olan skoru gir.`
+  if (bestOf && Math.max(r.home, r.away) !== max) return `Bu maç ${max} ${info.unit} alan kazanır; kazanan tarafın skoru ${max} olmalı.`
+  const first = r.first ?? null
+  if (first !== null && first !== '1' && first !== '2') return `İlk ${info.unit} için bir taraf seç ya da boş bırak.`
+  if (bestOf && first !== null && (first === '1' ? r.home : r.away) === 0) return `İlk ${info.unit} alan taraf maçı hiç ${info.unit} almadan bitirmiş olamaz.`
   if ((r.htHome === null) !== (r.htAway === null)) return 'İlk yarı skorunun iki tarafını da gir ya da ikisini de boş bırak.'
   if (r.htHome !== null && r.htAway !== null) {
-    if (!goal(r.htHome) || !goal(r.htAway)) return `İlk yarı skoru 0-${MAX_GOALS} arasında olmalı.`
+    if (!goal(r.htHome) || !goal(r.htAway)) return `İlk yarı skoru 0-${max} arasında olmalı.`
     if (r.htHome > r.home || r.htAway > r.away) return 'İlk yarı skoru maç skorundan büyük olamaz.'
   }
   if (!stat(r.corners)) return `Korner sayısı 0-${MAX_STAT} arasında olmalı.`

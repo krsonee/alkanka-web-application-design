@@ -2,16 +2,18 @@
 
 import { useState } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
-import { createLeagueMatch, editLeagueQuestions, finishLeagueMatch, loadLeaguePicks, removeLeagueMatch } from '@/app/panel/community-actions'
+import { editLeagueQuestions, finishLeagueMatch, loadLeaguePicks, removeLeagueMatch } from '@/app/panel/community-actions'
 import type { LeagueMatch } from '@/lib/predictions'
 import {
   MARKETS,
+  SPORTS,
   marketList,
   marketTitle,
   prizeText,
   resultError,
   resultNeeds,
   rewardText,
+  sportOf,
   voidedBy,
   type MatchResult,
   type QuestionSet,
@@ -22,10 +24,8 @@ import { PickList } from '@/components/panel/pick-list'
 import { RecordLink } from '@/components/panel/record-link'
 import { StatusLine } from '@/components/alkanka/community/use-action'
 import { cn } from '@/lib/utils'
-import { QuestionSetEditor, ceilingLine, questionLine, setProblem, type PrizeOptions } from './league-fields'
+import { QuestionSetEditor, setProblem, type PrizeOptions } from './league-fields'
 
-const field =
-  'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring'
 const caption = 'flex flex-col gap-1 text-xs font-semibold text-muted-foreground'
 
 const when = (iso: string) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })
@@ -63,13 +63,13 @@ function Questions({ set }: { set: QuestionSet }) {
   )
 }
 
-function Digits({ label, value, onChange, wide = false }: { label: string; value: string; onChange: (v: string) => void; wide?: boolean }) {
+function Digits({ label, value, onChange, wide = false, digits = 2 }: { label: string; value: string; onChange: (v: string) => void; wide?: boolean; digits?: number }) {
   return (
     <input
       aria-label={label}
       inputMode="numeric"
       value={value}
-      onChange={(e) => onChange(e.target.value.replace(/\D/g, '').slice(0, 2))}
+      onChange={(e) => onChange(e.target.value.replace(/\D/g, '').slice(0, digits))}
       placeholder="-"
       className={cn('h-10 rounded-lg border border-border bg-background text-center text-sm tabular-nums text-foreground focus:outline-none focus:ring-2 focus:ring-ring', wide ? 'w-20' : 'w-14')}
     />
@@ -80,9 +80,11 @@ const numberOrNull = (v: string) => (v === '' ? null : Number(v))
 
 function ResultForm({ m }: { m: LeagueMatch }) {
   const { pending, status, run } = usePanelAction('Maç puanlandı.')
-  const [v, setV] = useState({ home: '', away: '', htHome: '', htAway: '', corners: '', cards: '' })
+  const [v, setV] = useState({ home: '', away: '', htHome: '', htAway: '', corners: '', cards: '', first: '' })
   const put = (k: keyof typeof v) => (value: string) => setV((prev) => ({ ...prev, [k]: value }))
   const needs = resultNeeds(m.set)
+  const info = SPORTS[sportOf(m.set)]
+  const digits = String(info.maxScore).length
   const ready = v.home !== '' && v.away !== ''
   const result: MatchResult = {
     home: Number(v.home),
@@ -91,6 +93,7 @@ function ResultForm({ m }: { m: LeagueMatch }) {
     htAway: needs.half ? numberOrNull(v.htAway) : null,
     corners: needs.corners ? numberOrNull(v.corners) : null,
     cards: needs.cards ? numberOrNull(v.cards) : null,
+    first: needs.first && (v.first === '1' || v.first === '2') ? v.first : null,
   }
   const problem = ready ? resultError(m.set, result) : null
   const voided = ready && !problem ? voidedBy(m.set, result) : []
@@ -107,22 +110,36 @@ function ResultForm({ m }: { m: LeagueMatch }) {
     <div className="flex flex-col gap-2 rounded-lg bg-background p-3">
       <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
         <div className={caption}>
-          Maç skoru (90 dk)
+          {info.scoreLabel}
           <span className="flex items-center gap-1.5">
-            <Digits label={`${m.home} gol`} value={v.home} onChange={put('home')} />
+            <Digits label={`${m.home} ${info.unit}`} value={v.home} onChange={put('home')} digits={digits} wide={digits > 2} />
             <span aria-hidden="true">-</span>
-            <Digits label={`${m.away} gol`} value={v.away} onChange={put('away')} />
+            <Digits label={`${m.away} ${info.unit}`} value={v.away} onChange={put('away')} digits={digits} wide={digits > 2} />
           </span>
         </div>
         {needs.half && (
           <div className={caption}>
             İlk yarı skoru
             <span className="flex items-center gap-1.5">
-              <Digits label={`${m.home} ilk yarı gol`} value={v.htHome} onChange={put('htHome')} />
+              <Digits label={`${m.home} ilk yarı ${info.unit}`} value={v.htHome} onChange={put('htHome')} digits={digits} wide={digits > 2} />
               <span aria-hidden="true">-</span>
-              <Digits label={`${m.away} ilk yarı gol`} value={v.htAway} onChange={put('htAway')} />
+              <Digits label={`${m.away} ilk yarı ${info.unit}`} value={v.htAway} onChange={put('htAway')} digits={digits} wide={digits > 2} />
             </span>
           </div>
+        )}
+        {needs.first && (
+          <label className={cn(caption, 'w-full sm:w-56')}>
+            İlk {info.unit} kimin
+            <select
+              value={v.first}
+              onChange={(e) => put('first')(e.target.value)}
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">Bilinmiyor (soru iptal olur)</option>
+              <option value="1">{m.home}</option>
+              <option value="2">{m.away}</option>
+            </select>
+          </label>
         )}
         {needs.corners && (
           <div className={caption}>
@@ -165,14 +182,25 @@ function ResultForm({ m }: { m: LeagueMatch }) {
 function resultLine(m: LeagueMatch) {
   const r = m.result
   if (!r) return `${m.homeGoals} - ${m.awayGoals}`
+  const sport = sportOf(m.set)
+  const unit = SPORTS[sport].unit
   return [
-    `${r.home} - ${r.away}`,
+    `${r.home} - ${r.away}${sport === 'football' ? '' : ` (${unit})`}`,
     r.htHome !== null && r.htAway !== null ? `ilk yarı ${r.htHome} - ${r.htAway}` : '',
+    r.first ? `ilk ${unit} ${r.first === '1' ? m.home : m.away}` : '',
     r.corners !== null ? `${r.corners} korner` : '',
     r.cards !== null ? `${r.cards} kart` : '',
   ]
     .filter(Boolean)
     .join(' · ')
+}
+
+/** What kind of match this is, for sports where the league name alone does not say. */
+function sportLine(set: QuestionSet) {
+  const sport = sportOf(set)
+  if (sport === 'football') return ''
+  const info = SPORTS[sport]
+  return `${info.label}${set.bestOf && info.bestOf.length > 1 ? `, ${set.bestOf} ${info.unit} üzerinden` : ''} · `
 }
 
 function MatchAdminRow({ m, state, options }: { m: LeagueMatch; state: AdminState; options: PrizeOptions }) {
@@ -191,6 +219,7 @@ function MatchAdminRow({ m, state, options }: { m: LeagueMatch; state: AdminStat
             {m.home} - {m.away}
           </span>
           <span className="text-xs text-muted-foreground">
+            {sportLine(m.set)}
             {m.league} · {when(m.kickoff)}
             {m.closesAt && m.closesAt !== m.kickoff ? ` · tahmin ${when(m.closesAt)} kapanır` : ''}
             {m.extId ? ' · takvimden' : ' · elle eklendi'}
@@ -301,98 +330,5 @@ export function MatchList({ matches, options }: { matches: LeagueMatch[]; option
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm leading-relaxed text-muted-foreground">{STATES.find((s) => s.id === tab)?.empty}</p>
       )}
     </div>
-  )
-}
-
-export function AddMatchForm({ defaults, options }: { defaults: QuestionSet; options: PrizeOptions }) {
-  const { pending, status, run } = usePanelAction('Maç eklendi.')
-  const [form, setForm] = useState({ league: 'Süper Lig', home: '', away: '', kickoff: '', closesAt: '' })
-  const [custom, setCustom] = useState(false)
-  const [draft, setDraft] = useState<QuestionSet>(defaults)
-  const put = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value })
-  const problem = custom ? setProblem(draft) : null
-
-  return (
-    <form
-      className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4"
-      onSubmit={(e) => {
-        e.preventDefault()
-        run(
-          () =>
-            createLeagueMatch({
-              ...form,
-              kickoff: new Date(form.kickoff).toISOString(),
-              closesAt: form.closesAt ? new Date(form.closesAt).toISOString() : undefined,
-              set: custom ? draft : null,
-            }),
-          () => setForm({ ...form, home: '', away: '', kickoff: '', closesAt: '' }),
-        )
-      }}
-    >
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <label className={caption}>
-          Lig
-          <input value={form.league} onChange={put('league')} className={field} />
-        </label>
-        <label className={caption}>
-          Ev sahibi
-          <input value={form.home} onChange={put('home')} placeholder="Galatasaray" className={field} />
-        </label>
-        <label className={caption}>
-          Deplasman
-          <input value={form.away} onChange={put('away')} placeholder="Fenerbahçe" className={field} />
-        </label>
-        <label className={caption}>
-          Başlama saati
-          <input type="datetime-local" value={form.kickoff} onChange={put('kickoff')} className={field} />
-        </label>
-        <label className={caption}>
-          <span>
-            Tahmin bitiş <span className="font-normal opacity-70">· boşsa maç saatinde</span>
-          </span>
-          <input type="datetime-local" value={form.closesAt} max={form.kickoff || undefined} onChange={put('closesAt')} className={field} />
-        </label>
-      </div>
-
-      <fieldset className="flex flex-col gap-2">
-        <legend className="mb-1 text-xs font-semibold text-muted-foreground">Sorular</legend>
-        <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">
-          <input type="radio" name="soru-seti" checked={!custom} onChange={() => setCustom(false)} className="mt-1 size-4 accent-primary" />
-          <span className="flex min-w-0 flex-col">
-            <span className="font-semibold">Varsayılan sorular</span>
-            <span className="text-xs leading-relaxed text-muted-foreground">
-              {questionLine(defaults)} · en fazla {ceilingLine(defaults)}
-            </span>
-          </span>
-        </label>
-        <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">
-          <input
-            type="radio"
-            name="soru-seti"
-            checked={custom}
-            onChange={() => {
-              setDraft(defaults)
-              setCustom(true)
-            }}
-            className="mt-1 size-4 accent-primary"
-          />
-          <span className="font-semibold">Bu maça özel sorular</span>
-        </label>
-        {custom && <QuestionSetEditor value={draft} onChange={setDraft} options={options} />}
-      </fieldset>
-
-      {problem && (
-        <p role="alert" className="text-xs font-medium text-destructive">
-          {problem}
-        </p>
-      )}
-      <button disabled={pending || !form.home || !form.away || !form.kickoff || Boolean(problem)} className="h-10 self-start rounded-lg bg-primary px-6 text-xs font-bold uppercase tracking-wider text-primary-foreground disabled:opacity-40">
-        {pending ? 'Ekleniyor...' : 'Maçı ekle'}
-      </button>
-      <StatusLine status={status} />
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        Tahminler bitiş saatinde (boşsa başlama saatinde) kendiliğinden kilitlenir. Her üye bir maça bir kez tahmin yapar. Maç bitince sonucu gir; puanlar ve ödüller anında dağıtılır.
-      </p>
-    </form>
   )
 }

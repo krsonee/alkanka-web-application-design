@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { savePickAction } from '@/app/actions/community'
 import type { LeagueMatch } from '@/lib/predictions'
-import { MARKETS, answerText, ceilingText, marketList, prizeText, type Answers, type MarketId } from '@/lib/predictions-shared'
+import { MARKETS, SPORTS, answerText, ceilingText, marketList, prizeText, sportOf, type Answers, type MarketId } from '@/lib/predictions-shared'
 import { cn } from '@/lib/utils'
 import { TeamLogo } from '../logo-context'
 import { usePoints } from '../points-context'
@@ -59,7 +59,8 @@ type Fact = { text: string; tone?: string }
 
 /** The one line under the teams: what is asked and what it pays, or how the member did. */
 function facts(m: LeagueMatch, state: MatchState, ids: MarketId[], now: number, signedIn: boolean): Fact[] {
-  const league: Fact = { text: m.league }
+  const sport = sportOf(m.set)
+  const league: Fact = { text: sport === 'football' ? m.league : `${SPORTS[sport].label} · ${m.league}` }
   if (state === 'open') {
     const closing = closingText(m, now)
     return [

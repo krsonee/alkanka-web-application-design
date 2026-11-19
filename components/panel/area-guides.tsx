@@ -210,7 +210,7 @@ const TOURNAMENT_STEPS: GuideStep[] = [
       <ol className={ol}>
         <li>Beğendiğin turnuvayı listeden aç, <b>Şablon</b> sekmesinde bir ad verip <b>Şablonu kaydet</b>e bas. Oyun, format, lig ayarları (tur aralığı, devre, sayılan oyunlar, oyun sınırı), ad, açıklama, kontenjan, ücret, ödül, başlangıç saati, turnuvanın süresi (başlangıçtan bitişe), maç uzunluğu ve maça giriş süresi saklanır.</li>
         <li>Yenisini açarken <b>Yeni turnuva</b>ya bas ve açılan pencerenin üstündeki şablonu seç. Form dolar, başlangıç yarın şablondaki saate, bitiş şablondaki süre kadar sonrasına ayarlanır. Bu güncellemeden önce kaydedilmiş şablonlarda süre yoktur; onlar 3 saatle açılır, bir kez yeniden kaydedersen süreyi de saklar. Tarihleri kontrol edip son adımda <b>Turnuvayı oluştur</b> de.</li>
-        <li><b>İçerik Takvimi</b>nde her turnuva iki satırla görünür: <b>Turnuva</b> (başlangıç saati) ve <b>Turnuva biter</b> (en geç kapanacağı saat). Biten turnuvada ikinci satır gerçekten kapandığı anı gösterir; iptal edilen turnuvanın bitiş satırı olmaz.</li>
+        <li><b>İçerik Takvimi</b>nde her turnuva iki satırla görünür: <b>Turnuva</b> (başlangıç saati) ve <b>Turnuva biter</b> (en geç kapanacağı saat). Biten turnuvada ikinci satır gerçekten kapandığı anı gösterir; iptal edilen turnuvanın bitiş satırı olmaz. Takvimde turnuva satırına basınca bu ekran açılır; turnuva tarihi takvimde sürüklenerek değişmez, buradan değiştirilir. Etkinlik, kampanya ve seçenekli tahmin ise takvimden eklenir, yandan düzenlenir ve başka güne sürüklenir.</li>
         <li>Şablon sadece formu doldurur. Şablonu silmek ya da değiştirmek, daha önce açılmış turnuvalara dokunmaz.</li>
       </ol>
     ),
