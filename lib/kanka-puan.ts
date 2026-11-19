@@ -341,7 +341,7 @@ export async function predictionBoard(period: RankPeriod, limit = 20): Promise<P
   await ensureKp()
   const since = periodStart(period)
   const r = await rows(sql`SELECT p.user_id, max(p.user_name) AS name, coalesce(sum(p.points), 0) AS pts,
-      count(*) FILTER (WHERE p.points > 0) AS hits, count(*) FILTER (WHERE p.points = 3) AS exact, count(*) AS picks
+      count(*) FILTER (WHERE p.points > 0) AS hits, count(*) FILTER (WHERE p.exact) AS exact, count(*) AS picks
     FROM league_picks p JOIN league_matches m ON m.id = p.match_id
     WHERE m.settled AND m.kickoff >= ${since}
     GROUP BY p.user_id HAVING count(*) > 0 ORDER BY pts DESC, exact DESC, hits DESC LIMIT ${limit}`)
@@ -761,7 +761,7 @@ export async function contestStandings(kind: Exclude<AutoKind, 'turnuva'>): Prom
   const [{ period }] = await rows<{ period: string }>(sql`SELECT ${span.label} AS period`)
   if (kind.startsWith('tahmin')) {
     const r = await rows(sql`SELECT p.user_id, max(p.user_name) AS name, sum(p.points) AS pts,
-        count(*) FILTER (WHERE p.points = 3) AS exact, count(*) FILTER (WHERE p.points > 0) AS hits
+        count(*) FILTER (WHERE p.exact) AS exact, count(*) FILTER (WHERE p.points > 0) AS hits
       FROM league_picks p JOIN league_matches m ON m.id = p.match_id
       WHERE m.settled AND m.kickoff >= (${span.start} AT TIME ZONE 'Europe/Istanbul')
       GROUP BY p.user_id HAVING sum(p.points) > 0 ORDER BY pts DESC, exact DESC LIMIT 10`)

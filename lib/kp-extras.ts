@@ -252,12 +252,13 @@ const HIDDEN: Omit<HiddenBadge, 'unlocked'>[] = [
 /** Secret achievements, checked live from activity. They pay no KP, so nothing needs to be stored. */
 export async function getHiddenBadges(userId: string | null, bestStreak: number): Promise<HiddenBadge[]> {
   if (!userId) return HIDDEN.map((b) => ({ ...b, unlocked: false }))
+  await ensureKp()
   const [games, picks, refs] = await Promise.all([exists('game_history'), exists('league_picks'), exists('referrals')])
   const [r] = await rows<{ night: boolean; games: string; exact: string; refs: string }>(sql`SELECT
     EXISTS (SELECT 1 FROM kp_events WHERE user_id = ${userId} AND source = 'sure'
       AND extract(hour FROM created_at AT TIME ZONE 'Europe/Istanbul') BETWEEN 2 AND 4) AS night,
     ${games ? sql`(SELECT count(*) FROM game_history WHERE user_id = ${userId} AND mode <> 'odul' AND game <> 'turnuva' AND mode <> 'admin')` : sql`0`} AS games,
-    ${picks ? sql`(SELECT count(*) FROM league_picks WHERE user_id = ${userId} AND points = 3)` : sql`0`} AS exact,
+    ${picks ? sql`(SELECT count(*) FROM league_picks WHERE user_id = ${userId} AND exact)` : sql`0`} AS exact,
     ${refs ? sql`(SELECT count(*) FROM referrals WHERE referrer_id = ${userId} AND rewarded_at IS NOT NULL)` : sql`0`} AS refs`)
   const done: Record<string, boolean> = {
     'gece-kusu': Boolean(r?.night),

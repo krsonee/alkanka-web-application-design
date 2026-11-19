@@ -1,0 +1,453 @@
+/** Everything the site, the panel and the server agree on about the prediction league. No server imports. */
+
+export const MARKET_IDS = ['side', 'score', 'goals', 'btts', 'half', 'corners', 'cards'] as const
+export type MarketId = (typeof MARKET_IDS)[number]
+
+export type Coin = 'kc' | 'kp'
+
+export type MarketRule = {
+  /** League points for a correct answer. */
+  pts: number
+  coin: Coin
+  amount: number
+  /** Over/under threshold, always x.5 so an answer is never a push. */
+  line?: number
+  /** Score only: what a wrong score on the right side still earns. */
+  nearPts?: number
+  nearAmount?: number
+}
+
+export type PrizeKind = 'kc' | 'kp' | 'market' | 'cash'
+
+/** `ref`/`name` point at the market product or the sponsor site; `amount` is KC, KP or TL. */
+export type Prize = { kind: PrizeKind; amount: number; ref: string; name: string }
+
+export type QuestionSet = {
+  markets: Partial<Record<MarketId, MarketRule>>
+  /** Paid on top when every question of the match is answered correctly. */
+  bonus: { pts: number; prize: Prize | null } | null
+}
+
+export type Answers = Partial<Record<MarketId, string>>
+
+export type MatchResult = {
+  home: number
+  away: number
+  /** Null means the figure is unknown, which cancels the question that needs it. */
+  htHome: number | null
+  htAway: number | null
+  corners: number | null
+  cards: number | null
+}
+
+export type Outcome = 'hit' | 'near' | 'miss' | 'void'
+
+export type Grade = {
+  outcomes: Partial<Record<MarketId, Outcome>>
+  pts: number
+  kc: number
+  kp: number
+  exact: boolean
+  bonus: boolean
+}
+
+type LineSpec = { def: number; min: number; max: number }
+
+export const MARKETS: Record<MarketId, { label: string; short: string; ask: string; line?: LineSpec; needs?: 'half' | 'corners' | 'cards' }> = {
+  side: { label: 'Maç sonucu', short: 'Taraf', ask: 'Maçı kim kazanır?' },
+  score: { label: 'Tam skor', short: 'Skor', ask: 'Maç kaç kaç biter?' },
+  goals: { label: 'Toplam gol', short: 'Gol', ask: 'Toplam gol sayısı', line: { def: 2.5, min: 0.5, max: 6.5 } },
+  btts: { label: 'Karşılıklı gol', short: 'KG', ask: 'İki takım da gol atar mı?' },
+  half: { label: 'İlk yarı sonucu', short: 'İlk yarı', ask: 'İlk yarıyı kim önde kapatır?', needs: 'half' },
+  corners: { label: 'Korner', short: 'Korner', ask: 'Toplam korner sayısı', line: { def: 9.5, min: 4.5, max: 15.5 }, needs: 'corners' },
+  cards: { label: 'Kart', short: 'Kart', ask: 'Toplam kart sayısı (sarı + kırmızı)', line: { def: 4.5, min: 0.5, max: 10.5 }, needs: 'cards' },
+}
+
+export const MAX_GOALS = 20
+export const MAX_MARKET_POINTS = 10
+export const MAX_MARKET_AMOUNT = 100_000
+export const MAX_BONUS_POINTS = 20
+export const MAX_PRIZE_AMOUNT = 10_000_000
+export const MAX_LEAGUE_PLACES = 20
+export const MAX_STAT = 60
+
+/** How the league scored before questions could be chosen: the exact score, with a consolation for the right side. */
+export const LEGACY_SET: QuestionSet = {
+  markets: { score: { pts: 3, coin: 'kc', amount: 150, nearPts: 1, nearAmount: 40 } },
+  bonus: null,
+}
+
+const int = (v: unknown, min: number, max: number, fallback = min) => {
+  const n = Math.round(Number(v))
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback
+}
+
+function cleanLine(v: unknown, spec: LineSpec) {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return spec.def
+  const half = Math.floor(n) + 0.5
+  return Math.min(spec.max, Math.max(spec.min, half))
+}
+
+export function normalizePrize(raw: unknown): Prize | null {
+  if (!raw || typeof raw !== 'object') return null
+  const p = raw as Partial<Prize>
+  const kind = p.kind === 'kp' || p.kind === 'market' || p.kind === 'cash' ? p.kind : p.kind === 'kc' ? 'kc' : null
+  if (!kind) return null
+  const ref = String(p.ref ?? '').trim().slice(0, 80)
+  const name = String(p.name ?? '').trim().slice(0, 120)
+  if (kind === 'market') return ref ? { kind, amount: 1, ref, name: name || 'Market ürünü' } : null
+  const amount = int(p.amount, 0, MAX_PRIZE_AMOUNT)
+  if (amount <= 0) return null
+  if (kind === 'cash') return ref ? { kind, amount, ref, name: name || 'Sponsor' } : null
+  return { kind, amount, ref: '', name: '' }
+}
+
+export function normalizeSet(raw: unknown): QuestionSet {
+  const input = (raw && typeof raw === 'object' ? raw : {}) as Partial<QuestionSet>
+  const markets: QuestionSet['markets'] = {}
+  for (const id of MARKET_IDS) {
+    const r = input.markets?.[id]
+    if (!r || typeof r !== 'object') continue
+    const rule: MarketRule = {
+      pts: int(r.pts, 0, MAX_MARKET_POINTS),
+      coin: r.coin === 'kp' ? 'kp' : 'kc',
+      amount: int(r.amount, 0, MAX_MARKET_AMOUNT),
+    }
+    const spec = MARKETS[id].line
+    if (spec) rule.line = cleanLine(r.line, spec)
+    if (id === 'score') {
+      rule.nearPts = int(r.nearPts, 0, MAX_MARKET_POINTS)
+      rule.nearAmount = int(r.nearAmount, 0, MAX_MARKET_AMOUNT)
+    }
+    markets[id] = rule
+  }
+  if (!marketList({ markets, bonus: null }).length) return LEGACY_SET
+  const b = input.bonus
+  const bonus =
+    b && typeof b === 'object' && marketList({ markets, bonus: null }).length > 1
+      ? { pts: int(b.pts, 0, MAX_BONUS_POINTS), prize: normalizePrize(b.prize) }
+      : null
+  return { markets, bonus: bonus && (bonus.pts > 0 || bonus.prize) ? bonus : null }
+}
+
+/** The questions of a match, in the order they are asked. */
+export function marketList(set: QuestionSet): MarketId[] {
+  return MARKET_IDS.filter((id) => set.markets[id])
+}
+
+export type Teams = { home: string; away: string }
+
+export type Option = { value: string; label: string }
+
+export function marketOptions(id: MarketId, teams: Teams, rule: MarketRule | undefined): Option[] {
+  if (id === 'side' || id === 'half') {
+    return [
+      { value: '1', label: teams.home },
+      { value: 'X', label: 'Berabere' },
+      { value: '2', label: teams.away },
+    ]
+  }
+  if (id === 'btts') {
+    return [
+      { value: 'var', label: 'Var' },
+      { value: 'yok', label: 'Yok' },
+    ]
+  }
+  if (id === 'score') return []
+  const line = lineText(rule?.line ?? MARKETS[id].line!.def)
+  return [
+    { value: 'alt', label: `${line} Alt` },
+    { value: 'ust', label: `${line} Üst` },
+  ]
+}
+
+export const lineText = (line: number) => line.toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+
+/** The question as the member reads it, with its line when it has one. */
+export function marketTitle(id: MarketId, rule: MarketRule | undefined) {
+  return MARKETS[id].line ? `${MARKETS[id].label} ${lineText(rule?.line ?? MARKETS[id].line!.def)}` : MARKETS[id].label
+}
+
+export function parseScore(value: string | undefined | null): [number, number] | null {
+  const m = /^(\d{1,2})-(\d{1,2})$/.exec(String(value ?? ''))
+  if (!m) return null
+  const h = Number(m[1])
+  const a = Number(m[2])
+  return h <= MAX_GOALS && a <= MAX_GOALS ? [h, a] : null
+}
+
+export function answerText(id: MarketId, value: string | undefined | null, teams: Teams, rule: MarketRule | undefined) {
+  if (!value) return '-'
+  if (id === 'score') return value
+  return marketOptions(id, teams, rule).find((o) => o.value === value)?.label ?? value
+}
+
+const sideOf = (h: number, a: number) => (h > a ? '1' : h < a ? '2' : 'X')
+const overUnder = (total: number, line: number) => (total > line ? 'ust' : 'alt')
+
+/** The right answer to a question, or null when the figure it needs was never entered. */
+export function correctAnswer(id: MarketId, rule: MarketRule | undefined, r: MatchResult): string | null {
+  switch (id) {
+    case 'score':
+      return `${r.home}-${r.away}`
+    case 'side':
+      return sideOf(r.home, r.away)
+    case 'goals':
+      return overUnder(r.home + r.away, rule?.line ?? MARKETS.goals.line!.def)
+    case 'btts':
+      return r.home > 0 && r.away > 0 ? 'var' : 'yok'
+    case 'half':
+      return r.htHome === null || r.htAway === null ? null : sideOf(r.htHome, r.htAway)
+    case 'corners':
+      return r.corners === null ? null : overUnder(r.corners, rule?.line ?? MARKETS.corners.line!.def)
+    case 'cards':
+      return r.cards === null ? null : overUnder(r.cards, rule?.line ?? MARKETS.cards.line!.def)
+  }
+}
+
+/** Why these answers cannot be saved, or null when every question of the match is answered. */
+export function answersError(set: QuestionSet, answers: Answers, teams: Teams): string | null {
+  for (const id of marketList(set)) {
+    const value = answers[id]
+    if (!value) return `"${marketTitle(id, set.markets[id])}" sorusunu cevapla.`
+    if (id === 'score') {
+      if (!parseScore(value)) return `Skor 0-${MAX_GOALS} arasında olmalı.`
+    } else if (!marketOptions(id, teams, set.markets[id]).some((o) => o.value === value)) {
+      return `"${marketTitle(id, set.markets[id])}" için geçerli bir seçenek seç.`
+    }
+  }
+  return null
+}
+
+/** Keeps only the answers this match asks for, so a stray key can never be stored or counted. */
+export function cleanAnswers(set: QuestionSet, answers: Answers): Answers {
+  const out: Answers = {}
+  for (const id of marketList(set)) if (answers[id]) out[id] = String(answers[id])
+  return out
+}
+
+/** Scores one member's answers against the final result. */
+export function gradePick(set: QuestionSet, result: MatchResult, answers: Answers): Grade {
+  const grade: Grade = { outcomes: {}, pts: 0, kc: 0, kp: 0, exact: false, bonus: false }
+  const add = (coin: Coin, amount: number) => {
+    if (coin === 'kp') grade.kp += amount
+    else grade.kc += amount
+  }
+  const ids = marketList(set)
+  for (const id of ids) {
+    const rule = set.markets[id]!
+    const right = correctAnswer(id, rule, result)
+    if (right === null) {
+      grade.outcomes[id] = 'void'
+      continue
+    }
+    const mine = answers[id]
+    if (mine === right) {
+      grade.outcomes[id] = 'hit'
+      grade.pts += rule.pts
+      add(rule.coin, rule.amount)
+      if (id === 'score') grade.exact = true
+      continue
+    }
+    const guess = id === 'score' ? parseScore(mine) : null
+    const near = guess && sideOf(guess[0], guess[1]) === sideOf(result.home, result.away) && ((rule.nearPts ?? 0) > 0 || (rule.nearAmount ?? 0) > 0)
+    if (near) {
+      grade.outcomes[id] = 'near'
+      grade.pts += rule.nearPts ?? 0
+      add(rule.coin, rule.nearAmount ?? 0)
+    } else {
+      grade.outcomes[id] = 'miss'
+    }
+  }
+  const counted = ids.filter((id) => grade.outcomes[id] !== 'void')
+  if (set.bonus && counted.length > 1 && counted.every((id) => grade.outcomes[id] === 'hit')) {
+    grade.bonus = true
+    grade.pts += set.bonus.pts
+    const prize = set.bonus.prize
+    if (prize && (prize.kind === 'kc' || prize.kind === 'kp')) add(prize.kind, prize.amount)
+  }
+  return grade
+}
+
+const fmt = (n: number) => n.toLocaleString('tr-TR')
+
+export function prizeText(p: Prize | null | undefined): string {
+  if (!p) return ''
+  if (p.kind === 'kc') return `${fmt(p.amount)} KC`
+  if (p.kind === 'kp') return `${fmt(p.amount)} KP`
+  if (p.kind === 'market') return p.name
+  return `${fmt(p.amount)} TL nakit · ${p.name}`
+}
+
+export const PRIZE_KIND_LABEL: Record<PrizeKind, string> = {
+  kc: 'Kanka Coin',
+  kp: 'Kanka Puan',
+  market: 'Market ödülü',
+  cash: 'Sponsor nakit ödülü',
+}
+
+export function rewardText(rule: Pick<MarketRule, 'pts' | 'coin' | 'amount'>) {
+  const parts: string[] = []
+  if (rule.pts > 0) parts.push(`${rule.pts} puan`)
+  if (rule.amount > 0) parts.push(`${fmt(rule.amount)} ${rule.coin === 'kp' ? 'KP' : 'KC'}`)
+  return parts.join(' + ')
+}
+
+/** The most a member can take from a match by answering everything right, bonus included. */
+export function setCeiling(set: QuestionSet) {
+  let pts = 0
+  let kc = 0
+  let kp = 0
+  for (const id of marketList(set)) {
+    const r = set.markets[id]!
+    pts += r.pts
+    if (r.coin === 'kp') kp += r.amount
+    else kc += r.amount
+  }
+  const prize = set.bonus?.prize ?? null
+  if (set.bonus) pts += set.bonus.pts
+  if (prize?.kind === 'kc') kc += prize.amount
+  if (prize?.kind === 'kp') kp += prize.amount
+  return { pts, kc, kp, gift: prize && (prize.kind === 'market' || prize.kind === 'cash') ? prize : null }
+}
+
+export function ceilingText(set: QuestionSet) {
+  const c = setCeiling(set)
+  const parts: string[] = []
+  if (c.kc > 0) parts.push(`${fmt(c.kc)} KC`)
+  if (c.kp > 0) parts.push(`${fmt(c.kp)} KP`)
+  if (c.gift) parts.push(prizeText(c.gift))
+  return parts.length ? parts.join(' + ') : `${c.pts} puan`
+}
+
+/** Which extra figures the result form has to ask for. */
+export function resultNeeds(set: QuestionSet) {
+  return {
+    half: Boolean(set.markets.half),
+    corners: Boolean(set.markets.corners),
+    cards: Boolean(set.markets.cards),
+  }
+}
+
+export function resultError(set: QuestionSet, r: MatchResult): string | null {
+  const goal = (n: number) => Number.isInteger(n) && n >= 0 && n <= MAX_GOALS
+  const stat = (n: number | null) => n === null || (Number.isInteger(n) && n >= 0 && n <= MAX_STAT)
+  if (!goal(r.home) || !goal(r.away)) return `Skor 0-${MAX_GOALS} arasında olmalı.`
+  if ((r.htHome === null) !== (r.htAway === null)) return 'İlk yarı skorunun iki tarafını da gir ya da ikisini de boş bırak.'
+  if (r.htHome !== null && r.htAway !== null) {
+    if (!goal(r.htHome) || !goal(r.htAway)) return `İlk yarı skoru 0-${MAX_GOALS} arasında olmalı.`
+    if (r.htHome > r.home || r.htAway > r.away) return 'İlk yarı skoru maç skorundan büyük olamaz.'
+  }
+  if (!stat(r.corners)) return `Korner sayısı 0-${MAX_STAT} arasında olmalı.`
+  if (!stat(r.cards)) return `Kart sayısı 0-${MAX_STAT} arasında olmalı.`
+  return null
+}
+
+/** The questions that will be cancelled because the result leaves their figure empty. */
+export function voidedBy(set: QuestionSet, r: MatchResult): MarketId[] {
+  return marketList(set).filter((id) => correctAnswer(id, set.markets[id], r) === null)
+}
+
+// --- League prizes -------------------------------------------------------
+
+export type PeriodKind = 'week' | 'month'
+
+export type PeriodPrizes = {
+  on: boolean
+  /** When the prizes were switched on; a period that ended before it is never paid. */
+  since: string | null
+  /** One prize per place, first place first. */
+  places: Prize[]
+}
+
+export type LeagueSettings = {
+  /** The questions a new match gets unless it is given its own. */
+  defaults: QuestionSet
+  week: PeriodPrizes
+  month: PeriodPrizes
+  /** Score finished calendar matches without anyone pressing a button. */
+  auto: boolean
+}
+
+export const PERIOD_LABEL: Record<PeriodKind, string> = { week: 'Haftalık', month: 'Aylık' }
+
+function normalizePeriod(raw: unknown): PeriodPrizes {
+  const p = (raw && typeof raw === 'object' ? raw : {}) as Partial<PeriodPrizes>
+  const places = (Array.isArray(p.places) ? p.places : []).map(normalizePrize).filter((x): x is Prize => x !== null).slice(0, MAX_LEAGUE_PLACES)
+  const since = typeof p.since === 'string' && Number.isFinite(Date.parse(p.since)) ? new Date(p.since).toISOString() : null
+  return { on: Boolean(p.on) && places.length > 0, since, places }
+}
+
+export function normalizeSettings(raw: unknown): LeagueSettings {
+  const s = (raw && typeof raw === 'object' ? raw : {}) as Partial<LeagueSettings>
+  return {
+    defaults: normalizeSet(s.defaults),
+    week: normalizePeriod(s.week),
+    month: normalizePeriod(s.month),
+    auto: Boolean(s.auto),
+  }
+}
+
+const TR_OFFSET_MS = 3 * 3_600_000
+const DAY_MS = 86_400_000
+
+const dayMonth = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', timeZone: 'Europe/Istanbul' })
+const monthYear = new Intl.DateTimeFormat('tr-TR', { month: 'long', year: 'numeric', timeZone: 'Europe/Istanbul' })
+
+export type Period = { kind: PeriodKind; key: string; start: number; end: number; label: string }
+
+/** The league week (Monday to Sunday) or month around `at`, in Istanbul time. `shift` -1 is the one before. */
+export function periodBounds(kind: PeriodKind, at: number, shift = 0): Period {
+  const local = new Date(at + TR_OFFSET_MS)
+  const y = local.getUTCFullYear()
+  const m = local.getUTCMonth()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  if (kind === 'month') {
+    const start = Date.UTC(y, m + shift, 1) - TR_OFFSET_MS
+    const end = Date.UTC(y, m + shift + 1, 1) - TR_OFFSET_MS
+    const first = new Date(start + TR_OFFSET_MS)
+    return { kind, key: `m:${first.getUTCFullYear()}-${pad(first.getUTCMonth() + 1)}`, start, end, label: monthYear.format(start) }
+  }
+  const sinceMonday = (local.getUTCDay() + 6) % 7
+  const start = Date.UTC(y, m, local.getUTCDate() - sinceMonday + shift * 7) - TR_OFFSET_MS
+  const end = start + 7 * DAY_MS
+  const first = new Date(start + TR_OFFSET_MS)
+  return {
+    kind,
+    key: `w:${first.getUTCFullYear()}-${pad(first.getUTCMonth() + 1)}-${pad(first.getUTCDate())}`,
+    start,
+    end,
+    label: `${dayMonth.format(start)} - ${dayMonth.format(end - DAY_MS)}`,
+  }
+}
+
+export const placeLabel = (place: number) => `${place}.`
+
+// --- Awards --------------------------------------------------------------
+
+export type AwardStatus = 'verildi' | 'beklemede' | 'iptal'
+
+export const AWARD_STATUS_LABEL: Record<AwardStatus, string> = {
+  verildi: 'Teslim edildi',
+  beklemede: 'Teslim bekliyor',
+  iptal: 'İptal edildi',
+}
+
+export type Award = {
+  id: number
+  userId: string
+  userName: string
+  source: 'match' | PeriodKind
+  title: string
+  prize: Prize
+  status: AwardStatus
+  /** The member's user name on the sponsor site, needed before a sponsor prize can be delivered. */
+  siteUsername: string | null
+  needsUsername: boolean
+  note: string | null
+  createdAt: string
+}
+
+export const SITE_USERNAME_MIN = 2
+export const SITE_USERNAME_MAX = 60
