@@ -120,8 +120,8 @@ export function MatchRow({ m, state, now, signedIn, onSaved }: { m: LeagueMatch;
             <TeamLine name={m.away} logo={m.awayLogo} goals={m.settled ? m.awayGoals : null} lost={awayLost} />
           </span>
           {state === 'open' ? (
-            <span className="flex h-9 shrink-0 items-center gap-1 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground">
-              {open ? 'Kapat' : 'Tahmin yap'}
+            <span className="flex h-9 min-w-9 shrink-0 items-center justify-center gap-1 rounded-lg bg-primary px-2.5 text-xs font-bold text-primary-foreground @xs:px-3">
+              <span className="sr-only @xs:not-sr-only">{open ? 'Kapat' : 'Tahmin yap'}</span>
               <ChevronDown className={cn('size-3.5 transition-transform', open && 'rotate-180')} aria-hidden="true" />
             </span>
           ) : (

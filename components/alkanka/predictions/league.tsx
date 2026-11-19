@@ -9,10 +9,10 @@ import { MatchRow, matchState, type MatchState } from './match-row'
 import { MyAwards } from './my-awards'
 import { Standings, type PeriodView } from './standings'
 
-const TABS: { id: MatchState; label: string; empty: string }[] = [
-  { id: 'open', label: 'Tahmine açık', empty: 'Şu an tahmine açık maç yok. Yeni maçlar eklendiğinde burada görünür.' },
-  { id: 'waiting', label: 'Sonuç bekleyen', empty: 'Sonucu beklenen maç yok.' },
-  { id: 'done', label: 'Sonuçlanan', empty: 'Son 7 günde sonuçlanan maç yok.' },
+const TABS: { id: MatchState; label: string; short: string; empty: string }[] = [
+  { id: 'open', label: 'Tahmine açık', short: 'Açık', empty: 'Şu an tahmine açık maç yok. Yeni maçlar eklendiğinde burada görünür.' },
+  { id: 'waiting', label: 'Sonuç bekleyen', short: 'Bekleyen', empty: 'Sonucu beklenen maç yok.' },
+  { id: 'done', label: 'Sonuçlanan', short: 'Biten', empty: 'Son 7 günde sonuçlanan maç yok.' },
 ]
 
 const DAY_MS = 86_400_000
@@ -182,7 +182,7 @@ export function League({
       <div className="grid items-start gap-5 @4xl:grid-cols-[minmax(0,1fr)_19rem]">
         <div className={cn('@container min-w-0 flex-col gap-3', view === 'matches' ? 'flex' : 'hidden @4xl:flex')}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div role="tablist" aria-label="Maç durumu" className="flex max-w-full gap-1 overflow-x-auto rounded-lg border border-border bg-card p-1 no-scrollbar">
+            <div role="tablist" aria-label="Maç durumu" className="grid w-full grid-cols-3 gap-1 rounded-lg border border-border bg-card p-1 @md:flex @md:w-auto">
               {TABS.map((t) => (
                 <button
                   key={t.id}
@@ -194,11 +194,14 @@ export function League({
                     setSaved(false)
                   }}
                   className={cn(
-                    'flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-bold transition-colors',
+                    'flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-bold transition-colors @md:shrink-0 @md:px-3',
                     tab === t.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
-                  {t.label}
+                  <span className="truncate @md:hidden" aria-hidden="true">
+                    {t.short}
+                  </span>
+                  <span className="sr-only @md:not-sr-only">{t.label}</span>
                   <span className={cn('tabular-nums', tab === t.id ? 'opacity-80' : 'text-foreground')}>{groups[t.id].length}</span>
                 </button>
               ))}

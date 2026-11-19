@@ -129,9 +129,9 @@ export function QuestionInput({
               disabled={disabled}
               aria-pressed={value === o.value}
               onClick={() => onPick(o.value)}
-              className={cn('flex min-h-11 min-w-0 items-center justify-center rounded-md border px-2 py-1 text-center text-sm font-semibold leading-tight transition-colors disabled:opacity-50', value === o.value ? 'border-primary bg-primary/15 text-primary' : chipIdle)}
+              className={cn('flex min-h-11 min-w-0 items-center justify-center rounded-md border px-1 py-1 text-center text-xs font-semibold leading-tight transition-colors disabled:opacity-50 @xs:px-2 @xs:text-sm', value === o.value ? 'border-primary bg-primary/15 text-primary' : chipIdle)}
             >
-              <span className="line-clamp-2 text-balance">{o.label}</span>
+              <span className="line-clamp-2 text-balance break-words">{o.label}</span>
             </button>
           ))}
         </div>
@@ -199,7 +199,7 @@ export function QuestionResult({
 
   const options = marketOptions(id, teams, rule)
   return (
-    <div className="flex flex-col gap-2">
+    <div className="@container flex flex-col gap-2">
       <Head id={id} rule={rule} outcome={outcome} />
       <ul className={cn('grid gap-1.5', options.length === 3 ? 'grid-cols-3' : 'grid-cols-2')}>
         {options.map((o) => {
@@ -210,15 +210,15 @@ export function QuestionResult({
             <li
               key={o.value}
               className={cn(
-                'relative flex min-h-11 min-w-0 flex-col items-center justify-center overflow-hidden rounded-md border px-2 py-1 text-center',
+                'relative flex min-h-11 min-w-0 flex-col items-center justify-center overflow-hidden rounded-md border px-1 py-1 text-center @xs:px-2',
                 isRight ? 'border-success/60 text-success' : isMine ? (right ? 'border-destructive/60 text-destructive' : 'border-primary text-primary') : 'border-border text-foreground',
               )}
             >
               {total > 0 && <span aria-hidden="true" className="absolute inset-y-0 left-0 bg-foreground/5" style={{ width: `${share}%` }} />}
-              <span className="relative flex w-full items-center justify-center gap-1 text-sm font-semibold leading-tight">
+              <span className="relative flex w-full items-center justify-center gap-1 text-xs font-semibold leading-tight @xs:text-sm">
                 {isRight && <Check className="size-3.5 shrink-0" aria-label="Doğru cevap" />}
                 {isMine && right && !isRight && <X className="size-3.5 shrink-0" aria-hidden="true" />}
-                <span className="line-clamp-2 text-balance">{o.label}</span>
+                <span className="line-clamp-2 text-balance break-words">{o.label}</span>
               </span>
               <span className="relative text-xs text-muted-foreground">
                 {isMine ? 'Seçimin' : ''}
