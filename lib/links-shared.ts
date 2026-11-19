@@ -34,6 +34,21 @@ export type LinkRow = {
 
 export type LinkReport = { from: string; to: string; siteId: number | null; shortDomain: string; rows: LinkRow[] }
 
+/** One sponsor's affiliate earnings in one currency, all periods together; rejected records are left out. */
+export type SiteEarning = { siteId: number; currency: string; pending: number; claimed: number; paid: number }
+
+export function earningsBySite(list: { siteId: number; currency: string; status: 'pending' | 'claimed' | 'paid' | 'rejected'; amount: number }[]): SiteEarning[] {
+  const out = new Map<string, SiteEarning>()
+  for (const e of list) {
+    if (e.status === 'rejected') continue
+    const key = `${e.siteId}:${e.currency}`
+    const row = out.get(key) ?? { siteId: e.siteId, currency: e.currency, pending: 0, claimed: 0, paid: 0 }
+    row[e.status] += e.amount
+    out.set(key, row)
+  }
+  return [...out.values()]
+}
+
 export const LINK_RANGES = [
   { id: '1', label: 'Bugün', days: 1 },
   { id: '7', label: 'Son 7 gün', days: 7 },

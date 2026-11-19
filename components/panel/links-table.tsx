@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import { ArrowDown, ArrowUp, Check, ChevronDown, Copy, Download, Globe, Loader2, Pencil, Search, TriangleAlert } from 'lucide-react'
 import { loadLinksAction, saveShortDomainAction, type LinkQuery } from '@/app/panel/link-actions'
 import { Flash } from '@/components/panel/flash'
-import { LINK_KINDS, LINK_RANGES, linkKindLabel, linksCsv, shortUrl, type LinkKind, type LinkReport, type LinkRow } from '@/lib/links-shared'
+import { LINK_KINDS, LINK_RANGES, linkKindLabel, linksCsv, shortUrl, type LinkKind, type LinkReport, type LinkRow, type SiteEarning } from '@/lib/links-shared'
 import { cn } from '@/lib/utils'
 
 type SiteOption = { id: number; name: string }
@@ -14,6 +14,8 @@ type Props = {
   siteUrl: string
   /** Where each kind of link is edited; null when this account cannot open that screen. */
   editHrefs: { sponsor: string; campaigns: string | null; earnings: string | null }
+  /** Shown above the table once one sponsor is picked; empty for an account that cannot open the earnings screen. */
+  earnings: SiteEarning[]
 }
 type Msg = { ok: boolean; message: string } | null
 type SortKey = 'clicks' | 'uniques' | 'signups' | 'lastClick'
@@ -211,7 +213,7 @@ function Row({ row, url, editHref }: { row: LinkRow; url: string; editHref: stri
   )
 }
 
-export function LinksTable({ report: initial, sites, siteUrl, editHrefs }: Props) {
+export function LinksTable({ report: initial, sites, siteUrl, editHrefs, earnings }: Props) {
   const [report, setReport] = useState(initial)
   const [kind, setKind] = useState<LinkKind | 'all'>('all')
   const [q, setQ] = useState('')
@@ -249,6 +251,7 @@ export function LinksTable({ report: initial, sites, siteUrl, editHrefs }: Props
   )
   const signups = report.rows.reduce((sum, r) => sum + (r.signups ?? 0), 0)
   const site = report.siteId === null ? null : sites.find((s) => s.id === report.siteId) ?? null
+  const siteEarnings = site ? earnings.filter((e) => e.siteId === site.id) : []
 
   const onSort = (key: SortKey) => setSort((s) => (s.key === key ? { key, dir: s.dir === -1 ? 1 : -1 } : { key, dir: -1 }))
 
@@ -337,19 +340,48 @@ export function LinksTable({ report: initial, sites, siteUrl, editHrefs }: Props
       </section>
 
       {site ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-secondary px-4 py-3">
-          <p className="min-w-0 flex-1 text-sm text-foreground">
-            <span className="font-semibold">{site.name}</span>: {report.rows.length} link listeleniyor.
-          </p>
+        <section aria-label={`${site.name} özeti`} className="flex flex-col gap-3 rounded-xl border border-border bg-secondary px-4 py-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="min-w-0 flex-1 text-sm text-foreground">
+              <span className="font-semibold">{site.name}</span>: {report.rows.length} link, {num(report.rows.reduce((sum, r) => sum + r.clicks, 0))} tıklama.
+            </p>
+            {editHrefs.earnings ? (
+              <a href={editHrefs.earnings} className={ghost}>
+                Hakedişe git
+              </a>
+            ) : null}
+            <button type="button" className={ghost} disabled={pending} onClick={() => load({ from: report.from, to: report.to, siteId: null })}>
+              Tüm sponsorlar
+            </button>
+          </div>
           {editHrefs.earnings ? (
-            <a href={editHrefs.earnings} className={ghost}>
-              Hakedişe git
-            </a>
+            siteEarnings.length ? (
+              <dl className="flex flex-col gap-2">
+                {siteEarnings.map((e) => (
+                  <div key={e.currency} className="grid grid-cols-3 gap-2">
+                    {[
+                      { label: 'Bekleyen hakediş', value: e.pending },
+                      { label: 'Talep edilen', value: e.claimed },
+                      { label: 'Tahsil edilen', value: e.paid },
+                    ].map((cell) => (
+                      <div key={cell.label} className="flex min-w-0 flex-col gap-0.5 rounded-lg border border-border bg-card px-3 py-2">
+                        <dt className="truncate text-xs text-muted-foreground">{cell.label}</dt>
+                        <dd className="truncate text-sm font-bold tabular-nums text-foreground">
+                          {num(Math.round(cell.value))} {e.currency}
+                        </dd>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </dl>
+            ) : (
+              <p className="text-xs leading-relaxed text-muted-foreground">Bu sponsor için hakediş kaydı yok. Hakediş rakamları tüm dönemlerin toplamıdır, yukarıdaki tarih aralığına bağlı değildir.</p>
+            )
           ) : null}
-          <button type="button" className={ghost} disabled={pending} onClick={() => load({ from: report.from, to: report.to, siteId: null })}>
-            Tüm sponsorlar
-          </button>
-        </div>
+          {editHrefs.earnings && siteEarnings.length ? (
+            <p className="text-xs leading-relaxed text-muted-foreground">Hakediş rakamları tüm dönemlerin toplamıdır, yukarıdaki tarih aralığına bağlı değildir.</p>
+          ) : null}
+        </section>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Link türü">

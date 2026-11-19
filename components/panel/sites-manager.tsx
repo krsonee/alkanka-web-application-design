@@ -3,12 +3,12 @@
 import { HideButton } from '@/components/panel/hide-button'
 import { ImageField } from '@/components/panel/image-field'
 import { useId, useState, useTransition, type ReactNode } from 'react'
-import { BarChart3, Eye, EyeOff, Link2, Loader2, Pencil, Plus, Save } from 'lucide-react'
+import { BarChart3, Check, Copy, Eye, EyeOff, Link2, Loader2, Pencil, Plus, Save, Search, TriangleAlert } from 'lucide-react'
 import { SideSheet } from '@/components/panel/side-sheet'
 import { cn } from '@/lib/utils'
 import { bulkSitesActiveAction, checkSiteLinksAction, reorderSitesAction, saveSiteAction, sponsorSummaryAction } from '@/app/panel/site-actions'
 import { askConfirm } from '@/components/panel/confirm-dialog'
-import { SortableList, useOrder } from '@/components/panel/sortable-list'
+import { SortableList, mergeOrder, useOrder } from '@/components/panel/sortable-list'
 import { SponsorSummaryPanel } from '@/components/panel/sponsor-summary'
 import { amountInput, parseAmount } from '@/lib/amount'
 import type { SponsorSummary, SummarySection } from '@/lib/sponsor-summary-shared'
@@ -77,12 +77,53 @@ const BADGE_LABEL: Record<(typeof SITE_BADGES)[number], string> = {
   'Sponsor Değil': '5 · Sponsor değil (yalnızca güven merkezi ve özel oranlar)',
 }
 
+const NOT_SPONSOR = 'Sponsor Değil'
+
+type ListFilter = 'all' | 'live' | 'hidden' | 'missing' | 'deal'
+
+/** What a visitor would notice is absent on the sponsor's card. A record that is not a sponsor has no card, so only its logo counts. */
+function missingOf(site: SponsorSite, logo: string) {
+  const card = site.badge !== NOT_SPONSOR
+  return [
+    !logo ? 'logo' : '',
+    card && !site.entryUrl.trim() && !site.url.trim() ? 'giriş adresi' : '',
+    card && !site.bonusText.trim() ? 'bonus satırı' : '',
+  ].filter(Boolean)
+}
+
+function fold(value: string) {
+  return value.toLocaleLowerCase('tr').trim()
+}
+
+function CopyLink({ value, label }: { value: string; label: string }) {
+  const [done, setDone] = useState(false)
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={value}
+      onClick={() => {
+        void navigator.clipboard?.writeText(value).then(() => {
+          setDone(true)
+          window.setTimeout(() => setDone(false), 1600)
+        })
+      }}
+      className="flex h-9 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-semibold text-foreground hover:bg-secondary"
+    >
+      {done ? <Check className="size-3.5 text-success" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}
+      <span aria-live="polite">{done ? 'Kopyalandı' : 'Link'}</span>
+    </button>
+  )
+}
+
 /**
  * `legacyLogos` are logos uploaded on the old "Sponsor logoları" screen, keyed by address slug. The
  * site still falls back to them; opening a sponsor puts its old logo in the form so the next save keeps it on the record.
  */
-export function SitesManager({ sites, today, legacyLogos = {} }: { sites: SponsorSite[]; today: string; legacyLogos?: Record<string, string> }) {
+export function SitesManager({ sites, today, legacyLogos = {}, siteUrl = '' }: { sites: SponsorSite[]; today: string; legacyLogos?: Record<string, string>; siteUrl?: string }) {
   const logoOf = (site: SponsorSite) => site.logoUrl.trim() || legacyLogos[site.slug] || ''
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<ListFilter>('all')
   const [selected, setSelected] = useState<Set<number>>(() => new Set())
   const [bulking, startBulk] = useTransition()
   const [checks, setChecks] = useState<Map<number, LinkCheck> | null>(null)
@@ -154,7 +195,36 @@ export function SitesManager({ sites, today, legacyLogos = {} }: { sites: Sponso
   const [loadingId, setLoadingId] = useState<number | null>(null)
   const [, startSummary] = useTransition()
 
-  function move(ids: string[]) {
+  const closing = (site: SponsorSite) => {
+    const days = dealDaysLeft(site.dealEnds, today)
+    return days !== null && days <= DEAL_WARN_DAYS
+  }
+  const matches: Record<ListFilter, (site: SponsorSite) => boolean> = {
+    all: () => true,
+    live: (site) => site.active,
+    hidden: (site) => !site.active,
+    missing: (site) => missingOf(site, logoOf(site)).length > 0,
+    deal: closing,
+  }
+  const FILTERS: { id: ListFilter; label: string }[] = [
+    { id: 'all', label: 'Hepsi' },
+    { id: 'live', label: 'Yayında' },
+    { id: 'hidden', label: 'Gizli' },
+    { id: 'missing', label: 'Eksik bilgi' },
+    { id: 'deal', label: 'Anlaşması bitiyor' },
+  ]
+  const needle = fold(query)
+  const visible = order.ordered.filter(
+    (site) => matches[filter](site) && (!needle || [site.name, site.slug, site.domain, site.bonusCode].some((text) => fold(text).includes(needle))),
+  )
+  const position = new Map(order.ordered.map((site, i) => [site.id, i + 1]))
+  const narrowed = visible.length !== order.ordered.length
+
+  function move(shown: string[]) {
+    const ids = mergeOrder(
+      order.ordered.map((site) => String(site.id)),
+      shown,
+    )
     order.set(ids)
     startSort(async () => {
       const res = await reorderSitesAction(ids.map(Number))
@@ -253,11 +323,66 @@ export function SitesManager({ sites, today, legacyLogos = {} }: { sites: Sponso
         </div>
       )}
       {editing && <SiteForm key={editing.id ?? 'yeni'} value={editing} pending={pending} error={formError} onCancel={() => setEditing(null)} onSave={save} />}
+      {sites.length > 0 && (
+        <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3">
+          <label className="relative flex items-center">
+            <span className="sr-only">Sponsor ara</span>
+            <Search className="pointer-events-none absolute left-3 size-4 text-muted-foreground" aria-hidden="true" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Ad, adres kısaltması, alan adı ya da bonus kodu"
+              className={cn(field, 'pl-9')}
+            />
+          </label>
+          <div role="group" aria-label="Sponsor süzgeci" className="flex flex-wrap gap-2">
+            {FILTERS.map((item) => {
+              const count = sites.filter(matches[item.id]).length
+              const on = filter === item.id
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setFilter(item.id)}
+                  className={cn(
+                    'flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold',
+                    on ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-foreground hover:bg-secondary',
+                  )}
+                >
+                  {item.label}
+                  <span className={cn('tabular-nums', on ? 'opacity-80' : 'text-muted-foreground')}>{count}</span>
+                </button>
+              )
+            })}
+          </div>
+          {narrowed && (
+            <p className="text-xs leading-relaxed text-muted-foreground text-pretty" aria-live="polite">
+              {sites.length} sponsordan {visible.length} tanesi görünüyor. Sürükleyince görünenler kendi aralarında yer değiştirir, gizlenenlerin sırası bozulmaz.
+            </p>
+          )}
+        </div>
+      )}
       {sites.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Henüz sponsor yok. &quot;Yeni sponsor&quot; ile ekle.</p>
+      ) : visible.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border p-8 text-center">
+          <p className="text-sm text-muted-foreground">Bu aramaya ya da süzgece uyan sponsor yok.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setQuery('')
+              setFilter('all')
+            }}
+            className="h-9 rounded-md border border-border px-3 text-xs font-semibold text-foreground hover:bg-secondary"
+          >
+            Süzgeci temizle
+          </button>
+        </div>
       ) : (
         <SortableList
-          items={order.ordered}
+          items={visible}
           idOf={(site) => String(site.id)}
           nameOf={(site) => site.name}
           onMove={move}
@@ -265,9 +390,10 @@ export function SitesManager({ sites, today, legacyLogos = {} }: { sites: Sponso
           className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card"
           itemClassName="bg-card first:rounded-t-xl last:rounded-b-xl"
         >
-          {(site, handle, i) => {
+          {(site, handle) => {
             const daysLeft = dealDaysLeft(site.dealEnds, today)
             const check = checks?.get(site.id)
+            const missing = missingOf(site, logoOf(site))
             return (
             <>
               <div data-find={`sponsor-${site.id}`} className="flex flex-wrap items-center gap-2 p-2 pr-3 text-sm">
@@ -279,7 +405,7 @@ export function SitesManager({ sites, today, legacyLogos = {} }: { sites: Sponso
                   aria-label={`${site.name} seç`}
                   className="size-4 shrink-0 accent-primary"
                 />
-                <span className="w-6 shrink-0 text-xs tabular-nums text-muted-foreground">{i + 1}</span>
+                <span className="w-6 shrink-0 text-xs tabular-nums text-muted-foreground">{position.get(site.id)}</span>
                 <span className={cn('flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background', !site.active && 'opacity-50')}>
                   {logoOf(site) ? (
                     // eslint-disable-next-line @next/next/no-img-element -- sponsor logos can come from any https host set in the panel
@@ -294,7 +420,12 @@ export function SitesManager({ sites, today, legacyLogos = {} }: { sites: Sponso
                   {site.name}
                   {site.slug ? <span className="ml-2 font-normal text-muted-foreground">/{site.slug}</span> : null}
                 </span>
-                {!logoOf(site) && <span className="rounded bg-secondary px-2 py-0.5 text-xs font-semibold text-muted-foreground">Logo yok</span>}
+                {missing.length > 0 && (
+                  <span className="flex items-center gap-1 rounded bg-destructive/15 px-2 py-0.5 text-xs font-semibold text-destructive">
+                    <TriangleAlert className="size-3.5 shrink-0" aria-hidden="true" />
+                    Eksik: {missing.join(', ')}
+                  </span>
+                )}
                 <span className="rounded bg-secondary px-2 py-0.5 text-xs font-bold uppercase text-foreground">{BADGE_LABEL[site.badge as (typeof SITE_BADGES)[number]] ?? site.badge}</span>
                 {site.featured && <span className="text-xs font-bold uppercase text-primary">Öne çıkan</span>}
                 {!site.active && <span className="text-xs font-bold uppercase text-muted-foreground">Gizli</span>}
@@ -312,6 +443,7 @@ export function SitesManager({ sites, today, legacyLogos = {} }: { sites: Sponso
                   {loadingId === site.id ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <BarChart3 className="size-3.5" aria-hidden="true" />}
                   Özet
                 </button>
+                {siteUrl && site.slug && site.badge !== NOT_SPONSOR && <CopyLink value={`${siteUrl}/git/${site.slug}`} label={`${site.name} Git linkini kopyala`} />}
                 <HideButton key={`${site.id}-${site.active}`} kind="sponsor" id={site.id} hidden={!site.active} label={site.name} />
                 <button type="button" aria-label={`${site.name} düzenle`} onClick={() => open({ ...site, logoUrl: logoOf(site) })} className="rounded-md p-1.5 text-muted-foreground hover:text-foreground">
                   <Pencil className="size-4" aria-hidden="true" />

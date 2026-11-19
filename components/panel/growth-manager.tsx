@@ -30,6 +30,8 @@ type Props = {
   siteUrl: string
   /** Where campaign links are managed, for an account that may open that section; null keeps the quick builder here. */
   campaignsHref: string | null
+  /** The Linkler tab; a sponsor in the report opens it narrowed to that sponsor. Null when the tab is not there. */
+  linksHref: string | null
   affLinks: AffLinkView[]
   affSites: AffSiteOption[]
 }
@@ -92,7 +94,7 @@ function LinkBuilder({ siteUrl }: { siteUrl: string }) {
   )
 }
 
-function Report({ report, names }: { report: TrafficReport; names: Record<string, string> }) {
+function Report({ report, names, linksHref }: { report: TrafficReport; names: Record<string, string>; linksHref: string | null }) {
   return (
     <section className={card}>
       <div className="flex flex-wrap items-end justify-between gap-2">
@@ -128,12 +130,30 @@ function Report({ report, names }: { report: TrafficReport; names: Record<string
         </div>
       )}
       {report.sites.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {report.sites.map((s) => (
-            <span key={s.siteId} className="rounded-full bg-secondary px-3 py-1 text-xs text-foreground">
-              {names[s.siteId] ?? s.siteId}: <strong className="tabular-nums">{s.clicks}</strong>
-            </span>
-          ))}
+        <div className="flex flex-col gap-2">
+          {linksHref && <p className="text-xs leading-relaxed text-muted-foreground">Bir sponsora bas: o sponsorun linkleri ve hakedişi açılır.</p>}
+          <div className="flex flex-wrap gap-2">
+            {report.sites.map((s) => {
+              const text = (
+                <>
+                  {names[s.siteId] ?? s.siteId}: <strong className="tabular-nums">{s.clicks}</strong>
+                </>
+              )
+              return linksHref && /^[1-9]\d{0,8}$/.test(s.siteId) ? (
+                <a
+                  key={s.siteId}
+                  href={`${linksHref}&sponsor=${s.siteId}`}
+                  className="rounded-full border border-border bg-secondary px-3 py-1 text-xs text-foreground hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {text}
+                </a>
+              ) : (
+                <span key={s.siteId} className="rounded-full bg-secondary px-3 py-1 text-xs text-foreground">
+                  {text}
+                </span>
+              )
+            })}
+          </div>
         </div>
       )}
     </section>
@@ -372,7 +392,7 @@ export function GrowthManager(props: Props) {
         )}
         <Flagged flagged={props.flagged} />
       </div>
-      <Report report={props.report} names={{ ...names, ...props.recordNames }} />
+      <Report report={props.report} names={{ ...names, ...props.recordNames }} linksHref={props.linksHref} />
       <SiteLinks sites={props.sites} links={props.links} followers={props.followers} />
       <div className="grid gap-6 lg:grid-cols-2">
         <Accounts accounts={props.accounts} names={names} />

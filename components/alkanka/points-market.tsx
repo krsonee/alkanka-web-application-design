@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { getMyMarketRequests, requestMarketItem } from '@/app/actions/market'
 import type { MarketProduct } from '@/lib/market'
 import { productImage } from '@/lib/market-image'
+import { MARKET_KIND_PARAM } from '@/lib/record-links'
 import { DetailButton, DetailModal } from './detail-modal'
 import { JakoTip } from './jako'
 import { formatAC, usePoints } from './points-context'
@@ -55,10 +56,19 @@ function SponsorTag({ item, className }: { item: MarketProduct; className?: stri
   )
 }
 
-export function PointsMarket({ items }: { items: MarketProduct[] }) {
+export function PointsMarket({ items, focus, kind }: { items: MarketProduct[]; focus?: string; kind?: string }) {
   const { points, member, setBalance, requireLogin } = usePoints()
-  const [filter, setFilter] = useState<Filter>('hepsi')
-  const [detail, setDetail] = useState<MarketProduct | null>(null)
+  const [filter, setFilterState] = useState<Filter>(kind === 'sponsor' || kind === 'alkanka' ? kind : 'hepsi')
+  // A product's own page (/market/[id]) opens with that product's details on screen.
+  const [detail, setDetail] = useState<MarketProduct | null>(() => (focus == null ? null : (items.find((i) => i.id === focus) ?? null)))
+  const setFilter = (next: Filter) => {
+    setFilterState(next)
+    if (focus != null) return
+    const url = new URL(window.location.href)
+    if (next === 'hepsi') url.searchParams.delete(MARKET_KIND_PARAM)
+    else url.searchParams.set(MARKET_KIND_PARAM, next)
+    window.history.replaceState(null, '', url)
+  }
   const [asking, setAsking] = useState<MarketProduct | null>(null)
   const [flash, setFlash] = useState<{ ok: boolean; text: string } | null>(null)
   const [stock, setStock] = useState<Record<string, number>>(() => Object.fromEntries(items.map((i) => [i.id, i.stock])))

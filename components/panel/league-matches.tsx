@@ -19,6 +19,7 @@ import {
 import { askConfirm } from '@/components/panel/confirm-dialog'
 import { usePanelAction } from '@/components/panel/flash'
 import { PickList } from '@/components/panel/pick-list'
+import { RecordLink } from '@/components/panel/record-link'
 import { StatusLine } from '@/components/alkanka/community/use-action'
 import { cn } from '@/lib/utils'
 import { QuestionSetEditor, ceilingLine, questionLine, setProblem, type PrizeOptions } from './league-fields'
@@ -195,8 +196,9 @@ function MatchAdminRow({ m, state, options }: { m: LeagueMatch; state: AdminStat
             {m.extId ? ' · takvimden' : ' · elle eklendi'}
           </span>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           <span className="text-xs font-semibold text-foreground">{m.picks} tahmin</span>
+          <RecordLink kind="tahmin" id={m.id} name={`${m.home} - ${m.away}`} compact className="contents" />
           {canEdit && (
             <button
               type="button"

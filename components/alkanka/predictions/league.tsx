@@ -4,10 +4,16 @@ import { useEffect, useId, useState } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import type { LeagueMatch, LeagueRow, LeagueScope, PaidPeriod } from '@/lib/predictions'
 import type { Award, PeriodKind } from '@/lib/predictions-shared'
+import { LEAGUE_TAB_PARAM } from '@/lib/record-links'
 import { cn } from '@/lib/utils'
 import { MatchRow, matchState, type MatchState } from './match-row'
 import { MyAwards } from './my-awards'
 import { Standings, type PeriodView } from './standings'
+
+/** What a shared address can open: one of the match tabs, or the league table (its own view on a narrow screen). */
+export type LeagueStart = MatchState | 'league'
+
+const TAB_ADDRESS: Record<LeagueStart, string> = { open: 'acik', waiting: 'bekleyen', done: 'sonuclanan', league: 'lig' }
 
 const TABS: { id: MatchState; label: string; short: string; empty: string }[] = [
   { id: 'open', label: 'Tahmine açık', short: 'Açık', empty: 'Şu an tahmine açık maç yok. Yeni maçlar eklendiğinde burada görünür.' },
@@ -87,6 +93,8 @@ export function League({
   awards,
   meId,
   serverNow,
+  focus,
+  start,
 }: {
   matches: LeagueMatch[]
   tables: Record<LeagueScope, LeagueRow[]>
@@ -95,10 +103,24 @@ export function League({
   awards: Award[]
   meId: string | null
   serverNow: number
+  /** The match of a shared /tahminler/[id] address: its tab is shown and its row starts open. */
+  focus?: number
+  start?: LeagueStart
 }) {
   const now = useNow(serverNow, 30_000)
-  const [chosen, setChosen] = useState<MatchState | null>(null)
-  const [view, setView] = useState<'matches' | 'league'>('matches')
+  const [chosen, setChosen] = useState<MatchState | null>(() => {
+    const focused = focus == null ? undefined : matches.find((m) => m.id === focus)
+    if (focused) return matchState(focused, serverNow)
+    return start && start !== 'league' ? start : null
+  })
+  const [view, setView] = useState<'matches' | 'league'>(focus == null && start === 'league' ? 'league' : 'matches')
+  // On a match's own page the address already says what is shown.
+  const remember = (tab: LeagueStart) => {
+    if (focus != null) return
+    const url = new URL(window.location.href)
+    url.searchParams.set(LEAGUE_TAB_PARAM, TAB_ADDRESS[tab])
+    window.history.replaceState(null, '', url)
+  }
   const [mineOnly, setMineOnly] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -165,7 +187,10 @@ export function League({
             type="button"
             role="tab"
             aria-selected={view === v}
-            onClick={() => setView(v)}
+            onClick={() => {
+              setView(v)
+              remember(v === 'league' ? 'league' : tab)
+            }}
             className={cn('flex h-10 items-center justify-center gap-1.5 rounded-md text-sm font-bold transition-colors', view === v ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
           >
             {v === 'matches' ? 'Maçlar' : 'Lig ve ödüller'}
@@ -192,6 +217,7 @@ export function League({
                   onClick={() => {
                     setChosen(t.id)
                     setSaved(false)
+                    remember(t.id)
                   }}
                   className={cn(
                     'flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-bold transition-colors @md:shrink-0 @md:px-3',
@@ -238,7 +264,7 @@ export function League({
                   <span className="font-normal normal-case tracking-normal">{day.items.length} maç</span>
                 </h2>
                 {day.items.map((m) => (
-                  <MatchRow key={m.id} m={m} state={tab} now={now} signedIn={meId !== null} onSaved={() => setSaved(true)} />
+                  <MatchRow key={m.id} m={m} state={tab} now={now} signedIn={meId !== null} onSaved={() => setSaved(true)} defaultOpen={m.id === focus} />
                 ))}
               </section>
             ))

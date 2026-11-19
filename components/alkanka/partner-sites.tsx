@@ -946,7 +946,45 @@ function CampaignCard({ c, className }: { c: Campaign; className?: string }) {
 
 const CAMPAIGN_PAGE = 6
 
-export function CampaignBoard() {
+/** One sponsor campaign or bonus on its own page (`/kampanyalar/[id]`); the page has already checked that it exists. */
+export function CampaignSolo({ id }: { id: string }) {
+  const sponsorById = useSponsorById()
+  const { campaigns, bonuses } = useCatalog()
+  const bonus = campaigns.some((c) => c.id === id) ? undefined : bonuses.find((b) => b.id === id)
+  if (!bonus) return <CampaignBoard solo={id} />
+
+  const detail = bonusDetail(bonus, sponsorById(bonus.sponsorId)?.name)
+  return (
+    <section aria-label="Bonus" className="grid gap-4 md:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] md:items-start">
+      <ul className="grid">
+        <BonusCard b={bonus} onRules={() => document.getElementById('bonus-kurallar')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
+      </ul>
+      <div id="bonus-kurallar" className="flex scroll-mt-24 flex-col gap-4 rounded-2xl border border-border bg-card p-5">
+        <p className="text-sm leading-relaxed text-muted-foreground text-pretty">{detail.description}</p>
+        <div className="flex flex-col gap-2">
+          <h2 className="font-display text-sm font-bold uppercase tracking-wider text-primary">Nasıl alınır</h2>
+          <ol className="flex list-decimal flex-col gap-1.5 pl-5 text-sm leading-relaxed text-foreground">
+            {(detail.steps ?? []).map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+        </div>
+        <div className="flex flex-col gap-2">
+          <h2 className="font-display text-sm font-bold uppercase tracking-wider text-primary">Kurallar</h2>
+          <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm leading-relaxed text-muted-foreground">
+            {(detail.rules ?? []).map((rule) => (
+              <li key={rule}>{rule}</li>
+            ))}
+          </ul>
+        </div>
+        {detail.note && <p className="rounded-lg bg-secondary px-3 py-2 text-xs leading-relaxed text-muted-foreground">{detail.note}</p>}
+      </div>
+    </section>
+  )
+}
+
+/** `solo` shows that one campaign alone, without the list under it. */
+export function CampaignBoard({ solo }: { solo?: string }) {
   const sponsorById = useSponsorById()
   const { campaigns: allCampaigns, order } = useCatalog()
   const CAMPAIGNS = allCampaigns.filter((c) => isCampaignLive(c))
@@ -956,7 +994,7 @@ export function CampaignBoard() {
   const [todayOnly, setTodayOnly] = useState(false)
   const [visible, setVisible] = useState(CAMPAIGN_PAGE)
 
-  const featured = CAMPAIGNS[0]
+  const featured = solo ? CAMPAIGNS.find((c) => c.id === solo) : CAMPAIGNS[0]
   const rest = CAMPAIGNS.slice(1)
     .filter((c) => (tag === 'Tümü' || c.tag === tag) && (!todayOnly || c.hoursLeft <= 24))
     .sort((a, b) => (sort === 'bitis' ? a.hoursLeft - b.hoursLeft : b.hoursLeft - a.hoursLeft))
@@ -983,7 +1021,7 @@ export function CampaignBoard() {
         <div aria-hidden="true" className="absolute inset-x-0 top-0 -z-10 h-40 bg-gradient-to-t from-card to-transparent to-60% md:inset-0 md:h-auto md:bg-gradient-to-r md:from-card md:via-card/70 md:to-transparent md:to-100%" />
         <div className="flex max-w-xl flex-col justify-end gap-2.5 p-5 pt-32 sm:gap-3 sm:p-8 sm:pt-32 md:justify-center md:pt-8">
           <span className="self-start rounded-md bg-primary px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-primary-foreground">
-            Haftanın kampanyası
+            {solo ? featured.tag : 'Haftanın kampanyası'}
           </span>
           <h2 className="font-display text-2xl font-bold text-foreground text-balance sm:text-3xl">{featured.title}</h2>
           <p className="text-sm leading-relaxed text-muted-foreground sm:text-base">{featured.description}</p>
@@ -995,6 +1033,8 @@ export function CampaignBoard() {
         </div>
       </article>
 
+      {!solo && (
+        <>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
         <ChipRail label="Kampanya etiketleri" className="min-w-0 flex-1">
           {tags.map((t) => (
@@ -1042,6 +1082,8 @@ export function CampaignBoard() {
         </ul>
       )}
       <LoadMore remaining={rest.length - shown.length} onClick={() => setVisible((v) => v + CAMPAIGN_PAGE)} />
+        </>
+      )}
     </section>
   )
 }

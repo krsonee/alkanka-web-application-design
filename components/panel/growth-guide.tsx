@@ -14,6 +14,12 @@ const STEPS: GuideStep[] = [
           Üstten <b>tarih aralığını</b> ve <b>sponsoru</b> seç; tıklama, tekil ve kayıt o aralığa göre sayılır. <b>Son tıklama</b> tüm zamanlara bakar, böylece ölü link belli olur.
         </li>
         <li>
+          Tek bir sponsor seçince üstte o sponsorun <b>özeti</b> açılır: link sayısı, tıklama ve (Pazarlama yetkin varsa) bekleyen, talep edilen, tahsil edilen hakediş. Hakediş rakamları tüm dönemlerin toplamıdır, tarih aralığına bağlı değildir. Trafik raporundaki sponsor adına ya da Hakediş listesindeki <b>Linklerini gör</b> yazısına basınca da aynı ekran o sponsorla açılır.
+        </li>
+        <li>
+          Sponsor kampanyası ve bonusunun da kendi sayfası var. <b>İçerik Takvimi</b>’nde kaydedilmiş bir kampanya ya da bonus kartını açınca <b>Linki kopyala</b> ve <b>Kısa link üret</b> çıkar; kısa linkin tıklamaları bu tabloda görünür. Sayfa sadece üyelere açıktır.
+        </li>
+        <li>
           Tıklamalar tür tür ayrı gösterilir, toplanmaz: sponsorun ana linki varsa “Git” düğmesi tıklaması o linkin satırında da sayılır. “Git” düğmesinde tekil sayı sadece giriş yapmış üyelerden gelir. Kayıt sadece kampanya linklerinde ölçülür.
         </li>
         <li>

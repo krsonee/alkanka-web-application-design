@@ -2,12 +2,14 @@ import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
 import { PointsMarket } from '@/components/alkanka/points-market'
 import { listProducts } from '@/lib/market'
+import { MARKET_KIND_PARAM } from '@/lib/record-links'
 import { ThemeShop } from '@/components/alkanka/theme-shop'
 
 export const metadata = pageMeta('market')
 export const dynamic = 'force-dynamic'
 
-export default async function MarketPage() {
+export default async function MarketPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const kind = (await searchParams)[MARKET_KIND_PARAM]
   const items = await listProducts().catch((e) => {
     console.error('[market] ürünler okunamadı', e)
     return []
@@ -25,7 +27,7 @@ export default async function MarketPage() {
         speech="Coinlerini burada harca kanka, stoklar sınırlı!"
       />
       <ThemeShop />
-      <PointsMarket items={items} />
+      <PointsMarket items={items} kind={typeof kind === 'string' ? kind : undefined} />
     </>
   )
 }

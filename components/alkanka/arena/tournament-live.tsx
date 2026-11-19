@@ -1,12 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { CalendarDays, Send, Swords, TrendingUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ARENA_META, type ArenaGame } from '@/lib/arena'
+import { TOURNAMENT_FILTER_PARAM } from '@/lib/record-links'
 import { DUEL_TOURNAMENT_GAMES, TABLE_TOURNAMENT_GAMES, listPulse, type Tournament } from '@/lib/tournaments-shared'
 import { usePoints } from '../points-context'
 import { useTelegramUrl } from '../telegram-address'
@@ -27,6 +28,9 @@ const read = async (url: string) => {
 }
 
 type Filter = 'all' | 'running' | 'open' | 'past' | 'mine'
+
+const FILTER_ADDRESS: Record<Exclude<Filter, 'all'>, string> = { running: 'devam', open: 'kayit', past: 'tamamlanan', mine: 'benim' }
+const FILTER_OF: Record<string, Filter | undefined> = { devam: 'running', kayit: 'open', tamamlanan: 'past', benim: 'mine' }
 
 const closedAt = (t: Tournament) => Date.parse(t.finishedAt ?? t.endsAt ?? t.startsAt)
 
@@ -50,7 +54,7 @@ function Group({ id, title, count, children }: { id: string; title: string; coun
  * while a tournament is running or about to start and the tab is in view, asks for the current one:
  * every few seconds while a match is on, every couple of minutes for a league that is only waiting.
  */
-export function TournamentLive({ initial }: { initial: Tournament[] }) {
+export function TournamentLive({ initial, only }: { initial: Tournament[]; only?: number }) {
   const { data, mutate } = useSWR<Tournament[]>(LIVE_URL, read, {
     fallbackData: initial,
     revalidateOnMount: false,
@@ -61,7 +65,23 @@ export function TournamentLive({ initial }: { initial: Tournament[] }) {
   const { member } = usePoints()
   const [filter, setFilter] = useState<Filter>('all')
   const [allPast, setAllPast] = useState(false)
-  const list = data ?? initial
+  const everything = data ?? initial
+  // A tournament's own page keeps reading the shared list and shows its one card from it.
+  const list = useMemo(() => (only == null ? everything : everything.filter((t) => t.id === only)), [everything, only])
+
+  // The page is static HTML, so the filter of a shared address is read here, once the page is on screen.
+  useEffect(() => {
+    if (only != null) return
+    const wanted = FILTER_OF[new URLSearchParams(window.location.search).get(TOURNAMENT_FILTER_PARAM) ?? '']
+    if (wanted) setFilter(wanted)
+  }, [only])
+  const pick = (key: Filter) => {
+    setFilter(key)
+    const url = new URL(window.location.href)
+    if (key === 'all') url.searchParams.delete(TOURNAMENT_FILTER_PARAM)
+    else url.searchParams.set(TOURNAMENT_FILTER_PARAM, FILTER_ADDRESS[key])
+    window.history.replaceState(null, '', url)
+  }
   const latest = useRef(list)
   const pageCopy = useRef(initial)
   const lastRead = useRef(0)
@@ -110,12 +130,23 @@ export function TournamentLive({ initial }: { initial: Tournament[] }) {
     { key: 'mine' as const, label: 'Kayıtlı olduklarım', count: mine.length },
     { key: 'past' as const, label: 'Tamamlanan', count: past.length },
   ].filter((tab) => tab.count > 0)
-  const tabs = kinds.length > 1 ? [{ key: 'all' as const, label: 'Tümü', count: running.length + open.length + past.length }, ...kinds] : []
+  const tabs = only == null && kinds.length > 1 ? [{ key: 'all' as const, label: 'Tümü', count: running.length + open.length + past.length }, ...kinds] : []
   // The member signed out, or the last tournament of a kind closed: that filter is gone, so the list falls back to everything.
   const shown: Filter = tabs.some((tab) => tab.key === filter) ? filter : 'all'
   const show = (key: Filter) => shown === 'all' || shown === key
   const pastList = allPast || shown === 'past' ? past : past.slice(0, PAST_SHOWN)
-  const card = (t: Tournament) => <TournamentCard key={t.id} t={t} onChanged={reload} defaultOpen={active === 1 && t.status !== 'bitti'} />
+  const card = (t: Tournament) => <TournamentCard key={t.id} t={t} onChanged={reload} defaultOpen={only != null || (active === 1 && t.status !== 'bitti')} />
+
+  if (only != null && list.length === 0) {
+    return (
+      <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm leading-relaxed text-muted-foreground">
+        Bu turnuva artık listede değil.{' '}
+        <Link href="/turnuvalar" className="font-bold text-primary underline-offset-4 hover:underline">
+          Tüm turnuvalara dön
+        </Link>
+      </p>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-8">
@@ -126,7 +157,7 @@ export function TournamentLive({ initial }: { initial: Tournament[] }) {
               key={tab.key}
               type="button"
               aria-pressed={shown === tab.key}
-              onClick={() => setFilter(tab.key)}
+              onClick={() => pick(tab.key)}
               className={cn(
                 'flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold transition-colors',
                 shown === tab.key ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-foreground hover:bg-secondary',
@@ -145,7 +176,7 @@ export function TournamentLive({ initial }: { initial: Tournament[] }) {
         </Group>
       ) : (
         <>
-          {shown === 'all' && active === 0 && <NoneOpen />}
+          {only == null && shown === 'all' && active === 0 && <NoneOpen />}
           {show('running') && running.length > 0 && (
             <Group id="devam" title="Devam eden" count={running.length}>
               {running.map(card)}
