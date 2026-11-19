@@ -24,10 +24,12 @@ import {
 import {
   MARKETS,
   PERIOD_LABEL,
+  SPORTS,
   answerText,
   marketList,
   marketTitle,
   normalizeSet,
+  parseSport,
   prizeText,
   type Award,
   type LeagueSettings,
@@ -36,7 +38,9 @@ import {
   type Prize,
   type QuestionSet,
 } from '@/lib/predictions-shared'
-import { getFinalResult, getFixtures, type Fixture } from '@/lib/kankatv'
+import { getFeedCountries, getFeedLeagues, getLeagueFixtures, getSportResult, isFeedSport, type FeedCountry, type FeedLeague, type FeedTeam, type LeagueFixtures } from '@/lib/kankatv'
+import { forgetTeam, getLeagueBook, rememberTeams, setLeaguePin } from '@/lib/prediction-book'
+import { EMPTY_BOOK, MAX_LEAGUES_AT_ONCE, type LeagueBook, type LeaguePin } from '@/lib/prediction-book-shared'
 
 import type { PickListData } from '@/components/panel/pick-list'
 
@@ -113,10 +117,29 @@ export async function answerComplaint(id: number, status: Complaint['status'], r
 
 const questionNames = (set: QuestionSet) => marketList(set).map((id) => marketTitle(id, set.markets[id])).join(', ')
 
-export async function createLeagueMatch(input: { league: string; home: string; away: string; kickoff: string; closesAt?: string; set?: QuestionSet | null }) {
+export async function createLeagueMatch(input: {
+  league: string
+  home: string
+  away: string
+  kickoff: string
+  closesAt?: string
+  set?: QuestionSet | null
+  sport?: string
+  bestOf?: number
+}) {
   return guard(async () => {
     await addLeagueMatch({ ...input, set: input.set ?? undefined })
-    await logPanel('community', 'Tahmin maçı eklendi', `${input.home} - ${input.away}`, `${input.league}${input.set ? ` · ${questionNames(normalizeSet(input.set))}` : ' · varsayılan sorular'}`)
+    // E-sport teams come from no feed, so the ones typed here are kept for the next match.
+    if (parseSport(input.sport) === 'esports') {
+      await rememberTeams(input.league, [input.home, input.away]).catch((e) => console.error('[community] takım listesi yazılamadı', (e as Error).message))
+    }
+    const sport = SPORTS[parseSport(input.sport)].label
+    await logPanel(
+      'community',
+      'Tahmin maçı eklendi',
+      `${input.home} - ${input.away}`,
+      `${sport} · ${input.league}${input.set ? ` · ${questionNames(normalizeSet({ ...input.set, sport: parseSport(input.sport), bestOf: input.bestOf }))}` : ' · varsayılan sorular'}`,
+    )
   })
 }
 
@@ -128,11 +151,59 @@ export async function editLeagueQuestions(id: number, set: QuestionSet) {
   })
 }
 
-export async function loadFixtures(day: string): Promise<{ ok: true; fixtures: Fixture[]; published: number[] } | { ok: false; error: string }> {
-  if (!(await canPanel('community'))) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return { ok: false, error: 'Geçerli bir tarih seç.' }
-  const [fixtures, published] = await Promise.all([getFixtures(day), publishedFixtureIds()])
-  return { ok: true, fixtures, published }
+type Loaded<T> = ({ ok: true } & T) | { ok: false; error: string }
+
+const EXPIRED = { ok: false as const, error: 'Oturum süresi doldu, tekrar giriş yap.' }
+const FEED_DOWN = { ok: false as const, error: 'Maç kaynağına ulaşılamadı. Biraz sonra tekrar dene ya da maçı elle ekle.' }
+const NO_FEED = { ok: false as const, error: 'Bu sporun maçları kaynakta yok; maçı elle ekle.' }
+
+export async function loadFeedCountries(sport: string): Promise<Loaded<{ countries: FeedCountry[] }>> {
+  if (!(await canPanel('community'))) return EXPIRED
+  if (!isFeedSport(sport)) return NO_FEED
+  const countries = await getFeedCountries(sport)
+  return countries ? { ok: true, countries } : FEED_DOWN
+}
+
+export async function loadFeedLeagues(sport: string, countryId: number): Promise<Loaded<{ leagues: FeedLeague[] }>> {
+  if (!(await canPanel('community'))) return EXPIRED
+  if (!isFeedSport(sport)) return NO_FEED
+  if (!Number.isSafeInteger(countryId) || countryId <= 0) return { ok: false, error: 'Ülke bulunamadı.' }
+  const leagues = await getFeedLeagues(sport, countryId)
+  return leagues ? { ok: true, leagues } : FEED_DOWN
+}
+
+/** The upcoming games of the chosen leagues. A league the feed cannot read is named instead of failing the rest. */
+export async function loadLeagueFixtures(sport: string, leagueIds: number[]): Promise<Loaded<{ groups: LeagueFixtures[]; published: number[]; missing: number[] }>> {
+  if (!(await canPanel('community'))) return EXPIRED
+  if (!isFeedSport(sport)) return NO_FEED
+  const ids = [...new Set((Array.isArray(leagueIds) ? leagueIds : []).map(Number).filter((n) => Number.isSafeInteger(n) && n > 0))].slice(0, MAX_LEAGUES_AT_ONCE)
+  if (!ids.length) return { ok: false, error: 'En az bir lig seç.' }
+  const [found, published] = await Promise.all([Promise.all(ids.map((id) => getLeagueFixtures(sport, id))), publishedFixtureIds()])
+  const groups = found.filter((g): g is LeagueFixtures => g !== null)
+  if (!groups.length) return FEED_DOWN
+  return { ok: true, groups, published, missing: ids.filter((_, i) => !found[i]) }
+}
+
+/** The sides of one league, for picking the teams of a hand-added match from a list. */
+export async function loadLeagueTeams(sport: string, leagueId: number): Promise<Loaded<{ teams: FeedTeam[] }>> {
+  if (!(await canPanel('community'))) return EXPIRED
+  if (!isFeedSport(sport)) return NO_FEED
+  const found = Number.isSafeInteger(leagueId) && leagueId > 0 ? await getLeagueFixtures(sport, leagueId) : null
+  return found ? { ok: true, teams: found.teams } : FEED_DOWN
+}
+
+export async function pinLeague(pin: LeaguePin, on: boolean) {
+  return guard(async () => {
+    await setLeaguePin(pin, Boolean(on))
+    return on ? `${pin.name} sabitlendi.` : `${pin.name} sabitlerden çıkarıldı.`
+  })
+}
+
+export async function removeBookTeam(game: string, name: string) {
+  return guard(async () => {
+    await forgetTeam(String(game), String(name))
+    return `${name} listeden çıkarıldı.`
+  })
 }
 
 export async function publishFixtures(list: FixtureInput[]) {
@@ -145,10 +216,10 @@ export async function publishFixtures(list: FixtureInput[]) {
 
 export async function autoSettleMatches() {
   return guard(async () => {
-    const r = await autoSettleLeague(getFinalResult)
+    const r = await autoSettleLeague(getSportResult)
     if (r.settled) await logPanel('community', 'Maçlar otomatik sonuçlandırıldı', null, `${r.settled} maç`)
     if (!r.checked) return 'Sonucu bekleyen fikstür maçı yok.'
-    const waiting = r.waiting ? ` ${r.waiting} maçın korner, kart ya da ilk yarı verisi kaynakta yok; sonucunu elle gir.` : ''
+    const waiting = r.waiting ? ` ${r.waiting} maçın korner, kart, ilk yarı ya da ilk set verisi kaynakta yok; sonucunu elle gir.` : ''
     return `${r.checked} maç kontrol edildi, ${r.settled} tanesi sonuçlandırıldı.${waiting}`
   })
 }
@@ -210,6 +281,7 @@ export type LeagueSetup = {
   sites: { id: string; name: string }[]
   awards: Award[]
   paid: Partial<Record<PeriodKind, PaidPeriod>>
+  book: LeagueBook
 }
 
 /** Everything the league screens need beyond the match list, read when they open. */
@@ -217,12 +289,13 @@ export async function loadLeagueSetup(): Promise<{ ok: true; data: LeagueSetup }
   if (!(await canPanel('community'))) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
   try {
     const [{ listProducts }, { siteOptions }, { listAwards }] = await Promise.all([import('@/lib/market'), import('@/lib/sites'), import('@/lib/prediction-awards')])
-    const [settings, products, sites, awards, paid] = await Promise.all([
+    const [settings, products, sites, awards, paid, book] = await Promise.all([
       getLeagueSettings(),
       listProducts({ includeInactive: true }).catch(() => []),
       siteOptions().catch(() => []),
       listAwards().catch(() => []),
       lastPaidPeriods().catch(() => ({})),
+      getLeagueBook().catch(() => EMPTY_BOOK),
     ])
     return {
       ok: true,
@@ -232,6 +305,7 @@ export async function loadLeagueSetup(): Promise<{ ok: true; data: LeagueSetup }
         sites: sites.map((s) => ({ id: String(s.id), name: s.name })),
         awards,
         paid,
+        book,
       },
     }
   } catch (error) {

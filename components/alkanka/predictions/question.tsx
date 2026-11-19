@@ -58,6 +58,9 @@ function GoalPicker({ team, value, onChange, disabled }: { team: string; value: 
 /** The score question is the wide one: it takes the whole row wherever the questions sit two abreast. */
 const WIDE = '@2xl:col-span-2'
 
+/** Two or three answers sit in one row; a set or map score has four to eight and wraps into even rows. */
+const optionGrid = (count: number) => (count === 3 || count === 6 ? 'grid-cols-3' : count === 8 ? 'grid-cols-4' : 'grid-cols-2')
+
 /** The order the questions are laid out in, with the wide score question placed where it leaves no gap beside it. */
 export function layoutOrder(ids: MarketId[]): MarketId[] {
   const rest = ids.filter((id) => id !== 'score')
@@ -121,7 +124,7 @@ export function QuestionInput({
           <GoalPicker team={teams.away} value={score.away} disabled={disabled} onChange={(away) => onScore({ ...score, away })} />
         </div>
       ) : (
-        <div role="group" aria-label={marketTitle(id, rule)} className={cn('grid gap-1.5', options.length === 3 ? 'grid-cols-3' : 'grid-cols-2')}>
+        <div role="group" aria-label={marketTitle(id, rule)} className={cn('grid gap-1.5', optionGrid(options.length))}>
           {options.map((o) => (
             <button
               key={o.value}
@@ -201,7 +204,7 @@ export function QuestionResult({
   return (
     <div className="@container flex flex-col gap-2">
       <Head id={id} rule={rule} outcome={outcome} />
-      <ul className={cn('grid gap-1.5', options.length === 3 ? 'grid-cols-3' : 'grid-cols-2')}>
+      <ul className={cn('grid gap-1.5', optionGrid(options.length))}>
         {options.map((o) => {
           const share = pct(crowd?.[o.value] ?? 0, total)
           const isMine = mine === o.value

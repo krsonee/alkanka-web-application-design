@@ -232,6 +232,91 @@ export type Fixture = {
   awayLogo: string
   kickoff: string
   started: boolean
+  /** Left out for football. */
+  sport?: FeedSport
+}
+
+const FEED_SPORT_ID = { football: 1, basketball: 2, tennis: 3, volleyball: 8 } as const
+
+/** The sports whose fixtures and results the feed carries. */
+export type FeedSport = keyof typeof FEED_SPORT_ID
+
+export const isFeedSport = (v: unknown): v is FeedSport => typeof v === 'string' && Object.hasOwn(FEED_SPORT_ID, v)
+
+export type FeedCountry = { id: number; name: string }
+export type FeedLeague = { id: number; name: string; country: string }
+export type FeedTeam = { name: string; logo: string }
+
+async function feedJson<T>(path: string, revalidate: number): Promise<T | null> {
+  try {
+    const res = await fetch(`${API}${path}&${BASE_QUERY}`, { headers: HEADERS, next: { revalidate }, signal: AbortSignal.timeout(8000) })
+    return res.ok ? ((await res.json()) as T) : null
+  } catch {
+    return null
+  }
+}
+
+type RawCountry = { id: number; name: string; sportTypes?: number[]; isInternational?: boolean }
+type RawCompetition = { id: number; name: string; countryId: number; sportId?: number; popularityRank?: number }
+
+/** Every country (and continent) with competitions in this sport: Türkiye first, then the international ones. Null when the feed is down. */
+export async function getFeedCountries(sport: FeedSport): Promise<FeedCountry[] | null> {
+  const id = FEED_SPORT_ID[sport]
+  const raw = await feedJson<{ countries?: RawCountry[] }>(`/countries/?sports=${id}`, 86_400)
+  if (!raw) return null
+  const rank = (c: RawCountry) => (/^türkiye$/i.test(c.name.trim()) ? 0 : c.isInternational ? 1 : 2)
+  return (raw.countries ?? [])
+    .filter((c) => !c.sportTypes || c.sportTypes.includes(id))
+    .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, 'tr'))
+    .map((c) => ({ id: c.id, name: tidy(c.name) }))
+}
+
+/** The competitions of one country, best known first. */
+export async function getFeedLeagues(sport: FeedSport, countryId: number): Promise<FeedLeague[] | null> {
+  const id = FEED_SPORT_ID[sport]
+  const raw = await feedJson<{ competitions?: RawCompetition[]; countries?: RawCountry[] }>(`/competitions/?sports=${id}&countries=${countryId}`, 21_600)
+  if (!raw) return null
+  const country = tidy((raw.countries ?? []).find((c) => c.id === countryId)?.name)
+  return (raw.competitions ?? [])
+    .filter((c) => c.countryId === countryId && (c.sportId === undefined || c.sportId === id))
+    .sort((a, b) => (b.popularityRank ?? 0) - (a.popularityRank ?? 0) || a.name.localeCompare(b.name, 'tr'))
+    .map((c) => ({ id: c.id, name: tidy(c.name), country }))
+}
+
+export type LeagueFixtures = { league: FeedLeague; fixtures: Fixture[]; teams: FeedTeam[] }
+
+/** The games a competition still has to play, soonest first, and the sides that play in it. Null when it is not a competition of this sport. */
+export async function getLeagueFixtures(sport: FeedSport, leagueId: number): Promise<LeagueFixtures | null> {
+  const id = FEED_SPORT_ID[sport]
+  const raw = await feedJson<{ games?: RawGame[]; countries?: RawCountry[]; competitions?: RawCompetition[]; competitors?: RawCompetitor[] }>(
+    `/games/fixtures/?competitions=${leagueId}&showOdds=false`,
+    300,
+  )
+  const comp = raw?.competitions?.find((c) => c.id === leagueId)
+  if (!raw || !comp || (comp.sportId !== undefined && comp.sportId !== id)) return null
+  const league: FeedLeague = { id: leagueId, name: tidy(comp.name), country: tidy((raw.countries ?? []).find((c) => c.id === comp.countryId)?.name) }
+  const games = (raw.games ?? []).filter((g) => g.competitionId === leagueId)
+  const now = Date.now()
+  const fixtures = games
+    .filter((g) => g.statusGroup !== 3 && g.statusGroup !== 4 && new Date(g.startTime).getTime() > now)
+    .sort((a, b) => a.startTime.localeCompare(b.startTime))
+    .slice(0, 60)
+    .map((g) => ({
+      extId: g.id,
+      league: league.name,
+      home: g.homeCompetitor.name.trim(),
+      away: g.awayCompetitor.name.trim(),
+      homeLogo: crest(g.homeCompetitor.id, g.homeCompetitor.imageVersion),
+      awayLogo: crest(g.awayCompetitor.id, g.awayCompetitor.imageVersion),
+      kickoff: new Date(g.startTime).toISOString(),
+      started: false,
+      ...(sport === 'football' ? {} : { sport }),
+    }))
+  const sides = new Map<number, FeedTeam>()
+  for (const c of [...(raw.competitors ?? []), ...games.flatMap((g) => [g.homeCompetitor, g.awayCompetitor])]) {
+    if (c?.name && !sides.has(c.id)) sides.set(c.id, { name: c.name.trim(), logo: crest(c.id, c.imageVersion) })
+  }
+  return { league, fixtures, teams: [...sides.values()].sort((a, b) => a.name.localeCompare(b.name, 'tr')).slice(0, 200) }
 }
 
 /** Upcoming football fixtures for a calendar day (YYYY-MM-DD, Istanbul time), most prestigious first. */
@@ -330,6 +415,54 @@ export async function getFinalResult(id: number): Promise<FinalResult | null> {
       corners: sum(STAT_CORNERS),
       cards: yellows === null ? null : yellows + (reds ?? 0),
     }
+  } catch {
+    return null
+  }
+}
+
+export type SportResult = FinalResult & { first: '1' | '2' | null }
+
+type NamedStage = { name?: string; homeCompetitorScore?: number; awayCompetitorScore?: number }
+
+/**
+ * The final figures of a finished game in any sport the feed carries. Football keeps its own reader
+ * (90 minutes, corners, cards). Elsewhere the score is the feed's own final figure: points with overtime
+ * in basketball, sets in volleyball and tennis. The first half is the first two quarters; the first set
+ * is read from the stage named after it. A figure the feed does not carry is null.
+ */
+export async function getSportResult(id: number, sport: 'football' | 'basketball' | 'volleyball' | 'tennis' | 'esports'): Promise<SportResult | null> {
+  if (sport === 'esports') return null
+  if (sport === 'football') {
+    const r = await getFinalResult(id)
+    return r ? { ...r, first: null } : null
+  }
+  try {
+    const res = await fetch(`${API}/game/?${BASE_QUERY}&gameId=${id}`, { headers: HEADERS, cache: 'no-store', signal: AbortSignal.timeout(6000) })
+    if (!res.ok) return null
+    const { game } = (await res.json()) as { game?: RawGame & { stages?: NamedStage[] } }
+    if (!game || game.statusGroup !== 4) return null
+    const home = game.homeCompetitor.score
+    const away = game.awayCompetitor.score
+    if (typeof home !== 'number' || typeof away !== 'number' || home < 0 || away < 0) return null
+    const stage = (name: RegExp) => {
+      const s = (game.stages ?? []).find((x) => name.test(String(x.name ?? '').trim()))
+      const h = s?.homeCompetitorScore
+      const a = s?.awayCompetitorScore
+      return typeof h === 'number' && typeof a === 'number' && h >= 0 && a >= 0 ? { home: h, away: a } : null
+    }
+    const out: SportResult = { home, away, htHome: null, htAway: null, corners: null, cards: null, first: null }
+    if (sport === 'basketball') {
+      const q1 = stage(/^(q1|1\. ?çeyrek)$/i)
+      const q2 = stage(/^(q2|2\. ?çeyrek)$/i)
+      if (q1 && q2 && q1.home + q2.home <= home && q1.away + q2.away <= away) {
+        out.htHome = q1.home + q2.home
+        out.htAway = q1.away + q2.away
+      }
+    } else {
+      const set1 = stage(/^set 1$/i)
+      if (set1 && set1.home !== set1.away) out.first = set1.home > set1.away ? '1' : '2'
+    }
+    return out
   } catch {
     return null
   }

@@ -24,7 +24,8 @@ import { StatusLine } from '@/components/alkanka/community/use-action'
 import { cn } from '@/lib/utils'
 import { FixturePicker } from './fixture-picker'
 import { PrizeField, QuestionSetEditor, ceilingLine, prizeProblem, questionLine, setProblem, type PrizeOptions } from './league-fields'
-import { AddMatchForm, MatchList } from './league-matches'
+import { AddMatchForm } from './league-add-match'
+import { MatchList } from './league-matches'
 
 type Tab = 'maclar' | 'sorular' | 'oduller' | 'teslim'
 
@@ -42,7 +43,7 @@ function DefaultQuestions({ initial, options, onSaved }: { initial: QuestionSet;
           Varsayılan sorular
         </h3>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Takvimden yayınlanan ve elle eklenirken özel soru seçilmeyen her maç bu sorularla açılır. Burada yapılan değişiklik yayındaki maçları etkilemez; bir maçın sorularını, ona tahmin gelmeden önce &quot;Maçlar&quot; sekmesinden değiştirebilirsin.
+          Takvimden yayınlanan ve elle eklenirken özel soru seçilmeyen her futbol maçı bu sorularla açılır. Diğer sporlar kendi hazır sorularıyla açılır (kazanan ve sporun ana sorusu: toplam sayı, set skoru ya da harita skoru). Burada yapılan değişiklik yayındaki maçları etkilemez; bir maçın sorularını, ona tahmin gelmeden önce &quot;Maçlar&quot; sekmesinden değiştirebilirsin.
         </p>
       </div>
       <QuestionSetEditor value={draft} onChange={setDraft} options={options} />
@@ -74,8 +75,9 @@ function AutoScoring({ on, onSaved }: { on: boolean; onSaved: () => void }) {
             Otomatik puanlama: {on ? 'açık' : 'kapalı'}
           </h3>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Açıkken takvimden eklenen maçlar bitince sonuç kaynaktan alınır, tahminler puanlanır ve ödüller dağıtılır; kimsenin düğmeye basması gerekmez. Kontrol ziyaretçi trafiğiyle, en sık 10 dakikada bir yapılır. Korner, kart ya da ilk yarı
-            sorusu olan maçta o rakam kaynakta yoksa maç &quot;Sonuç bekleyen&quot; sekmesinde elle girilmeyi bekler. Elle eklenen maçlar her zaman elle sonuçlandırılır.
+            Açıkken takvimden eklenen maçlar (futbol, basketbol, voleybol, tenis) bitince sonuç kaynaktan alınır, tahminler puanlanır ve ödüller dağıtılır; kimsenin düğmeye basması gerekmez. Kontrol ziyaretçi trafiğiyle, en sık 10 dakikada bir
+            yapılır. Korner, kart, ilk yarı ya da ilk set sorusu olan maçta o rakam kaynakta yoksa, ya da maç yarıda kaldıysa (teniste çekilme gibi), maç &quot;Sonuç bekleyen&quot; sekmesinde elle girilmeyi bekler. Elle eklenen maçlar ve e-spor
+            maçları her zaman elle sonuçlandırılır.
           </p>
         </div>
         <button
@@ -344,7 +346,7 @@ function Loaded({ matches, setup, refresh }: { matches: LeagueMatch[]; setup: Le
 
       {tab === 'maclar' && (
         <div className="flex flex-col gap-4">
-          <FixturePicker />
+          <FixturePicker book={setup.book} onBookChanged={refresh} />
           <div className="flex flex-col gap-2">
             <button
               type="button"
@@ -353,10 +355,10 @@ function Loaded({ matches, setup, refresh }: { matches: LeagueMatch[]; setup: Le
               className="flex h-10 items-center gap-1.5 self-start rounded-lg border border-border px-4 text-xs font-bold text-foreground hover:bg-secondary"
             >
               <Plus className="size-3.5" aria-hidden="true" />
-              Takvimde olmayan maçı elle ekle
+              Maçı elle ekle (e-spor ve takvimde olmayanlar)
               <ChevronDown className={cn('size-3.5 text-muted-foreground transition-transform', adding && 'rotate-180')} aria-hidden="true" />
             </button>
-            {adding && <AddMatchForm defaults={settings.defaults} options={options} />}
+            {adding && <AddMatchForm defaults={settings.defaults} options={options} book={setup.book} onBookChanged={refresh} />}
           </div>
           <MatchList matches={matches} options={options} />
         </div>

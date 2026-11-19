@@ -3,7 +3,7 @@
 import { useEffect, useId, useState } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import type { LeagueMatch, LeagueRow, LeagueScope, PaidPeriod } from '@/lib/predictions'
-import type { Award, PeriodKind } from '@/lib/predictions-shared'
+import { SPORTS, SPORT_IDS, sportOf, type Award, type PeriodKind, type Sport } from '@/lib/predictions-shared'
 import { LEAGUE_TAB_PARAM } from '@/lib/record-links'
 import { cn } from '@/lib/utils'
 import { MatchRow, matchState, type MatchState } from './match-row'
@@ -73,10 +73,11 @@ function HowTo() {
       </button>
       {open && (
         <ul id={id} className="flex list-disc flex-col gap-1 pl-5 text-xs leading-relaxed text-muted-foreground">
-          <li>Her maçın kendi soruları vardır: maç sonucu, tam skor, gol, korner ya da kart gibi. Hangi soruların sorulduğu ve ödülü maçın kartında yazar.</li>
+          <li>Her maçın kendi soruları vardır: futbolda maç sonucu, tam skor, gol, korner ya da kart; diğer sporlarda kazanan, toplam sayı, set ya da harita skoru gibi. Hangi soruların sorulduğu ve ödülü maçın kartında yazar.</li>
           <li>Her doğru cevap ayrı puan ve ödül kazandırır. Bir maçın bütün sorularını bilirsen bonus da alırsın.</li>
           <li>Tahmin maç başlamadan kapanır ve bir kez yapılır; kaydettikten sonra değişmez.</li>
-          <li>Uzatmaya giden maçlarda 90 dakikanın sonucu sayılır. Kart sorusunda sarı ve kırmızı kartlar toplanır.</li>
+          <li>Futbolda uzatmaya giden maçlarda 90 dakikanın sonucu sayılır. Kart sorusunda sarı ve kırmızı kartlar toplanır.</li>
+          <li>Basketbolda uzatmalar skora dahildir. Voleybol ve teniste set skoru, e-sporda harita skoru sorulur; bu maçlarda beraberlik olmaz.</li>
           <li>Verisi alınamayan bir soru iptal edilir; puanlanmaz ve bonusu etkilemez.</li>
           <li>Puanların haftalık ve aylık lig tablosuna yazılır. Eşitlikte tam skoru daha çok bilen öne geçer.</li>
         </ul>
@@ -122,6 +123,7 @@ export function League({
     window.history.replaceState(null, '', url)
   }
   const [mineOnly, setMineOnly] = useState(false)
+  const [onlySport, setOnlySport] = useState<Sport | null>(null)
   const [saved, setSaved] = useState(false)
 
   const groups: Record<MatchState, LeagueMatch[]> = { open: [], waiting: [], done: [] }
@@ -132,7 +134,11 @@ export function League({
 
   const tab = chosen ?? (groups.open.length ? 'open' : groups.waiting.length ? 'waiting' : 'done')
   const canFilter = tab !== 'open' && groups[tab].some((m) => m.myPick) && groups[tab].some((m) => !m.myPick)
-  const list = canFilter && mineOnly ? groups[tab].filter((m) => m.myPick) : groups[tab]
+  // The sport filter only appears where there is something to tell apart, and lets go of a sport the tab no longer has.
+  const sportsHere = SPORT_IDS.filter((s) => groups[tab].some((m) => sportOf(m.set) === s))
+  const sport = onlySport && sportsHere.length > 1 && sportsHere.includes(onlySport) ? onlySport : null
+  const list = groups[tab].filter((m) => (!canFilter || !mineOnly || m.myPick) && (!sport || sportOf(m.set) === sport))
+  const filtered = list.length < groups[tab].length
 
   const week = tables.week
   const myIndex = meId ? week.findIndex((r) => r.userId === meId) : -1
@@ -247,6 +253,26 @@ export function League({
             )}
           </div>
 
+          {sportsHere.length > 1 && (
+            <div role="group" aria-label="Spor" className="flex flex-wrap gap-1.5">
+              {[null, ...sportsHere].map((s) => (
+                <button
+                  key={s ?? 'hepsi'}
+                  type="button"
+                  aria-pressed={sport === s}
+                  onClick={() => setOnlySport(s)}
+                  className={cn(
+                    'flex min-h-9 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
+                    sport === s ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {s ? SPORTS[s].label : 'Hepsi'}
+                  <span className="tabular-nums opacity-80">{s ? groups[tab].filter((m) => sportOf(m.set) === s).length : groups[tab].length}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
           {saved && (
             <p role="status" className="rounded-lg bg-live/10 px-3 py-2 text-xs font-semibold text-live">
               Tahminin kaydedildi. Maç bitene kadar &quot;Sonuç bekleyen&quot; sekmesinde durur.
@@ -254,7 +280,9 @@ export function League({
           )}
 
           {list.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm leading-relaxed text-muted-foreground">{TABS.find((t) => t.id === tab)?.empty}</p>
+            <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm leading-relaxed text-muted-foreground">
+              {filtered ? 'Bu süzgeçle eşleşen maç yok.' : TABS.find((t) => t.id === tab)?.empty}
+            </p>
           ) : (
             byDay(list, now).map((day) => (
               <section key={day.title} aria-label={day.title} className="flex flex-col gap-2">

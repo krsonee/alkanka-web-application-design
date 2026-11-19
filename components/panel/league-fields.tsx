@@ -2,6 +2,7 @@
 
 import { useId } from 'react'
 import {
+  DEFAULT_RULES,
   MARKETS,
   MARKET_IDS,
   MAX_BONUS_POINTS,
@@ -9,11 +10,16 @@ import {
   MAX_MARKET_POINTS,
   MAX_PRIZE_AMOUNT,
   PRIZE_KIND_LABEL,
+  SPORTS,
+  lineSpec,
   lineText,
   marketList,
   marketTitle,
+  normalizeSet,
   prizeText,
   setCeiling,
+  sportMarkets,
+  sportOf,
   type MarketId,
   type MarketRule,
   type Prize,
@@ -149,29 +155,66 @@ export function PrizeField({
   )
 }
 
-const DEFAULT_RULES: Record<MarketId, MarketRule> = {
-  side: { pts: 1, coin: 'kc', amount: 40 },
-  score: { pts: 3, coin: 'kc', amount: 150, nearPts: 1, nearAmount: 40 },
-  goals: { pts: 1, coin: 'kc', amount: 40, line: 2.5 },
-  btts: { pts: 1, coin: 'kc', amount: 40 },
-  half: { pts: 1, coin: 'kc', amount: 40 },
-  corners: { pts: 2, coin: 'kc', amount: 60, line: 9.5 },
-  cards: { pts: 2, coin: 'kc', amount: 60, line: 4.5 },
-}
+type Preset = { label: string; ids: MarketId[] }
 
-const PRESETS: { label: string; ids: MarketId[] }[] = [
+const FOOTBALL_PRESETS: Preset[] = [
   { label: 'Sadece taraf', ids: ['side'] },
   { label: 'Sadece skor', ids: ['score'] },
   { label: 'Taraf + alt/üst', ids: ['side', 'goals'] },
   { label: 'Taraf, gol, korner, kart', ids: ['side', 'goals', 'corners', 'cards'] },
-  { label: 'Hepsi', ids: [...MARKET_IDS] },
+  { label: 'Hepsi', ids: SPORTS.football.markets },
 ]
+
+/** The ready-made sets of a sport; a one-map series only has the winner to ask about. */
+function presetsFor(set: QuestionSet): Preset[] {
+  const sport = sportOf(set)
+  if (sport === 'football') return FOOTBALL_PRESETS
+  const ids = sportMarkets(sport, set.bestOf)
+  if (ids.length < 2) return []
+  return [
+    { label: 'Sadece kazanan', ids: ids.slice(0, 1) },
+    { label: `Kazanan + ${MARKETS[ids[1]].label.toLocaleLowerCase('tr')}`, ids: ids.slice(0, 2) },
+    { label: 'Hepsi', ids },
+  ]
+}
 
 const NEEDS_TEXT = {
   half: 'Sonuç girilirken ilk yarı skoru da istenir.',
   corners: 'Sonuç girilirken toplam korner sayısı da istenir.',
   cards: 'Sonuç girilirken toplam kart sayısı da istenir.',
+  first: 'Sonuç girilirken bunu kimin aldığı da sorulur.',
 } as const
+
+const LENGTH_TEXT: Record<string, (n: number) => string> = {
+  set: (n) => `${n} set üzerinden (${Math.floor(n / 2) + 1} set alan kazanır)`,
+  harita: (n) => (n === 1 ? 'Tek harita (BO1)' : `${n} harita üzerinden (BO${n})`),
+}
+
+/** How long the match runs, for sports decided over sets or maps. Nothing to choose when the sport has one length. */
+export function LengthField({ value, onChange, className }: { value: QuestionSet; onChange: (set: QuestionSet) => void; className?: string }) {
+  const info = SPORTS[sportOf(value)]
+  if (info.bestOf.length < 2) return null
+  const text = LENGTH_TEXT[info.unit] ?? ((n: number) => String(n))
+  return (
+    <label className={cn(caption, className)}>
+      Maç uzunluğu
+      <select
+        value={String(value.bestOf ?? info.bestOf[0])}
+        // Going through the cleaner refits every line to the new length and drops questions it cannot ask.
+        onChange={(e) => onChange(normalizeSet({ ...value, bestOf: Number(e.target.value) }))}
+        className={cn(box, 'w-full')}
+      >
+        {[...info.bestOf]
+          .sort((a, b) => a - b)
+          .map((n) => (
+            <option key={n} value={String(n)}>
+              {text(n)}
+            </option>
+          ))}
+      </select>
+    </label>
+  )
+}
 
 /** Why a question set cannot be saved yet, or null when it is complete. */
 export function setProblem(set: QuestionSet): string | null {
@@ -202,8 +245,8 @@ export function questionLine(set: QuestionSet) {
     .join(', ')
 }
 
-function lineChoices(id: MarketId) {
-  const spec = MARKETS[id].line
+function lineChoices(id: MarketId, bestOf: number | undefined) {
+  const spec = lineSpec(id, bestOf)
   if (!spec) return []
   const out: number[] = []
   for (let n = spec.min; n <= spec.max; n += 1) out.push(n)
@@ -211,24 +254,44 @@ function lineChoices(id: MarketId) {
 }
 
 /** Which questions a match asks, what each right answer pays and what answering them all adds. */
-export function QuestionSetEditor({ value, onChange, options }: { value: QuestionSet; onChange: (set: QuestionSet) => void; options: PrizeOptions }) {
+export function QuestionSetEditor({
+  value,
+  onChange,
+  options,
+  hideLength = false,
+}: {
+  value: QuestionSet
+  onChange: (set: QuestionSet) => void
+  options: PrizeOptions
+  /** The form around the editor already asks how long the match runs. */
+  hideLength?: boolean
+}) {
   const ids = marketList(value)
+  const sport = sportOf(value)
+  const asked = MARKET_IDS.filter((id) => sportMarkets(sport, value.bestOf).includes(id))
+  const presets = presetsFor(value)
+  const winnerId = sport === 'football' ? 'side' : 'winner'
   const patch = (id: MarketId, rule: Partial<MarketRule>) => onChange({ ...value, markets: { ...value.markets, [id]: { ...value.markets[id]!, ...rule } } })
-  const withBonus = (markets: QuestionSet['markets']): QuestionSet => ({ markets, bonus: MARKET_IDS.filter((id) => markets[id]).length > 1 ? value.bonus : null })
+  // A freshly switched-on question is fitted to the match: its line inside the range, the series length copied in.
+  const fitted = (markets: QuestionSet['markets']): QuestionSet => {
+    const next = normalizeSet({ ...value, markets, bonus: null })
+    return { ...next, bonus: marketList(next).length > 1 ? value.bonus : null }
+  }
   const toggle = (id: MarketId) => {
     const markets = { ...value.markets }
     if (markets[id]) delete markets[id]
     else markets[id] = DEFAULT_RULES[id]
-    onChange(withBonus(markets))
+    onChange(fitted(markets))
   }
-  const preset = (list: MarketId[]) => onChange(withBonus(Object.fromEntries(list.map((id) => [id, value.markets[id] ?? DEFAULT_RULES[id]]))))
+  const preset = (list: MarketId[]) => onChange(fitted(Object.fromEntries(list.map((id) => [id, value.markets[id] ?? DEFAULT_RULES[id]]))))
   const sameAs = (list: MarketId[]) => list.length === ids.length && list.every((id) => value.markets[id])
 
   return (
     <div className="flex flex-col gap-3">
-      <div role="group" aria-label="Hazır soru setleri" className="flex flex-wrap items-center gap-1.5">
+      {!hideLength && <LengthField value={value} onChange={onChange} className="w-full sm:w-72" />}
+      <div role="group" aria-label="Hazır soru setleri" className={cn('flex flex-wrap items-center gap-1.5', !presets.length && 'hidden')}>
         <span className="text-xs font-semibold text-muted-foreground">Hazır set:</span>
-        {PRESETS.map((p) => (
+        {presets.map((p) => (
           <button
             key={p.label}
             type="button"
@@ -245,9 +308,10 @@ export function QuestionSetEditor({ value, onChange, options }: { value: Questio
       </div>
 
       <ul className="flex flex-col gap-2">
-        {MARKET_IDS.map((id) => {
+        {asked.map((id) => {
           const rule = value.markets[id]
           const info = MARKETS[id]
+          const choices = lineChoices(id, value.bestOf)
           return (
             <li key={id} className={cn('flex flex-col gap-3 rounded-lg border p-3', rule ? 'border-primary/40 bg-background' : 'border-border')}>
               <label className="flex cursor-pointer items-start gap-3">
@@ -267,8 +331,8 @@ export function QuestionSetEditor({ value, onChange, options }: { value: Questio
                     {info.line && (
                       <label className={cn(caption, 'w-24')}>
                         Baraj
-                        <select value={String(rule.line ?? info.line.def)} onChange={(e) => patch(id, { line: Number(e.target.value) })} className={cn(box, 'w-full')}>
-                          {lineChoices(id).map((n) => (
+                        <select value={String(rule.line ?? choices[0])} disabled={choices.length < 2} onChange={(e) => patch(id, { line: Number(e.target.value) })} className={cn(box, 'w-full')}>
+                          {choices.map((n) => (
                             <option key={n} value={String(n)}>
                               {lineText(n)}
                             </option>
@@ -286,15 +350,15 @@ export function QuestionSetEditor({ value, onChange, options }: { value: Questio
                       </select>
                     </label>
                   </div>
-                  {id === 'score' && (
+                  {(id === 'score' || info.series) && (
                     <div className="flex flex-col gap-1.5">
                       <div className="flex flex-wrap items-end gap-2">
                         <NumberField label="Skor tutmadı, taraf doğru: puan" value={rule.nearPts ?? 0} max={MAX_MARKET_POINTS} onChange={(nearPts) => patch(id, { nearPts })} className="w-56" />
                         <NumberField label={`Teselli ödülü (${rule.coin === 'kp' ? 'KP' : 'KC'})`} value={rule.nearAmount ?? 0} max={MAX_MARKET_AMOUNT} onChange={(nearAmount) => patch(id, { nearAmount })} className="w-40" />
                       </div>
-                      {value.markets.side && ((rule.nearPts ?? 0) > 0 || (rule.nearAmount ?? 0) > 0) && (
+                      {value.markets[winnerId] && ((rule.nearPts ?? 0) > 0 || (rule.nearAmount ?? 0) > 0) && (
                         <p className="text-xs leading-relaxed text-muted-foreground">
-                          &quot;Maç sonucu&quot; sorusu da açık: tarafı bilen üye hem o sorudan hem bu teselliden kazanır. İstemiyorsan teselliyi 0 yap.
+                          &quot;{MARKETS[winnerId].label}&quot; sorusu da açık: tarafı bilen üye hem o sorudan hem bu teselliden kazanır. İstemiyorsan teselliyi 0 yap.
                         </p>
                       )}
                     </div>

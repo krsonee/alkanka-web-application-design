@@ -7,17 +7,21 @@ import {
   LEGACY_SET,
   MARKET_IDS,
   PERIOD_LABEL,
+  SPORTS,
   answersError,
   cleanAnswers,
+  defaultSet,
   gradePick,
   marketList,
   normalizePrize,
   normalizeSet,
   normalizeSettings,
   parseScore,
+  parseSport,
   periodBounds,
   resultError,
   resultNeeds,
+  sportOf,
   voidedBy,
   type Answers,
   type LeagueSettings,
@@ -29,6 +33,7 @@ import {
   type PeriodPrizes,
   type Prize,
   type QuestionSet,
+  type Sport,
 } from '@/lib/predictions-shared'
 
 export const LEAGUE_SETTINGS_KEY = 'prediction_league'
@@ -64,7 +69,8 @@ export async function getLeagueSettings(): Promise<LeagueSettings> {
 
 export async function saveLeagueDefaults(input: unknown) {
   const current = await getLeagueSettings()
-  const defaults = normalizeSet(input)
+  // The saved defaults are the football ones; every other sport starts from its own built-in set.
+  const defaults = normalizeSet({ ...(input && typeof input === 'object' ? input : {}), sport: 'football' })
   await checkSetPrize(defaults)
   await setContent(LEAGUE_SETTINGS_KEY, { ...current, defaults })
 }
@@ -149,10 +155,20 @@ const setOf = (raw: unknown): QuestionSet => (raw ? normalizeSet(raw) : LEGACY_S
 
 const num = (v: unknown) => (v === null || v === undefined ? null : Number(v))
 
+const cleanFirst = (v: unknown): '1' | '2' | null => (v === '1' || v === '2' ? v : null)
+
 function resultOf(x: Record<string, unknown>): MatchResult | null {
   if (!x.settled || x.home_goals === null || x.away_goals === null) return null
   const r = (x.result ?? {}) as Partial<MatchResult>
-  return { home: Number(x.home_goals), away: Number(x.away_goals), htHome: num(r.htHome), htAway: num(r.htAway), corners: num(r.corners), cards: num(r.cards) }
+  return {
+    home: Number(x.home_goals),
+    away: Number(x.away_goals),
+    htHome: num(r.htHome),
+    htAway: num(r.htAway),
+    corners: num(r.corners),
+    cards: num(r.cards),
+    first: cleanFirst(r.first),
+  }
 }
 
 /** Picks made before questions existed only carry a score. */
@@ -318,7 +334,7 @@ export async function leagueTable(scope: LeagueScope, limit = 50): Promise<Leagu
 
 // --- Managing matches ----------------------------------------------------
 
-export async function addLeagueMatch(input: { league: string; home: string; away: string; kickoff: string; closesAt?: string; set?: unknown }) {
+export async function addLeagueMatch(input: { league: string; home: string; away: string; kickoff: string; closesAt?: string; set?: unknown; sport?: string; bestOf?: number }) {
   await ensureLeague()
   const when = new Date(input.kickoff)
   if (Number.isNaN(when.getTime())) throw new Error('Geçerli bir tarih gir.')
@@ -332,10 +348,16 @@ export async function addLeagueMatch(input: { league: string; home: string; away
     if (c.getTime() > when.getTime()) throw new Error('Tahmin bitişi maç saatinden sonra olamaz.')
     closes = c.toISOString()
   }
-  const set = input.set ? normalizeSet(input.set) : (await getLeagueSettings()).defaults
+  const sport = parseSport(input.sport)
+  // The sport chosen in the form wins over whatever the question set carries.
+  const set = input.set
+    ? normalizeSet({ ...(typeof input.set === 'object' ? input.set : {}), sport, bestOf: input.bestOf })
+    : sport === 'football'
+      ? (await getLeagueSettings()).defaults
+      : defaultSet(sport, input.bestOf)
   await checkSetPrize(set)
   await rows(sql`INSERT INTO league_matches (league, home, away, kickoff, closes_at, markets)
-    VALUES (${input.league.trim().slice(0, 80) || 'Futbol'}, ${input.home.trim().slice(0, 80)}, ${input.away.trim().slice(0, 80)}, ${when.toISOString()}, ${closes}, ${JSON.stringify(set)}::jsonb)`)
+    VALUES (${input.league.trim().slice(0, 80) || SPORTS[sport].label}, ${input.home.trim().slice(0, 80)}, ${input.away.trim().slice(0, 80)}, ${when.toISOString()}, ${closes}, ${JSON.stringify(set)}::jsonb)`)
 }
 
 /** Questions can only change while nobody has answered them. */
@@ -348,18 +370,22 @@ export async function updateLeagueMarkets(id: number, input: unknown) {
   if (!r.length) throw new Error('Bu maça tahmin yapılmış ya da maç sonuçlanmış; soruları artık değiştirilemez.')
 }
 
-export type FixtureInput = { extId: number; league: string; home: string; away: string; homeLogo: string; awayLogo: string; kickoff: string }
+export type FixtureInput = { extId: number; league: string; home: string; away: string; homeLogo: string; awayLogo: string; kickoff: string; sport?: string }
 
 const safeLogo = (url: string) => (/^https:\/\/imagecache\.365scores\.com\//.test(url) ? url : null)
 
 /** Publishes fixtures picked from the calendar with the default questions; already-published games are skipped. */
 export async function importLeagueFixtures(list: FixtureInput[]) {
   await ensureLeague()
-  const set = JSON.stringify((await getLeagueSettings()).defaults)
+  const football = JSON.stringify((await getLeagueSettings()).defaults)
   let added = 0
   for (const f of list.slice(0, 60)) {
     const when = new Date(f.kickoff)
     if (!Number.isSafeInteger(f.extId) || Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) continue
+    const sport = parseSport(f.sport)
+    // Only sports the feed carries can be published from it: their results are read back by the same id.
+    if (!SPORTS[sport].feed) continue
+    const set = sport === 'football' ? football : JSON.stringify(defaultSet(sport))
     const r = await rows(sql`INSERT INTO league_matches (league, home, away, kickoff, home_logo, away_logo, ext_id, markets)
       VALUES (${f.league.slice(0, 80)}, ${f.home.slice(0, 80)}, ${f.away.slice(0, 80)}, ${when.toISOString()},
         ${safeLogo(f.homeLogo)}, ${safeLogo(f.awayLogo)}, ${f.extId}, ${set}::jsonb)
@@ -392,6 +418,7 @@ function cleanResult(input: Partial<MatchResult>): MatchResult {
     htAway: cleanStat(input.htAway),
     corners: cleanStat(input.corners),
     cards: cleanStat(input.cards),
+    first: cleanFirst(input.first),
   }
 }
 
@@ -479,13 +506,13 @@ export async function payLeagueMatches() {
   return paid
 }
 
-type FeedResult = { home: number; away: number; htHome: number | null; htAway: number | null; corners: number | null; cards: number | null }
+type FeedResult = { home: number; away: number; htHome: number | null; htAway: number | null; corners: number | null; cards: number | null; first?: '1' | '2' | null }
 
 /**
- * Scores finished calendar matches from the result feed. A match that asks about corners, cards or
- * the first half waits until the feed has that figure; the panel can still enter it by hand.
+ * Scores finished calendar matches from the result feed. A match that asks about corners, cards, the
+ * first half or the first set waits until the feed has that figure; the panel can still enter it by hand.
  */
-export async function autoSettleLeague(fetchResult: (id: number) => Promise<FeedResult | null>, opts: { limit?: number; recentOnly?: boolean } = {}) {
+export async function autoSettleLeague(fetchResult: (id: number, sport: Sport) => Promise<FeedResult | null>, opts: { limit?: number; recentOnly?: boolean } = {}) {
   await ensureLeague()
   const due = await rows(sql`SELECT id, ext_id, markets FROM league_matches
     WHERE NOT settled AND ext_id IS NOT NULL AND kickoff < now() - interval '100 minutes'
@@ -494,14 +521,18 @@ export async function autoSettleLeague(fetchResult: (id: number) => Promise<Feed
   let settled = 0
   let waiting = 0
   for (const m of due) {
-    const r = await fetchResult(Number(m.ext_id))
+    const set = setOf(m.markets)
+    const sport = sportOf(set)
+    const r = await fetchResult(Number(m.ext_id), sport)
     if (!r) continue
-    const needs = resultNeeds(setOf(m.markets))
-    if ((needs.half && r.htHome === null) || (needs.corners && r.corners === null) || (needs.cards && r.cards === null)) {
+    const needs = resultNeeds(set)
+    if ((needs.half && r.htHome === null) || (needs.corners && r.corners === null) || (needs.cards && r.cards === null) || (needs.first && !r.first)) {
       waiting++
       continue
     }
-    const ok = await settleLeagueMatch(Number(m.id), { ...r, home: Math.min(r.home, 20), away: Math.min(r.away, 20) }).then(
+    const cap = SPORTS[sport].maxScore
+    // A result the rules reject (a retired tennis match, say) is left for the panel to decide.
+    const ok = await settleLeagueMatch(Number(m.id), { ...r, home: Math.min(r.home, cap), away: Math.min(r.away, cap) }).then(
       () => true,
       () => false,
     )
@@ -588,8 +619,8 @@ export async function leagueTick() {
   const s = await getLeagueSettings()
   if (!s.auto && !s.week.on && !s.month.on) return
   if (s.auto) {
-    const { getFinalResult } = await import('@/lib/kankatv')
-    await autoSettleLeague(getFinalResult, { limit: 8, recentOnly: true }).catch((e) => console.error('[league] otomatik puanlama', e))
+    const { getSportResult } = await import('@/lib/kankatv')
+    await autoSettleLeague(getSportResult, { limit: 8, recentOnly: true }).catch((e) => console.error('[league] otomatik puanlama', e))
   }
   await settleLeaguePeriods(now, s).catch((e) => console.error('[league] dönem ödülleri', e))
 }
