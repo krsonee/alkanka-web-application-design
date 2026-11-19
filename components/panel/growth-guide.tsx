@@ -4,6 +4,28 @@ const ol = 'flex list-decimal flex-col gap-1.5 pl-5'
 
 const STEPS: GuideStep[] = [
   {
+    title: 'Linkler: bütün kısa linkler tek listede',
+    body: (
+      <ol className={ol}>
+        <li>
+          <b>Linkler</b> sekmesi sponsor linklerini, dış linkleri, kampanya linklerini ve sitedeki “Git” düğmelerini tek tabloda gösterir. Kampanya linkleri sadece Pazarlama yetkisi olan hesapta görünür.
+        </li>
+        <li>
+          Üstten <b>tarih aralığını</b> ve <b>sponsoru</b> seç; tıklama, tekil ve kayıt o aralığa göre sayılır. <b>Son tıklama</b> tüm zamanlara bakar, böylece ölü link belli olur.
+        </li>
+        <li>
+          Tıklamalar tür tür ayrı gösterilir, toplanmaz: sponsorun ana linki varsa “Git” düğmesi tıklaması o linkin satırında da sayılır. “Git” düğmesinde tekil sayı sadece giriş yapmış üyelerden gelir. Kayıt sadece kampanya linklerinde ölçülür.
+        </li>
+        <li>
+          <b>Excel</b> ekranda süzülmüş listeyi indirir. Linki eklemek ve değiştirmek için satırdaki <b>Düzenle</b> seni o linkin ekranına götürür.
+        </li>
+        <li>
+          <b>Kısa link alan adı:</b> ayrı bir alan adın varsa (ör. <span className={code}>alk.link</span>) buraya yaz; kopyalanan linkler o adresle çıkar ve o adres sadece yönlendirme yapar. Alan adını satın almak, Vercel projesine eklemek ve DNS kaydı sende. Eski <span className={code}>alkanka.com/r/...</span> ve <span className={code}>/k/...</span> adresleri çalışmaya devam eder.
+        </li>
+      </ol>
+    ),
+  },
+  {
     title: 'Sponsor affiliate linkleri: kısa link, takip ve güncel adres',
     body: (
       <ol className={ol}>
