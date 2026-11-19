@@ -119,6 +119,19 @@ export async function savePickAction(matchId: number, answers: Answers) {
   }, '/tahminler')
 }
 
+export async function pickGoalSideAction(matchId: number, side: string, siteUsername: string) {
+  return run(async (m) => {
+    const { goalMatchCategory, pickGoalSide } = await import('@/lib/goal-rewards')
+    // Sponsor events follow the rule of every sponsor page: the age question has to be answered first.
+    if ((await goalMatchCategory(Number(matchId))) === 'sponsor') {
+      const { getSponsorAccess } = await import('@/lib/sponsor-access')
+      if ((await getSponsorAccess()).state !== 'open') throw new Error('Sponsor etkinliğine katılmak için önce sponsorlar sayfasında 18 yaş onayını ver.')
+    }
+    await pickGoalSide(m, Number(matchId), side, siteUsername)
+    return 'Seçimin kaydedildi.'
+  }, '/tahminler')
+}
+
 export async function claimAwardAction(awardId: number, siteUsername: string) {
   return run(async (m) => {
     const { claimAward } = await import('@/lib/prediction-awards')

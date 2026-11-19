@@ -38,6 +38,31 @@ const STEPS: Step[] = [
     ),
   },
   {
+    title: 'Gol başı ödül: etkinlik aç, maç ekle, sonucu gir',
+    body: (
+      <ol className="flex list-decimal flex-col gap-1.5 pl-5">
+        <li>
+          İçerik Takvimi → Tahminler → <b>Gol başı ödül</b> sekmesinde etkinlik aç ve gol başı ödülü yaz. Üye bir takım seçer; maç sonuçlanınca o takımın attığı her gol için bu ödülü kazanır (gol başı 10 KC, 5 gol, 50 KC). Tahmin liginden ayrıdır,
+          lig puanına yazılmaz.
+        </li>
+        <li>
+          <b>Alkanka etkinliği</b>: ödül KC. Sonucu girdiğin an üyelerin hesabına kendiliğinden yatar ve coin dökümüne yazılır. <b>Sponsor etkinliği</b>: ödülü sponsor verir (freebet, freespin). Katılım şartını (linkten üyelik, en az bahis)
+          forma yaz; üye kartta bu şartı görür ve seçim yaparken sponsordaki kullanıcı adını yazar.
+        </li>
+        <li>
+          Etkinliğe <b>Maç ekle</b> ile maç gir. Maçı olmayan etkinlik sitede görünmez. Seçimler maç başlarken kapanır; üye seçimini değiştiremez.
+        </li>
+        <li>
+          Maç bitince satırdaki kutulara skoru yaz, <b>Sonucu gir</b>. Sonuç bir kez girilir, sonradan değişmez; aynı maç iki kez ödenmez. Oynanmayan maçı <b>İptal et</b>: iptal edilen maç ödeme yapmaz.
+        </li>
+        <li>
+          <b>Katılımcılar</b> listesinde sponsor etkinliğinde önce <b>Şartı onayla</b>, sponsor ödülü tanımlayınca <b>Teslim edildi</b> işaretle; listeyi <b>Excel indir</b> ile sponsora gönder. Alkanka etkinliğinde &quot;Yazılamadı&quot; görünen bir ödeme varsa
+          önce üyenin coin dökümüne bak, ödül orada yoksa <b>Yeniden dene</b>.
+        </li>
+      </ol>
+    ),
+  },
+  {
     title: 'Tahmin ligi: soruları seç, maç ekle, sonuçlandır, ödülü teslim et',
     body: (
       <ol className="flex list-decimal flex-col gap-1.5 pl-5">

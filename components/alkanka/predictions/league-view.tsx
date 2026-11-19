@@ -1,9 +1,10 @@
 import 'server-only'
 import { cache } from 'react'
 import { Events } from '@/components/alkanka/events'
-import { getMember } from '@/lib/member'
+import { getMember, type Member } from '@/lib/member'
 import { getLeagueSettings, lastPaidPeriods, leagueTable, listLeagueMatches } from '@/lib/predictions'
 import { periodBounds, type Award, type PeriodKind } from '@/lib/predictions-shared'
+import { GoalBoard } from './goal-board'
 import { League, type LeagueStart } from './league'
 import type { PeriodView } from './standings'
 
@@ -25,21 +26,51 @@ export async function LeagueView({ focus, tab }: { focus?: number; tab?: string 
     lastPaidPeriods().catch(() => ({})),
     member ? import('@/lib/prediction-awards').then((m) => m.myAwards(member.id)).catch(() => [] as Award[]) : ([] as Award[]),
   ])
-  if (matches.length === 0 && awards.length === 0) return <Events view="tahminler" />
-
   const now = Date.now()
+  // A match's own page shows that match; the goal events stay on the list page.
+  const goals = focus == null ? await goalSection(member, now) : null
+  if (matches.length === 0 && awards.length === 0) {
+    return (
+      <>
+        {goals}
+        <Events view="tahminler" />
+      </>
+    )
+  }
+
   const period = (kind: PeriodKind): PeriodView => ({ on: settings[kind].on, places: settings[kind].places, label: periodBounds(kind, now).label })
   return (
-    <League
-      matches={matches}
-      tables={{ week, month, all }}
-      periods={{ week: period('week'), month: period('month') }}
-      paid={paid}
-      awards={awards}
-      meId={member?.id ?? null}
-      serverNow={now}
-      focus={focus}
-      start={tab ? STARTS[tab] : undefined}
-    />
+    <>
+      {goals}
+      <League
+        matches={matches}
+        tables={{ week, month, all }}
+        periods={{ week: period('week'), month: period('month') }}
+        paid={paid}
+        awards={awards}
+        meId={member?.id ?? null}
+        serverNow={now}
+        focus={focus}
+        start={tab ? STARTS[tab] : undefined}
+      />
+    </>
   )
+}
+
+/**
+ * "Gol başı ödül" events. Sponsor events follow the rule of every other sponsor page: members only,
+ * and only after the age question is answered. A failure here never takes the league down with it.
+ */
+async function goalSection(member: Member | null, now: number) {
+  try {
+    const [{ goalBoard }, { getSponsorAccess }] = await Promise.all([import('@/lib/goal-rewards'), import('@/lib/sponsor-access')])
+    const [events, access] = await Promise.all([goalBoard(member?.id ?? null), getSponsorAccess(member)])
+    const open = access.state === 'open'
+    const held = events.some((e) => e.category === 'sponsor') && !open
+    const note = !held ? null : access.state === 'guest' ? 'Sponsor etkinlikleri sadece üyelere açık. Giriş yaptığında burada görünür.' : 'Sponsor etkinliklerini görmek için önce sponsorlar sayfasında 18 yaş onayını ver.'
+    return <GoalBoard events={open ? events : events.filter((e) => e.category !== 'sponsor')} serverNow={now} sponsorNote={note} />
+  } catch (error) {
+    console.error('[goal] etkinlikler okunamadı', (error as Error).message)
+    return null
+  }
 }

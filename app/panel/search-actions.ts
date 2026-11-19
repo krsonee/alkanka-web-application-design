@@ -87,6 +87,7 @@ const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row
   { title: 'Tahmin ligi soruları ve puanlama', words: 'soru seti taraf skor alt üst korner kart karşılıklı gol ilk yarı bonus otomatik puanlama varsayılan', query: 's=league&lig=sorular', moved: 'league' },
   { title: 'Tahmin ligi haftalık ve aylık ödülleri', words: 'lig ödülü sıra ödülü kanka puan market sponsor nakit', query: 's=league&lig=oduller', moved: 'league' },
   { title: 'Tahmin ligi ödül teslimi', words: 'sponsor nakit ödül teslim bekleyen site kullanıcı adı', query: 's=league&lig=teslim', moved: 'league' },
+  { title: 'Gol başı ödül etkinlikleri', words: 'gol başı ödül takım seç gol başına kc freebet freespin sponsor etkinliği katılım şartı onay teslim katılımcı listesi excel maç sonucu iptal', query: 's=goal', moved: 'league' },
   { title: 'Çekim ödülleri', words: 'çekim paylaşımı coin puan', row: 'withdrawals', query: 'v=rewards' },
   { title: 'Çekim kuralları ve engeller', words: 'sahte paylaşım engel', row: 'withdrawals', query: 'v=rules' },
   { title: 'Seviyeler', words: 'kanka puan kp seviye', row: 'badges', query: 's=levels' },

@@ -12,6 +12,7 @@ import { EVENT_GAME_OPTIONS, EVENT_RANKS, RANK_LABEL, RANK_SHORT, cleanPayouts, 
 import { BONUS_TYPES, EVENT_KINDS, PREDICTION_PAYOUT, predictionPayout, sortByOrder, type Catalog, type CategoryOrder } from '@/lib/catalog-shared'
 import type { LeagueMatch } from '@/lib/predictions'
 import { LeagueAdmin } from '@/components/panel/league-admin'
+import { GoalAdmin } from '@/components/panel/goal-admin'
 import { PickList } from '@/components/panel/pick-list'
 import { cn } from '@/lib/utils'
 import { HideButton } from '@/components/panel/hide-button'
@@ -562,10 +563,10 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder,
   )
 }
 
-/** `league` is the prediction league: it lives under the Tahminler tab, next to the option predictions. */
-type Tab = Kind | 'calendar' | 'league'
+/** `league` is the prediction league and `goal` the per-goal reward events: both live under the Tahminler tab, next to the option predictions. */
+type Tab = Kind | 'calendar' | 'league' | 'goal'
 
-const TABS: { id: Exclude<Tab, 'league'>; label: string }[] = [
+const TABS: { id: Exclude<Tab, 'league' | 'goal'>; label: string }[] = [
   { id: 'events', label: 'Etkinlik & bilet' },
   { id: 'predictions', label: 'Tahminler' },
   { id: 'campaigns', label: 'Kampanyalar' },
@@ -583,6 +584,11 @@ const PREDICTION_KINDS = [
     id: 'league',
     label: 'Tahmin ligi',
     about: `Üye maçın sorularını cevaplar: maç sonucu, tam skor, gol, korner, kart gibi. Hangi soruların sorulacağını ve her doğru cevabın ödülünü sen seçersin. Sonuç girilince puanlar ve ödüller dağıtılır; puanlar /tahminler sayfasındaki haftalık ve aylık lig tablosuna yazılır.`,
+  },
+  {
+    id: 'goal',
+    label: 'Gol başı ödül',
+    about: `Üye bir takım seçer; maç sonuçlanınca o takımın attığı her gol için ayarladığın ödülü kazanır (gol başı 10 KC, 5 gol, 50 KC). Alkanka etkinliğinde ödül KC olarak kendiliğinden yatar; sponsor etkinliğinde ödülü sponsor verir, şartı sen onaylar ve teslimi sen işaretlersin. Tahmin liginden ayrıdır: lig puanına yazılmaz.`,
   },
 ] as const
 
@@ -602,10 +608,10 @@ export function CatalogEditor({
   /** Prediction-league matches, when this account may manage them here. */
   league?: LeagueMatch[] | null
 }) {
-  const [tab, setTab] = useUrlTab<Tab>(league ? ['events', 'predictions', 'league', 'campaigns', 'bonuses', 'calendar'] : ['events', 'predictions', 'campaigns', 'bonuses', 'calendar'], 'events')
+  const [tab, setTab] = useUrlTab<Tab>(league ? ['events', 'predictions', 'league', 'goal', 'campaigns', 'bonuses', 'calendar'] : ['events', 'predictions', 'campaigns', 'bonuses', 'calendar'], 'events')
   const [order, setOrder] = useState<CategoryOrder>(catalog.order ?? { campaignTags: [], bonusTypes: [] })
   const [focus, setFocus] = useState<{ kind: Kind; id: string } | null>(null)
-  const top = tab === 'league' ? 'predictions' : tab
+  const top = tab === 'league' || tab === 'goal' ? 'predictions' : tab
   return (
     <div className="flex flex-col gap-4">
       <div role="tablist" aria-label="Katalog bölümleri" className="flex flex-wrap gap-2">
@@ -633,7 +639,7 @@ export function CatalogEditor({
                 onClick={() => setTab(k.id)}
                 className={cn('h-9 rounded-md px-3 text-xs font-bold', tab === k.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
               >
-                {k.id === 'league' ? `${k.label} (${league.filter((m) => !m.settled).length})` : `${k.label} (${catalog.predictions.length})`}
+                {k.id === 'goal' ? k.label : k.id === 'league' ? `${k.label} (${league.filter((m) => !m.settled).length})` : `${k.label} (${catalog.predictions.length})`}
               </button>
             ))}
           </div>
@@ -642,6 +648,8 @@ export function CatalogEditor({
       )}
       {tab === 'league' ? (
         league && <LeagueAdmin matches={league} />
+      ) : tab === 'goal' ? (
+        league && <GoalAdmin />
       ) : tab === 'calendar' ? (
         <CatalogCalendar
           catalog={catalog}
