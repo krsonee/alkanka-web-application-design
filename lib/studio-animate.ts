@@ -7,13 +7,15 @@ import { promisify } from 'node:util'
 import { experimental_generateVideo as generateVideo } from 'ai'
 import ffmpegPath from 'ffmpeg-static'
 import sharp from 'sharp'
+import { motionText, type Motion } from '@/lib/studio-brief'
 import { buildOverlay, type Brush } from '@/lib/studio-overlay'
+import { clipToVideoSticker, stickerGreenFrame, STICKER_FRAME } from '@/lib/studio-telegram'
+import { STICKER_CLIP_SECONDS, type MotionQuality } from '@/lib/studio-types'
 
 const run = promisify(execFile)
 const VIDEO_MODEL = 'google/veo-3.1-lite-generate-001'
 const GIF_FRAMES = 28
 const GIF_DELAY_MS = 55
-export const AI_GIF_SECONDS = 4
 
 function seeded(seed: number) {
   let s = seed
@@ -83,7 +85,13 @@ export async function makeGif(image: Buffer) {
     .toBuffer()
 }
 
-export async function videoToGif(video: Buffer) {
+const GIF_SHAPE = {
+  sd: { fps: 14, width: 540, colors: 192 },
+  hd: { fps: 16, width: 720, colors: 224 },
+} as const
+
+export async function videoToGif(video: Buffer, quality: MotionQuality = 'sd') {
+  const shape = GIF_SHAPE[quality]
   if (!ffmpegPath) throw new Error('Video dönüştürücü bulunamadı.')
   const dir = await mkdtemp(path.join(tmpdir(), 'aigif-'))
   try {
@@ -95,7 +103,7 @@ export async function videoToGif(video: Buffer) {
       '-i',
       input,
       '-vf',
-      'fps=14,scale=540:-2:flags=lanczos,split[a][b];[a]palettegen=max_colors=192:stats_mode=diff[p];[b][p]paletteuse=dither=sierra2_4a',
+      `fps=${shape.fps},scale=${shape.width}:-2:flags=lanczos,split[a][b];[a]palettegen=max_colors=${shape.colors}:stats_mode=diff[p];[b][p]paletteuse=dither=sierra2_4a`,
       '-loop',
       '0',
       output,
@@ -214,7 +222,7 @@ export async function makeVideo({
   /** The text-free, logo-free picture when `brush` is set; otherwise the finished banner. */
   image: Buffer
   format: string
-  motion: string
+  motion: Motion
   duration: number
   audio: boolean
   hd: boolean
@@ -229,7 +237,7 @@ export async function makeVideo({
       image: new Uint8Array(frame),
       text: [
         'Animate this advertising key visual into a short, premium, eye-catching promo clip.',
-        motion || 'Subtle cinematic motion: light sweeps, sparkles and glints, gentle camera push-in, the character moves slightly.',
+        motionText(motion, padded),
         padded
           ? 'Only the sharp square in the middle is the picture; the soft areas on both sides are padding that is cut off afterwards. Keep the camera locked on that square: no panning, no tilting, no zooming out.'
           : '',
@@ -247,4 +255,27 @@ export async function makeVideo({
   const clip = Buffer.from(video.uint8Array)
   const overlay = brush ? await buildOverlay(art.width, art.height, brush) : null
   return padded || overlay ? finishClip(clip, { width, height }, padded ? art : null, overlay) : clip
+}
+
+/**
+ * A Telegram video sticker whose character really moves: the cut-out sticker is animated on a green
+ * screen by the video model, and the green is removed again afterwards.
+ */
+export async function makeMotionSticker(image: Buffer, motion: Motion) {
+  const { video } = await generateVideo({
+    model: VIDEO_MODEL,
+    prompt: {
+      image: new Uint8Array(await stickerGreenFrame(image)),
+      text: [
+        'Animate this sticker character in place, as a short, lively, looping reaction sticker.',
+        motionText(motion, true),
+        'The background is a green screen: it MUST stay perfectly flat, solid pure green (#00FF00) in every frame, edge to edge. No shadows on the background, no floor, no gradients, no particles or effects outside the character, no new objects.',
+        'The character stays the same size in the middle of the frame and never leaves it. Keep any outline around the character. Any writing on the sticker stays unchanged and readable. Do not add text.',
+      ].join('\n'),
+    },
+    resolution: `${STICKER_FRAME.width}x${STICKER_FRAME.height}`,
+    duration: STICKER_CLIP_SECONDS,
+    generateAudio: false,
+  })
+  return clipToVideoSticker(Buffer.from(video.uint8Array))
 }

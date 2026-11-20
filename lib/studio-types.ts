@@ -108,6 +108,22 @@ export const VIDEO_COST_PER_SECOND = {
   hd: { silent: 0.05, audio: 0.08 },
   sd: { silent: 0.03, audio: 0.05 },
 } as const
-/** `hd` is 1080p (videos); GIFs are rendered from the cheaper 720p clip. */
+/** `hd` is a 1080p clip, otherwise 720p. */
 export const videoCost = (seconds: number, audio: boolean, hd = true) =>
   seconds * VIDEO_COST_PER_SECOND[hd ? 'hd' : 'sd'][audio ? 'audio' : 'silent']
+
+export const MOTION_QUALITIES = [
+  { id: 'sd', label: 'Standart', hint: '720p' },
+  { id: 'hd', label: 'Yüksek', hint: '1080p' },
+] as const
+export type MotionQuality = (typeof MOTION_QUALITIES)[number]['id']
+export const toMotionQuality = (value: unknown, fallback: MotionQuality = 'sd'): MotionQuality =>
+  MOTION_QUALITIES.find((q) => q.id === value)?.id ?? fallback
+
+/** A GIF is a silent clip turned into frames, so it costs what that clip costs. */
+export const GIF_DURATIONS = [4, 6] as const
+export const gifCost = (seconds: number, quality: MotionQuality) => videoCost(seconds, false, quality === 'hd')
+
+/** The shortest clip the video model makes; the sticker is cut down to Telegram's 3 seconds. */
+export const STICKER_CLIP_SECONDS = 4
+export const STICKER_MOTION_COST = videoCost(STICKER_CLIP_SECONDS, false, false)

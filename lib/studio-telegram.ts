@@ -1,6 +1,6 @@
 import 'server-only'
 import { execFile } from 'node:child_process'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
@@ -23,6 +23,107 @@ export async function fitStaticSticker(image: Buffer) {
     if (out.length <= TG_STATIC_MAX) return out
   }
   return base.webp({ quality: 35 }).toBuffer()
+}
+
+const CLEAR = { r: 0, g: 0, b: 0, alpha: 0 }
+const STROKE = 9
+
+/**
+ * Puts an even white edge around a cut-out sticker and returns it as a 512 px PNG. The edge is the
+ * sticker's own shape grown outwards, so it follows every curve and hides leftover key colour.
+ */
+export async function outlineSticker(image: Buffer) {
+  const inner = SIZE - (STROKE + 3) * 2
+  const art = await sharp(image).resize(inner, inner, { fit: 'contain', background: CLEAR }).png().toBuffer()
+  const placed = await sharp({ create: { width: SIZE, height: SIZE, channels: 4, background: CLEAR } })
+    .composite([{ input: art, gravity: 'centre' }])
+    .png()
+    .toBuffer()
+  // A blurred mask cut off at a low level is the shape grown by about 1.5 sigma.
+  const grown = await sharp(placed)
+    .extractChannel('alpha')
+    .blur(STROKE / 1.5)
+    .threshold(18)
+    .blur(0.8)
+    .png()
+    .toBuffer()
+  const edge = await sharp({ create: { width: SIZE, height: SIZE, channels: 3, background: { r: 255, g: 255, b: 255 } } })
+    .joinChannel(grown)
+    .png()
+    .toBuffer()
+  return sharp(edge).composite([{ input: placed }]).png().toBuffer()
+}
+
+export const STICKER_FRAME = { width: 1280, height: 720 } as const
+const KEY_GREEN = { r: 0, g: 255, b: 0 }
+
+/**
+ * The frame handed to the video model: the sticker in the middle of a flat green 16:9 frame, with
+ * room around it to move. The green is keyed out again in `clipToVideoSticker`.
+ */
+export async function stickerGreenFrame(image: Buffer) {
+  const { width, height } = STICKER_FRAME
+  const art = await sharp(image)
+    .resize(Math.round(height * 0.8), Math.round(height * 0.8), { fit: 'contain', background: CLEAR })
+    .png()
+    .toBuffer()
+  return sharp({ create: { width, height, channels: 3, background: KEY_GREEN } })
+    .composite([{ input: art, gravity: 'centre' }])
+    .png()
+    .toBuffer()
+}
+
+const hex = (n: number) => Math.round(n).toString(16).padStart(2, '0')
+
+/** The clip's real background colour: video compression never returns the exact green it was given. */
+async function keyColour(ffmpeg: string, input: string, dir: string) {
+  const still = path.join(dir, 'first.png')
+  await run(ffmpeg, ['-y', '-loglevel', 'error', '-i', input, '-frames:v', '1', still], { timeout: 60_000 })
+  const { data, info } = await sharp(still).extract({ left: 8, top: 8, width: 48, height: 48 }).raw().toBuffer({ resolveWithObject: true })
+  const sum = [0, 0, 0]
+  for (let i = 0; i < data.length; i += info.channels) for (let c = 0; c < 3; c++) sum[c] += data[i + c]
+  const pixels = data.length / info.channels
+  const [r, g, b] = sum.map((total) => total / pixels)
+  // A corner that is not green means the model painted over the background; key on pure green then.
+  return g - Math.max(r, b) > 60 ? `0x${hex(r)}${hex(g)}${hex(b)}` : '0x00ff00'
+}
+
+/**
+ * Turns the model's green-screen clip into a Telegram video sticker: the middle square, the green
+ * removed, 512 px, 30 fps, VP9 with transparency, under 256 KB. The first three seconds play at
+ * double speed and then backwards, so the three-second loop has no jump.
+ */
+export async function clipToVideoSticker(video: Buffer) {
+  if (!ffmpegPath) throw new Error('Video dönüştürücü bulunamadı.')
+  const dir = await mkdtemp(path.join(tmpdir(), 'tgm-'))
+  try {
+    const input = path.join(dir, 'in.mp4')
+    const out = path.join(dir, 'out.webm')
+    await writeFile(input, video)
+    const key = await keyColour(ffmpegPath, input, dir)
+    const filter = [
+      `[0:v]trim=0:3,setpts=(PTS-STARTPTS)/2,fps=${FPS},crop=ih:ih:(iw-ih)/2:0`,
+      `chromakey=${key}:0.16:0.07,despill=type=green:mix=0.7`,
+      `scale=${SIZE}:${SIZE}:flags=lanczos,split[fwd][src]`,
+    ].join(',')
+    for (const crf of [36, 44, 52, 60]) {
+      await run(
+        ffmpegPath,
+        [
+          '-y', '-loglevel', 'error', '-i', input,
+          '-filter_complex', `${filter};[src]reverse[back];[fwd][back]concat=n=2:v=1,format=yuva420p[out]`,
+          '-map', '[out]', '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-b:v', '0', '-crf', String(crf),
+          '-deadline', 'good', '-cpu-used', '4', '-an', '-t', '2.95', '-r', String(FPS), out,
+        ],
+        { timeout: 180_000 },
+      )
+      const data = await readFile(out)
+      if (data.length > 2_000 && data.length <= TG_VIDEO_MAX) return data
+    }
+    throw new Error('Hareketli sticker 256 KB sınırına sığmadı. Daha sade bir hareket iste.')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 }
 
 export async function makeStickerIcon(image: Buffer) {

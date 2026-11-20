@@ -2,7 +2,8 @@ import 'server-only'
 import { generateText } from 'ai'
 import sharp from 'sharp'
 import { applyOverlay, brushOf } from '@/lib/studio-overlay'
-import { fitStaticSticker } from '@/lib/studio-telegram'
+import { stylePrompt, type StyleId } from '@/lib/studio-brief'
+import { fitStaticSticker, outlineSticker } from '@/lib/studio-telegram'
 import type { ImageSize, StudioBrand, StudioKind, StudioTexts } from '@/lib/studio-types'
 
 const MODEL = 'google/gemini-3.1-flash-image'
@@ -19,6 +20,13 @@ type Input = {
   /** Copy the server prints afterwards. When set, the model is told to draw no text at all. */
   texts: StudioTexts | null
   size: ImageSize
+  style?: StyleId
+  /** Extra colors asked for in the form, in plain words. */
+  palette?: string
+  /** Stickers: the short text on the sticker; empty means no text at all. */
+  caption?: string
+  /** Stickers: the server draws an even white edge, so the model is told to draw none. */
+  outline?: boolean
 }
 
 const NO_TEXT_RULE =
@@ -30,8 +38,10 @@ const FULL_BLEED_RULE =
   'The artwork must be full-bleed: one continuous scene that fills the whole canvas edge to edge. Never draw panels, boxes, bars, frames, borders, letterboxing or blank rectangles.'
 const SEAMLESS_RULE =
   'The transition into that calmer area must be gradual and natural: no straight dividing line, no blurred band, no sudden change in sharpness or brightness.'
-const LOGO_RULE =
-  'Do NOT draw any brand logo, watermark or website name. In the top-left corner show only low-detail background of the same scene (no faces, no key objects), because a logo is overlaid there later.'
+const NO_LOGO_RULE = 'Do NOT draw any brand logo, watermark or website name.'
+const LOGO_RULE = `${NO_LOGO_RULE} In the top-left corner show only low-detail background of the same scene (no faces, no key objects), because a logo is overlaid there later.`
+// Without a brand kit logo nothing is printed in the corner, so the corner is not kept clear.
+const logoRule = (brand: StudioBrand | null) => (brand?.logo ? LOGO_RULE : NO_LOGO_RULE)
 
 function copyRules({ format, prompt, texts }: Input) {
   if (!texts) {
@@ -55,12 +65,14 @@ function bannerPrompt(input: Input) {
   return [
     `Premium, high-end ${category} advertising banner for a Turkish online betting/casino brand${brand ? ` named "${brand.name}"` : ''}.`,
     `Aspect ratio ${format}. Cinematic lighting, sharp details, rich depth, professional marketing key visual.`,
+    stylePrompt(input.style ?? 'auto'),
     colors,
+    input.palette ? `${colors ? 'Additional colors' : 'Colors'} asked for by the client: ${input.palette}.` : '',
     brand?.font && !texts ? `Typography style should feel similar to the font "${brand.font}".` : '',
     brand?.notes ? `Brand style notes: ${brand.notes}` : '',
     ...copyRules(input),
     FULL_BLEED_RULE,
-    LOGO_RULE,
+    logoRule(brand),
     mascot ? MASCOT_RULE : '',
     mascot
       ? 'Any additional reference images are supporting game characters or symbols; place them around the mascot.'
@@ -70,12 +82,18 @@ function bannerPrompt(input: Input) {
     .join('\n')
 }
 
-function stickerPrompt({ prompt, brand, mascot }: Input) {
+function stickerPrompt({ prompt, brand, mascot, style, palette, caption, outline }: Input) {
   return [
-    'A single bold die-cut sticker illustration for a Telegram sticker pack, centered, with a thick white outline around the whole sticker.',
-    'Vibrant, glossy, cartoon/3D mascot style, expressive, high contrast.',
+    `A single bold die-cut sticker illustration for a Telegram sticker pack, centered${outline ? '' : ', with a thick white outline around the whole sticker'}.`,
+    outline ? 'Do NOT draw any outline, border or stroke around the sticker; a clean outline is added afterwards.' : '',
+    stylePrompt(style ?? 'auto') || 'Vibrant, glossy, cartoon/3D mascot style.',
+    'Expressive, high contrast, readable at a small size.',
     brand?.colors.length ? `Accent colors: ${brand.colors.join(', ')}.` : '',
-    `Content: ${prompt}. Any text must be in Turkish, spelled exactly, in a chunky readable font.`,
+    palette ? `Colors asked for by the client: ${palette}.` : '',
+    `Content:\n${prompt}`,
+    caption
+      ? `The sticker carries exactly this text, in Turkish, spelled exactly, in a chunky readable font: "${caption}". No other text.`
+      : 'Any text asked for above must be in Turkish, spelled exactly, in a chunky readable font. Otherwise draw no text.',
     'The background MUST be a perfectly flat solid pure green (#00FF00) with no shadows, gradients or other objects. Do not use green inside the sticker itself.',
     mascot ? MASCOT_RULE : 'If reference images are provided, use their character faithfully.',
   ]
@@ -92,14 +110,14 @@ function revisionPrompt(input: Input) {
       : '',
     input.kind === 'sticker'
       ? 'Keep the background a flat solid pure green (#00FF00).'
-      : `${LOGO_RULE} ${FULL_BLEED_RULE}`,
+      : `${logoRule(input.brand)} ${FULL_BLEED_RULE}`,
     input.kind !== 'sticker' && input.texts ? NO_TEXT_RULE : '',
   ]
     .filter(Boolean)
     .join('\n')
 }
 
-async function chromaKeySticker(image: Buffer) {
+async function chromaKeySticker(image: Buffer, outline: boolean) {
   const { data, info } = await sharp(image).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i]
@@ -117,7 +135,7 @@ async function chromaKeySticker(image: Buffer) {
     .trim({ threshold: 1 })
     .png()
     .toBuffer()
-  return fitStaticSticker(trimmed)
+  return fitStaticSticker(outline ? await outlineSticker(trimmed) : trimmed)
 }
 
 export async function runGeneration(input: Input) {
@@ -142,7 +160,7 @@ export async function runGeneration(input: Input) {
   const raw = Buffer.from(file.uint8Array)
 
   if (input.kind === 'sticker') {
-    return { data: await chromaKeySticker(raw), contentType: 'image/webp', ext: 'webp' }
+    return { data: await chromaKeySticker(raw, Boolean(input.outline)), contentType: 'image/webp', ext: 'webp' }
   }
   return { data: await applyOverlay(raw, brushOf(input.brand, input.texts)), contentType: 'image/png', ext: 'png', clean: raw }
 }

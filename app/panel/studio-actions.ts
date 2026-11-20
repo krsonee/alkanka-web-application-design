@@ -10,7 +10,9 @@ import { getContent, setContent } from '@/lib/content'
 import { CUSTOM_SLIDES_KEY, MAX_CUSTOM_SLIDES, readCustomSlides } from '@/lib/custom-slides'
 import { HIDDEN_KEY, readHidden } from '@/lib/hidden-shared'
 import { deleteAsset, deleteBrand, deleteJob, getJob, readFile, saveBrand } from '@/lib/studio'
+import { briefProblem, cleanBrief, type Brief, type Improved, type Motion, type StudioFlow } from '@/lib/studio-brief'
 import { saveStudioCap } from '@/lib/studio-budget'
+import { improveBrief } from '@/lib/studio-improve'
 import { STUDIO_CAP_RANGE, usd } from '@/lib/studio-types'
 
 type Result = { ok?: boolean; message?: string; brand?: { name: string; domain: string; logo: string; colors: string[]; font: string } }
@@ -136,6 +138,22 @@ export async function studioToSlideAction(id: number): Promise<Result> {
   } catch (error) {
     console.error('[studio] slider\'a eklenemedi', error)
     return { message: 'Görsel slider\'a eklenemedi. Biraz sonra tekrar dene.' }
+  }
+}
+
+const FLOWS: StudioFlow[] = ['banner', 'gif', 'video', 'sticker']
+
+/** "İsteği geliştir": rewrites the form's fields. Nothing is produced and nothing is saved. */
+export async function improveBriefAction(flow: string, brief: Brief, motion: Motion): Promise<Result & { improved?: Improved }> {
+  if (!(await canPanel('studio'))) return EXPIRED
+  const target = FLOWS.find((f) => f === flow) ?? 'banner'
+  const problem = briefProblem(cleanBrief(brief))
+  if (problem) return { message: problem }
+  try {
+    return { ok: true, improved: await improveBrief(target, brief, motion) }
+  } catch (error) {
+    console.error('[studio] istek geliştirilemedi', error)
+    return { message: 'İstek geliştirilemedi. Yazdıkların duruyor; biraz sonra tekrar dene ya da bu haliyle üret.' }
   }
 }
 
