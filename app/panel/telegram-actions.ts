@@ -7,6 +7,7 @@ import { canPanel, isPanelOwner } from '@/lib/admin-auth'
 import { connectChat, disconnectChat } from '@/lib/telegram-chat'
 import {
   addBot,
+  addSharedRules,
   addSource,
   addTarget,
   deleteBot,
@@ -15,9 +16,11 @@ import {
   getCronKey,
   normalizeChannel,
   runMirror,
+  saveSharedRules,
   setSourceActive,
   setTargetActive,
   testTarget,
+  updateSourceButtons,
   updateSourceText,
 } from '@/lib/telegram-mirror'
 import { encodeFilter } from '@/lib/telegram-filters'
@@ -101,11 +104,50 @@ export async function addSourceAction(_: ActionState, form: FormData): Promise<A
   } catch {
     return { message: 'Link https:// ile başlayan geçerli bir adres olmalı.' }
   }
-  const replacements = String(form.get('replacements') ?? '').slice(0, 3000)
   const footer = String(form.get('footer') ?? '').trim().slice(0, 300)
-  await addSource({ channel, brand, link, keywords, targetId, replacements, footer })
-  revalidatePath('/panel')
-  return logged('telegram', { ok: true, message: `@${channel} eklendi. İlk kontrolde mevcut postlar atlanır, sadece yeni postlar paylaşılır.` })
+  try {
+    await addSource({
+      channel,
+      brand,
+      link,
+      keywords,
+      targetId,
+      replacements: String(form.get('replacements') ?? ''),
+      footer,
+      buttons: String(form.get('buttons') ?? ''),
+      carryButtons: form.get('carryButtons') === 'on',
+    })
+    const moved = await addSharedRules(String(form.get('sharedRules') ?? ''))
+    revalidatePath('/panel')
+    return logged('telegram', {
+      ok: true,
+      message: `@${channel} eklendi. İlk kontrolde mevcut postlar atlanır, sadece yeni postlar paylaşılır.${moved ? ` ${moved} kural ortak kurallara eklendi.` : ''}`,
+    })
+  } catch (error) {
+    return { message: errorText(error) }
+  }
+}
+
+export async function updateSourceButtonsAction(_: ActionState, form: FormData): Promise<ActionState> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    await updateSourceButtons(Number(form.get('id')), { buttons: String(form.get('buttons') ?? ''), carryButtons: form.get('carryButtons') === 'on' })
+    revalidatePath('/panel')
+    return logged('telegram', { ok: true, message: 'Butonlar kaydedildi. Bundan sonraki postlarda geçerli.' })
+  } catch (error) {
+    return { message: errorText(error) }
+  }
+}
+
+export async function saveSharedRulesAction(_: ActionState, form: FormData): Promise<ActionState> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    await saveSharedRules(String(form.get('rules') ?? ''))
+    revalidatePath('/panel')
+    return logged('telegram', { ok: true, message: 'Ortak kurallar kaydedildi. Bütün kaynaklarda bundan sonraki postlarda geçerli.' })
+  } catch (error) {
+    return { message: errorText(error) }
+  }
 }
 
 export async function updateSourceTextAction(_: ActionState, form: FormData): Promise<ActionState> {
@@ -116,13 +158,18 @@ export async function updateSourceTextAction(_: ActionState, form: FormData): Pr
   } catch {
     return { message: 'Link https:// ile başlayan geçerli bir adres olmalı.' }
   }
-  await updateSourceText(Number(form.get('id')), {
-    link,
-    replacements: String(form.get('replacements') ?? '').slice(0, 3000),
-    footer: String(form.get('footer') ?? '').trim().slice(0, 300),
-  })
-  revalidatePath('/panel')
-  return logged('telegram', { ok: true, message: 'Kaydedildi. Bundan sonraki postlarda geçerli.' })
+  try {
+    await updateSourceText(Number(form.get('id')), {
+      link,
+      replacements: String(form.get('replacements') ?? ''),
+      footer: String(form.get('footer') ?? '').trim().slice(0, 300),
+    })
+    const moved = await addSharedRules(String(form.get('sharedRules') ?? ''))
+    revalidatePath('/panel')
+    return logged('telegram', { ok: true, message: `Kaydedildi. Bundan sonraki postlarda geçerli.${moved ? ` ${moved} kural ortak kurallara taşındı.` : ''}` })
+  } catch (error) {
+    return { message: errorText(error) }
+  }
 }
 
 export async function toggleSourceAction(form: FormData) {

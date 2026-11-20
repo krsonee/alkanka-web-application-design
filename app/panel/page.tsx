@@ -46,7 +46,7 @@ import { RewardsEditor } from '@/components/panel/rewards-editor'
 import { miniPlayStats } from '@/lib/rewards-stats'
 import type { MiniPlayStats } from '@/lib/rewards-forecast'
 import { CatalogEditor } from '@/components/panel/catalog-editor'
-import { getCronKey, listBots, listLog, listSources, listTargets } from '@/lib/telegram-mirror'
+import { getCronKey, listBots, listLog, listSources, listTargets, sharedRules } from '@/lib/telegram-mirror'
 import { TelegramMirror } from '@/components/panel/telegram-mirror'
 import { TelegramChatSetup } from '@/components/panel/telegram-chat-setup'
 import { ApprovalSection, ShareSection } from '@/components/panel/telegram-bot-suite'
@@ -298,13 +298,14 @@ async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Prom
     listOddsQueue().catch(miss([])),
     linkChoices(SITE_URL).catch(miss([])),
   ])
-  const [sources, log, cronKey, invite, addresses, shareInfo] = await Promise.all([
+  const [sources, log, cronKey, invite, addresses, shareInfo, tgRules] = await Promise.all([
     listSources().catch(miss([])),
     listLog().catch(miss([])),
     getCronKey().catch(miss('ANAHTAR')),
     getInviteConfig().catch(miss(null)),
     getTelegramAddresses(TELEGRAM_URL).catch(miss(null)),
     shareStatus().catch(miss({ lastError: null, lastRunAt: null, shared: 0 })),
+    sharedRules().catch(miss([])),
   ])
   const [tvConfig, tvStatus, tvToday] = await Promise.all([
     getTvConfig().catch(miss(DEFAULT_TV)),
@@ -328,7 +329,7 @@ async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Prom
       { chatId: oddsConfig.channelId, title: oddsConfig.channelTitle },
     ],
     tabs: [
-      { id: 'mirror', group: 'Otomasyonlar', label: 'Bağlantı & Cron', ...tabState([bots.length === 0, 'Hiç bot eklenmemiş', 'idle'], [sources.length === 0, 'Kaynak kanal eklenmemiş, aktarılacak bir şey yok', 'idle']), content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} /> },
+      { id: 'mirror', group: 'Otomasyonlar', label: 'Bağlantı & Cron', ...tabState([bots.length === 0, 'Hiç bot eklenmemiş', 'idle'], [sources.length === 0, 'Kaynak kanal eklenmemiş, aktarılacak bir şey yok', 'idle']), content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} sharedRules={tgRules} links={linkOptions} /> },
       { id: 'chat', group: 'Botlar', label: 'Canlı Sohbet', ...tabState([!chat?.webhook?.url, 'Webhook kurulmamış', 'idle'], [Boolean(chat?.webhook?.lastError), lastErr(chat?.webhook?.lastError), 'off']), content: <TelegramChatSetup bots={bots} status={chat} /> },
       {
         id: 'odds',
@@ -342,7 +343,7 @@ async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Prom
           [oddsStatus.activeSources === 0, 'Kaynak kanal eklenmemiş', 'off'],
           [!oddsStatus.webhookUrl, 'Webhook kurulmamış', 'off'],
         ),
-        content: <OddsBotManager config={oddsConfig} status={oddsStatus} bots={bots} sources={oddsSources} odds={oddsPage} queue={oddsQueue} links={linkOptions} />,
+        content: <OddsBotManager config={oddsConfig} status={oddsStatus} bots={bots} sources={oddsSources} odds={oddsPage} queue={oddsQueue} links={linkOptions} sharedRules={tgRules} />,
       },
       {
         id: 'kankatv',

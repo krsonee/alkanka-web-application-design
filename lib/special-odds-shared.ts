@@ -76,6 +76,8 @@ export type OddsSource = {
   passMode: OddsPassMode
   passWords: string
   buttons: PostButton[]
+  /** Also carry the source post's own buttons, with their links passed through the rules. */
+  carryButtons: boolean
   active: boolean
   lastAt: string | null
   total: number

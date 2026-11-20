@@ -17,7 +17,9 @@ import {
   updateOddsSourceTagAction,
   updateOddsSourceTextAction,
 } from '@/app/panel/odds-bot-actions'
-import { SourceTextEditor, SourceTextFields } from './source-text-fields'
+import { saveSharedRulesAction } from '@/app/panel/telegram-actions'
+import type { ReplaceRule } from '@/lib/text-replace'
+import { SharedRulesCard, SourceTextEditor, SourceTextFields } from './source-text-fields'
 import { OddsQueueCard, RuleEditor, RuleFields } from './odds-source-rule'
 import type { LinkChoice } from './tg-button-rows'
 import type { ActionState } from '@/app/panel/actions'
@@ -257,7 +259,7 @@ function TagEditor({ source }: { source: OddsSource }) {
   )
 }
 
-function SourcesCard({ sources, links }: { sources: OddsSource[]; links: LinkChoice[] }) {
+function SourcesCard({ sources, links, sharedRules }: { sources: OddsSource[]; links: LinkChoice[]; sharedRules: ReplaceRule[] }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(addOddsSourceAction, {})
   return (
     <Card icon={<Link2 className="size-4" aria-hidden="true" />} id="ob-sources" title="2. Kaynak site kanalları" desc="Her kanal bir siteye bağlanır. Bot o kanaldaki postlardaki tüm linkleri buradaki site linkiyle değiştirir. Hangi postların paylaşılacağını ve altına hangi butonların ekleneceğini kaynak kaynak sen seçersin.">
@@ -269,7 +271,7 @@ function SourcesCard({ sources, links }: { sources: OddsSource[]; links: LinkCho
         <TagFields />
         <RuleFields links={links} />
         <div className="flex flex-col gap-3 md:col-span-2">
-          <SourceTextFields footerPlaceholder="Boş bırakılırsa genel alt yazı kullanılır" />
+          <SourceTextFields footerPlaceholder="Boş bırakılırsa genel alt yazı kullanılır" mode="odds" shared={sharedRules} />
         </div>
         <div className="flex flex-col gap-2 md:col-span-2">
           <button type="submit" disabled={pending} className={cn(primaryBtn, 'self-start')}>
@@ -314,6 +316,8 @@ function SourcesCard({ sources, links }: { sources: OddsSource[]; links: LinkCho
                 footer={s.footer}
                 footerPlaceholder="Boş bırakılırsa genel alt yazı kullanılır"
                 action={updateOddsSourceTextAction}
+                mode="odds"
+                shared={sharedRules}
               />
             </li>
           ))}
@@ -540,6 +544,7 @@ export function OddsBotManager(props: {
   odds: OddsPage
   queue?: OddsQueueItem[]
   links?: LinkChoice[]
+  sharedRules?: ReplaceRule[]
 }) {
   return (
     <div className="flex flex-col gap-6">
@@ -550,7 +555,8 @@ export function OddsBotManager(props: {
       </div>
       <Flow />
       <SetupCard config={props.config} bots={props.bots} status={props.status} />
-      <SourcesCard sources={props.sources} links={props.links ?? []} />
+      <SourcesCard sources={props.sources} links={props.links ?? []} sharedRules={props.sharedRules ?? []} />
+      <SharedRulesCard rules={props.sharedRules ?? []} action={saveSharedRulesAction} />
       <OddsQueueCard items={props.queue ?? []} />
       <TestCard sources={props.sources} />
       <OddsListCard initial={props.odds} />

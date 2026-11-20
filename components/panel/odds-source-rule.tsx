@@ -6,14 +6,15 @@ import { resolveOddsQueueAction, updateOddsSourceRuleAction } from '@/app/panel/
 import type { ActionState } from '@/app/panel/actions'
 import { ODDS_PASS_OPTIONS, type OddsPassMode, type OddsQueueItem, type OddsSource } from '@/lib/special-odds-shared'
 import { cn } from '@/lib/utils'
-import { ButtonRows, type LinkChoice } from './tg-button-rows'
+import { SourceButtonFields } from './source-text-fields'
+import type { LinkChoice } from './tg-button-rows'
 
 const input = 'w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none'
 const label = 'flex flex-col gap-1.5 text-sm font-medium text-foreground'
 const hint = 'text-xs font-normal leading-relaxed text-muted-foreground'
 const smallBtn = 'inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary disabled:opacity-50'
 
-type RuleSource = Pick<OddsSource, 'passMode' | 'passWords' | 'buttons'>
+type RuleSource = Pick<OddsSource, 'passMode' | 'passWords' | 'buttons' | 'carryButtons'>
 
 /** Which posts of the source are shared, and the buttons under them. */
 export function RuleFields({ source, links }: { source?: RuleSource; links?: LinkChoice[] }) {
@@ -44,8 +45,8 @@ export function RuleFields({ source, links }: { source?: RuleSource; links?: Lin
         />
         <span className={hint}>{mode === 'keyword' ? 'Virgülle ayır. Büyük küçük harf fark etmez.' : 'Sadece “Anahtar kelime geçenler” seçiliyken kullanılır.'}</span>
       </label>
-      <div className="md:col-span-2">
-        <ButtonRows initial={source?.buttons} links={links} />
+      <div className="flex flex-col gap-3 md:col-span-2">
+        <SourceButtonFields buttons={source?.buttons} carryButtons={source?.carryButtons} links={links} />
       </div>
     </>
   )

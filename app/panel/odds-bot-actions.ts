@@ -22,6 +22,7 @@ import {
   updateOddsSourceText,
   type QueueAction,
 } from '@/lib/special-odds'
+import { addSharedRules } from '@/lib/telegram-mirror'
 import type { OddsFilter, OddsPage, OddsPreview } from '@/lib/special-odds-shared'
 import type { ActionState } from './actions'
 
@@ -104,9 +105,11 @@ export async function addOddsSourceAction(_: ActionState, form: FormData): Promi
       passMode: text(form, 'passMode'),
       passWords: text(form, 'passWords'),
       buttons: text(form, 'buttons'),
+      carryButtons: form.get('carryButtons') === 'on',
     })
+    const moved = await addSharedRules(text(form, 'sharedRules'))
     refresh()
-    return logged('telegram', { ok: true, message: `"${title}" kaynak olarak eklendi.` })
+    return logged('telegram', { ok: true, message: `"${title}" kaynak olarak eklendi.${moved ? ` ${moved} kural ortak kurallara eklendi.` : ''}` })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -115,7 +118,12 @@ export async function addOddsSourceAction(_: ActionState, form: FormData): Promi
 export async function updateOddsSourceRuleAction(_: ActionState, form: FormData): Promise<ActionState> {
   if (!(await canPanel('telegram'))) return EXPIRED
   try {
-    await updateOddsSourceRule(Number(form.get('id')), { passMode: text(form, 'passMode'), passWords: text(form, 'passWords'), buttons: text(form, 'buttons') })
+    await updateOddsSourceRule(Number(form.get('id')), {
+      passMode: text(form, 'passMode'),
+      passWords: text(form, 'passWords'),
+      buttons: text(form, 'buttons'),
+      carryButtons: form.get('carryButtons') === 'on',
+    })
     refresh()
     return logged('telegram', { ok: true, message: 'Kaydedildi. Bundan sonraki postlarda geçerli.' })
   } catch (error) {
@@ -153,8 +161,9 @@ export async function updateOddsSourceTextAction(_: ActionState, form: FormData)
   if (!(await canPanel('telegram'))) return EXPIRED
   try {
     await updateOddsSourceText(Number(form.get('id')), { siteLink: text(form, 'siteLink'), replacements: text(form, 'replacements'), footer: text(form, 'footer') })
+    const moved = await addSharedRules(text(form, 'sharedRules'))
     refresh()
-    return logged('telegram', { ok: true, message: 'Kaydedildi. Bundan sonraki postlarda geçerli.' })
+    return logged('telegram', { ok: true, message: `Kaydedildi. Bundan sonraki postlarda geçerli.${moved ? ` ${moved} kural ortak kurallara taşındı.` : ''}` })
   } catch (error) {
     return { message: errorText(error) }
   }
