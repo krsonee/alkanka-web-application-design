@@ -19,6 +19,8 @@ import type { CareItem, HealthIssue, NotFoundHit, Redirect } from '@/lib/seo-hea
 import type { SiteSeo } from '@/lib/site-seo'
 import { SiteSeoCard, WeeklyCareCard } from '@/components/panel/site-seo-card'
 import { Flash } from '@/components/panel/flash'
+import { PreparedPosts } from '@/components/panel/prepared-posts'
+import type { PreparedRow } from '@/lib/blog-drafts/types'
 
 type Props = {
   posts: BlogPost[]
@@ -31,6 +33,7 @@ type Props = {
   redirects: Redirect[]
   siteSeo: SiteSeo
   care: CareItem[]
+  prepared: PreparedRow[]
 }
 
 const input =
@@ -38,7 +41,7 @@ const input =
 const card = 'flex flex-col gap-4 rounded-2xl border border-border bg-card p-5'
 const label = 'flex flex-col gap-1.5 text-xs font-semibold text-muted-foreground'
 
-export function SeoManager({ posts, deals, publishing, verification, siteUrl, issues, notFound, redirects, siteSeo, care }: Props) {
+export function SeoManager({ posts, deals, publishing, verification, siteUrl, issues, notFound, redirects, siteSeo, care, prepared }: Props) {
   return (
     <div className="flex flex-col gap-6">
       <SetupHub verification={verification} />
@@ -47,6 +50,7 @@ export function SeoManager({ posts, deals, publishing, verification, siteUrl, is
       <SeoGuide />
       <SearchConsoleCard verification={verification} siteUrl={siteUrl} />
       <SeoHealthCard issues={issues} notFound={notFound} redirects={redirects} siteUrl={siteUrl} />
+      <PreparedPosts rows={prepared} />
       <BlogEditor posts={posts} siteUrl={siteUrl} />
       <DealsCard deals={deals} publishing={publishing} />
     </div>

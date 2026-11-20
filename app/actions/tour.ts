@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto'
 import { cookies, headers } from 'next/headers'
 import { getMember } from '@/lib/member'
 import { hashNetwork } from '@/lib/growth'
-import { claimTourReward, getTourState, markTourSeen, type TourClaim, type TourState } from '@/lib/tour'
+import { claimTourReward, getTourPreview, getTourSettings, getTourState, markTourSeen, type TourClaim, type TourState } from '@/lib/tour'
+import type { TourSettings } from '@/lib/tour-config'
 
 const DEVICE_COOKIE = 'alk_tdev'
 
@@ -23,14 +24,15 @@ async function requestContext() {
 export async function getMyTourState(): Promise<TourState | null> {
   const member = await getMember()
   if (!member) return null
-  return getTourState(member.id).catch(() => ({ done: false, rewarded: false }))
+  const { version } = await getTourSettings()
+  return getTourState(member.id, version).catch(() => ({ done: false, rewarded: false }))
 }
 
 export async function markTourSeenAction(): Promise<void> {
   const member = await getMember()
   if (!member) return
-  const { ipHash, deviceId } = await requestContext()
-  await markTourSeen(member.id, ipHash, deviceId).catch((error) => console.error('[tour] kaydedilemedi', error))
+  const [{ ipHash, deviceId }, { version }] = await Promise.all([requestContext(), getTourSettings()])
+  await markTourSeen(member.id, ipHash, deviceId, version).catch((error) => console.error('[tour] kaydedilemedi', error))
 }
 
 export async function completeTourAction(): Promise<TourClaim | { status: 'guest' | 'error'; message?: string }> {
@@ -45,4 +47,9 @@ export async function completeTourAction(): Promise<TourClaim | { status: 'guest
     console.error('[tour] ödül verilemedi', error)
     return { status: 'error', message: 'Ödül şu an verilemedi, tekrar dene.' }
   }
+}
+
+/** The draft a panel preview link points at; null once it has expired or another preview replaced it. */
+export async function getTourPreviewAction(token: string): Promise<TourSettings | null> {
+  return getTourPreview(token)
 }

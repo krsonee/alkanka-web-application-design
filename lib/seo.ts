@@ -65,21 +65,21 @@ export const PAGE_SEO = {
   turnuvalar: {
     path: '/turnuvalar',
     title: 'Tavla, Okey ve Bilardo Turnuvaları',
-    description: 'Tavla, okey ve bilardo turnuvalarına katıl, Kanka Coin ödül havuzunu kap.',
+    description: 'Tavla, okey, bilardo ve kafa topu turnuvalarına katıl. Eleme, lig ve puan ligi formatlarında yarış, Kanka Coin ödül havuzundan payını al.',
     image: '/images/heroes/turnuvalar.png',
     keywords: ['tavla turnuvası', 'okey turnuvası', 'bilardo turnuvası', 'ödüllü turnuva'],
   },
   market: {
     path: '/market',
     title: 'Puan Marketi: Kanka Coin ile Ödül Al',
-    description: 'Topladığın Kanka Coin ile rozet, ekstra hak ve hediye al.',
+    description: 'Topladığın Kanka Coin’i puan marketinde harca: çark ve zar hakkı, seri kalkanı, rozet ve sponsor ödülleri. Ürünleri incele, coinini ödüle çevir.',
     image: '/images/heroes/market.png',
     keywords: ['puan marketi', 'kanka coin', 'ödül marketi'],
   },
   gorevler: {
     path: '/gorevler',
     title: 'Günlük Görevler ve Ödüller',
-    description: 'Günlük ve haftalık görevleri tamamla, Kanka Coin ve ekstra hak kazan.',
+    description: 'Günlük ve haftalık görevleri tamamla, Kanka Coin ve ekstra hak kazan. Oyun oyna, tahmin yap, çarkı çevir; her görevin ödülü ayrı.',
     image: '/images/heroes/gorevler.png',
     keywords: ['günlük görev', 'görev ödülü', 'puan kazan'],
   },
@@ -94,7 +94,7 @@ export const PAGE_SEO = {
   tahminler: {
     path: '/tahminler',
     title: 'Maç Tahminleri ve Tahmin Yarışması',
-    description: 'Maç tahminlerini yap, doğru bil, Kanka Coin kazan.',
+    description: 'Günün maçlarına tahminini yap: maç sonucu, skor, gol alt/üst ve daha fazlası. Doğru bilen Kanka Coin kazanır, tahmin liginde sıralamaya girer.',
     image: '/images/heroes/tahminler.png',
     keywords: ['maç tahminleri', 'tahmin yarışması', 'günün tahminleri'],
   },
@@ -107,38 +107,41 @@ export const PAGE_SEO = {
   siralama: {
     path: '/siralama',
     title: 'Sıralama ve Liderlik Tablosu',
-    description: 'En çok Kanka Coin toplayan üyeler ve haftalık liderlik tablosu.',
+    description: 'En çok Kanka Coin toplayan üyeler ve haftalık liderlik tablosu. Sıranı gör, ilk üçe gir, şampiyon kürsüsünde yerini al.',
     image: '/images/heroes/siralama.png',
     keywords: ['liderlik tablosu', 'sıralama'],
   },
   sampiyonlar: {
     path: '/sampiyonlar',
-    title: 'Şampiyon Kürsüsü',
-    description: 'Her haftanın ve ayın ilk 3 kankası. Kürsüye çıkanlar burada kalıcı olarak yer alır.',
+    title: 'Şampiyon Kürsüsü: Haftanın ve Ayın İlk 3 Kankası',
+    description: 'Her haftanın ve ayın ilk 3 kankası şampiyon kürsüsünde. Kürsüye çıkanlar burada kalıcı olarak yer alır; geçmiş dönemlerin şampiyonlarını da gör.',
     image: '/images/heroes/siralama.png',
     keywords: ['şampiyonlar', 'haftanın şampiyonu', 'kürsü'],
   },
   uygulama: {
     path: '/uygulama',
     title: 'Mobil Uygulama: Ana Ekrana Ekle, Bonus Kazan',
-    description: "AL KANKA'yı Android ve iPhone ana ekranına ekle, uygulamadan giriş yap, bonus KC kazan.",
+    description: "AL KANKA'yı Android ve iPhone ana ekranına ekle, bildirimleri aç, bonus Kanka Coin kazan. Turnuva ve promo kod duyuruları ilk sana gelsin.",
     image: '/images/heroes/uygulama.png',
     keywords: ['al kanka uygulama', 'mobil uygulama', 'apk'],
   },
   sss: {
     path: '/sss',
     title: 'Sıkça Sorulan Sorular',
-    description: 'Kanka Coin, puan marketi, Telegram ve hesap güvenliği hakkında en çok sorulanlar.',
+    description: 'Kanka Coin nedir, nasıl kazanılır, puan marketi nasıl çalışır? Telegram bağlama, ödül teslimi ve hesap güvenliği hakkında en çok sorulanlar.',
     image: '/images/heroes/sss.png',
     keywords: ['al kanka nedir', 'kanka coin nedir', 'sss'],
   },
   rehber: {
     path: '/rehber',
-    title: 'Rehber: Bonus, Oran ve Promo Kod Yazıları',
-    description: 'Bonus kodları nasıl kullanılır, özel oran nedir, deneme bonusu nasıl alınır? Güncel rehber yazıları.',
-    keywords: ['bonus rehberi', 'deneme bonusu nasıl alınır', 'özel oran nedir', 'promo kod nasıl kullanılır'],
+    title: 'Oyun Rehberi: Okey, Tavla, Batak ve Bilardo',
+    description: 'Okey, 101 okey, tavla, batak, pişti ve bilardo nasıl oynanır? Kurallar, puan hesaplama, taktikler ve turnuva rehberleri tek yerde.',
+    keywords: ['okey nasıl oynanır', 'tavla nasıl oynanır', 'batak kuralları', 'bilardo kuralları', 'oyun rehberi'],
   },
 } satisfies Record<string, PageSeo>
+
+/** Shown to members only: served with noindex and kept out of the sitemap. */
+export const MEMBERS_ONLY_PATHS = new Set(['/sponsorlar', '/kampanyalar', '/bonuslar', '/ozel-oranlar'])
 
 export type PageKey = keyof typeof PAGE_SEO
 

@@ -758,11 +758,14 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     section(ctx, 'seo', 'SEO', async () => {
       const { seoHealth, list404, listRedirects, weeklyCare } = await import('@/lib/seo-health')
       const { getSiteSeo } = await import('@/lib/site-seo')
+      const { preparedRows } = await import('@/lib/blog-drafts')
+      const posts = await listPosts({ includeDrafts: true })
       return (
         <SeoManager
           siteSeo={await getSiteSeo()}
           care={await weeklyCare().catch(miss([]))}
-          posts={await listPosts({ includeDrafts: true })}
+          posts={posts}
+          prepared={preparedRows(posts)}
           deals={await listDeals(30)}
           publishing={await dealsPublishing()}
           verification={await getVerification().catch(miss({ google: '', bing: '', yandex: '', meta: '' }))}
@@ -775,13 +778,16 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     }),
     section(ctx, 'faqs', 'Sorular', async () => <FaqsManager faqs={await listFaqs()} />),
     section(ctx, 'tour', 'Site turu', async () => {
-      const { getTourSettings, tourStats } = await import('@/lib/tour')
+      const { getTourSettings, tourStats, tourFunnel, EMPTY_FUNNEL } = await import('@/lib/tour')
       const { TourSettingsEditor } = await import('@/components/panel/tour-settings-editor')
-      const [settings, stats] = await Promise.all([
-        getTourSettings(),
+      const settings = await getTourSettings()
+      const [stats, funnel] = await Promise.all([
         tourStats().catch(miss({ done: 0, rewarded: 0, blocked: 0, paidTotal: 0, recentBlocked: [] })),
+        tourFunnel(settings).catch(miss(EMPTY_FUNNEL)),
       ])
-      return <TourSettingsEditor settings={settings} stats={stats} />
+      const { headers } = await import('next/headers')
+      const onPanelDomain = /(^|\.)alkanka\.shop(:\d+)?$/i.test((await headers()).get('host') ?? '')
+      return <TourSettingsEditor settings={settings} stats={stats} funnel={funnel} siteBase={onPanelDomain ? SITE_URL : ''} />
     }),
     section(ctx, 'sponsors', 'Sponsorlar', async () => (
       <SitesManager sites={await listSites()} today={istanbulToday()} siteUrl={SITE_URL} legacyLogos={(content['logos:sponsors'] as Record<string, string> | undefined) ?? {}} />

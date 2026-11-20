@@ -110,6 +110,25 @@ export async function savePost(input: BlogInput) {
   return slug
 }
 
+/** Adds a guide written ahead of time (lib/blog-drafts): a new one as a draft, an update into the existing text. */
+export async function applyPrepared(slug: string): Promise<'taslak' | 'guncellendi' | 'zaten' | 'yok'> {
+  const { PREPARED_POSTS, withSections } = await import('@/lib/blog-drafts')
+  const prepared = PREPARED_POSTS.find((p) => p.slug === slug)
+  if (!prepared) return 'yok'
+  await ensureTable()
+  const found = await rows<{ id: number; body: string }>(sql`SELECT id, body FROM blog_posts WHERE slug = ${slug}`)
+  if (prepared.kind === 'new') {
+    if (found.length) return 'zaten'
+    await rows(sql`INSERT INTO blog_posts (slug, title, excerpt, body, cover, keywords, published)
+      VALUES (${prepared.slug}, ${prepared.title}, ${prepared.excerpt}, ${prepared.body}, ${prepared.cover}, ${prepared.keywords}, false)`)
+    return 'taslak'
+  }
+  if (!found.length) return 'yok'
+  if (found[0].body.includes(prepared.marker)) return 'zaten'
+  await rows(sql`UPDATE blog_posts SET body = ${withSections(found[0].body, prepared)}, updated_at = now() WHERE id = ${found[0].id}`)
+  return 'guncellendi'
+}
+
 export async function deletePost(id: number) {
   await ensureTable()
   await rows(sql`DELETE FROM blog_posts WHERE id = ${id}`)

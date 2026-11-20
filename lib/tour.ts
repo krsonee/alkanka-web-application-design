@@ -1,8 +1,9 @@
+import { randomUUID } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
 import { getContent, setContent } from '@/lib/content'
 import { credit, getBalance, recordHistory } from '@/lib/member'
 import { ensureGrowth } from '@/lib/growth'
-import { normalizeTourSettings, TOUR_SETTINGS_KEY, type TourSettings } from '@/lib/tour-config'
+import { normalizeTourSettings, tourSteps, TOUR_AUDIENCES, TOUR_SETTINGS_KEY, type TourAudience, type TourSettings } from '@/lib/tour-config'
 
 export async function getTourSettings(): Promise<TourSettings> {
   return normalizeTourSettings(await getContent(TOUR_SETTINGS_KEY).catch(() => null))
@@ -12,6 +13,23 @@ export async function saveTourSettings(input: unknown) {
   const clean = normalizeTourSettings(input)
   await setContent(TOUR_SETTINGS_KEY, clean)
   return clean
+}
+
+const TOUR_PREVIEW_KEY = 'tour:preview'
+const PREVIEW_TTL_MS = 30 * 60_000
+
+/** Parks the panel's unsaved draft for half an hour; one slot, the latest preview wins. */
+export async function saveTourPreview(input: unknown): Promise<string> {
+  const token = randomUUID()
+  await setContent(TOUR_PREVIEW_KEY, { token, at: Date.now(), settings: normalizeTourSettings(input) })
+  return token
+}
+
+export async function getTourPreview(token: unknown): Promise<TourSettings | null> {
+  if (typeof token !== 'string' || !/^[a-f0-9-]{36}$/.test(token)) return null
+  const saved = await getContent<{ token?: string; at?: number; settings?: unknown }>(TOUR_PREVIEW_KEY).catch(() => null)
+  if (!saved || saved.token !== token || Date.now() - Number(saved.at) > PREVIEW_TTL_MS) return null
+  return normalizeTourSettings(saved.settings)
 }
 
 let ready: Promise<unknown> | null = null
@@ -26,6 +44,13 @@ function ensureTable() {
       done_at timestamptz NOT NULL DEFAULT now())`)
     await rows(sql`CREATE UNIQUE INDEX IF NOT EXISTS tour_members_ip_paid ON tour_members (ip_hash) WHERE rewarded > 0 AND ip_hash IS NOT NULL`)
     await rows(sql`CREATE UNIQUE INDEX IF NOT EXISTS tour_members_dev_paid ON tour_members (device_id) WHERE rewarded > 0 AND device_id IS NOT NULL`)
+    await rows(sql`ALTER TABLE tour_members ADD COLUMN IF NOT EXISTS seen_version int NOT NULL DEFAULT 1`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS tour_funnel (
+      audience text NOT NULL,
+      step_id text NOT NULL,
+      seen int NOT NULL DEFAULT 0,
+      exits int NOT NULL DEFAULT 0,
+      PRIMARY KEY (audience, step_id))`)
   })().catch((error) => {
     ready = null
     throw error
@@ -35,43 +60,55 @@ function ensureTable() {
 
 export type TourState = { done: boolean; rewarded: boolean }
 
-export async function getTourState(userId: string): Promise<TourState> {
+/** `done` means the member has seen the tour as it stands now; a re-show raises the version and clears it. */
+export async function getTourState(userId: string, version = 1): Promise<TourState> {
   await ensureTable()
-  const r = await rows<{ rewarded: number }>(sql`SELECT rewarded FROM tour_members WHERE user_id = ${userId}`)
-  return { done: r.length > 0, rewarded: Number(r[0]?.rewarded ?? 0) > 0 }
+  const r = await rows<{ rewarded: number; seen_version: number }>(sql`SELECT rewarded, seen_version FROM tour_members WHERE user_id = ${userId}`)
+  return { done: r.length > 0 && Number(r[0].seen_version) >= version, rewarded: Number(r[0]?.rewarded ?? 0) > 0 }
 }
 
-export async function markTourSeen(userId: string, ipHash: string | null, deviceId: string | null) {
+export async function markTourSeen(userId: string, ipHash: string | null, deviceId: string | null, version = 1) {
   await ensureTable()
-  await rows(sql`INSERT INTO tour_members (user_id, ip_hash, device_id) VALUES (${userId}, ${ipHash}, ${deviceId})
-    ON CONFLICT (user_id) DO NOTHING`)
+  await rows(sql`INSERT INTO tour_members (user_id, ip_hash, device_id, seen_version) VALUES (${userId}, ${ipHash}, ${deviceId}, ${version})
+    ON CONFLICT (user_id) DO UPDATE SET seen_version = GREATEST(tour_members.seen_version, EXCLUDED.seen_version)`)
 }
 
 export type TourClaim =
   | { status: 'awarded'; amount: number; balance: number }
-  | { status: 'already' | 'multi' | 'off' }
+  | { status: 'already' | 'multi' | 'off' | 'cap' }
+  | { status: 'late'; days: number }
 
 /**
  * Pays the completion reward once per member. A second account on the same network (current IP or the
  * signup network) or the same browser is refused; the partial unique indexes make concurrent claims safe too.
+ * The panel's two extra rules come on top: only within N days of signing up, and at most N rewards a day
+ * (the daily limit is checked before paying, so two claims landing together can pass it by one).
  */
 export async function claimTourReward(member: { id: string; name: string }, ipHash: string | null, deviceId: string): Promise<TourClaim> {
   await ensureTable()
   await ensureGrowth()
-  const { reward, enabled } = await getTourSettings()
+  const { reward, enabled, version, rewardDays, rewardDailyCap } = await getTourSettings()
 
   const own = await rows<{ rewarded: number }>(sql`SELECT rewarded FROM tour_members WHERE user_id = ${member.id}`)
   if (Number(own[0]?.rewarded ?? 0) > 0) return { status: 'already' }
 
   const block = async (reason: string) => {
-    await rows(sql`INSERT INTO tour_members (user_id, ip_hash, device_id, blocked) VALUES (${member.id}, ${ipHash}, ${deviceId}, ${reason})
-      ON CONFLICT (user_id) DO UPDATE SET blocked = EXCLUDED.blocked, done_at = now()`)
+    await rows(sql`INSERT INTO tour_members (user_id, ip_hash, device_id, blocked, seen_version) VALUES (${member.id}, ${ipHash}, ${deviceId}, ${reason}, ${version})
+      ON CONFLICT (user_id) DO UPDATE SET blocked = EXCLUDED.blocked, done_at = now(), seen_version = GREATEST(tour_members.seen_version, EXCLUDED.seen_version)`)
     return { status: 'multi' as const }
   }
 
   if (!enabled || reward <= 0) {
-    await markTourSeen(member.id, ipHash, deviceId)
+    await markTourSeen(member.id, ipHash, deviceId, version)
     return { status: 'off' }
+  }
+
+  if (rewardDays > 0) {
+    const fresh = await rows(sql`SELECT 1 FROM public."user" WHERE id = ${member.id} AND "createdAt" > now() - (${rewardDays}::int * interval '1 day')`)
+    if (!fresh.length) {
+      await markTourSeen(member.id, ipHash, deviceId, version)
+      return { status: 'late', days: rewardDays }
+    }
   }
 
   const suspicious = await rows<{ reason: string }>(sql`
@@ -86,9 +123,20 @@ export async function claimTourReward(member: { id: string; name: string }, ipHa
     LIMIT 1`)
   if (suspicious.length) return block(suspicious[0].reason === 'flagged' ? 'işaretli hesap' : 'aynı ağ / cihaz')
 
+  if (rewardDailyCap > 0) {
+    const today = await rows<{ n: string }>(sql`SELECT count(*) AS n FROM tour_members
+      WHERE rewarded > 0 AND done_at >= date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul'`)
+    if (Number(today[0]?.n ?? 0) >= rewardDailyCap) {
+      // Left unpaid and unblocked on purpose: the member can finish the tour again tomorrow and be paid.
+      await markTourSeen(member.id, ipHash, deviceId, version)
+      return { status: 'cap' }
+    }
+  }
+
   try {
-    const paid = await rows(sql`INSERT INTO tour_members (user_id, rewarded, ip_hash, device_id) VALUES (${member.id}, ${reward}, ${ipHash}, ${deviceId})
-      ON CONFLICT (user_id) DO UPDATE SET rewarded = EXCLUDED.rewarded, ip_hash = EXCLUDED.ip_hash, device_id = EXCLUDED.device_id, blocked = NULL, done_at = now()
+    const paid = await rows(sql`INSERT INTO tour_members (user_id, rewarded, ip_hash, device_id, seen_version) VALUES (${member.id}, ${reward}, ${ipHash}, ${deviceId}, ${version})
+      ON CONFLICT (user_id) DO UPDATE SET rewarded = EXCLUDED.rewarded, ip_hash = EXCLUDED.ip_hash, device_id = EXCLUDED.device_id, blocked = NULL, done_at = now(),
+        seen_version = GREATEST(tour_members.seen_version, EXCLUDED.seen_version)
       WHERE tour_members.rewarded = 0 AND tour_members.blocked IS NULL
       RETURNING user_id`)
     if (!paid.length) {
@@ -146,4 +194,68 @@ export async function tourStats(): Promise<TourStats> {
 export async function clearTourBlock(userId: string) {
   await ensureTable()
   await rows(sql`DELETE FROM tour_members WHERE user_id = ${userId} AND rewarded = 0`)
+}
+
+const RUN_ROW = '__run'
+const DONE_ROW = '__done'
+
+/**
+ * One finished or abandoned walk through the tour: which steps were shown and where it was left.
+ * Counted per step instead of per visitor, so a run costs a single statement and no visitor row is kept.
+ */
+export async function trackTourRun(input: unknown): Promise<boolean> {
+  const raw = (input && typeof input === 'object' ? input : {}) as { a?: unknown; seen?: unknown; exit?: unknown; done?: unknown }
+  const audience = TOUR_AUDIENCES.find((a) => a === raw.a)
+  if (!audience || !Array.isArray(raw.seen)) return false
+  const settings = await getTourSettings()
+  if (!settings.enabled) return false
+  const valid = tourSteps(settings, audience).map((s) => s.id)
+  const seen = valid.filter((id) => (raw.seen as unknown[]).includes(id))
+  if (!seen.length) return false
+  const done = raw.done === true
+  const exit = !done && typeof raw.exit === 'string' && seen.includes(raw.exit) ? raw.exit : null
+  const ids = [RUN_ROW, ...seen, ...(done ? [DONE_ROW] : [])]
+  await ensureTable()
+  await rows(sql`INSERT INTO tour_funnel (audience, step_id, seen, exits)
+    SELECT ${audience}, s.id, 1, CASE WHEN s.id = ${exit}::text THEN 1 ELSE 0 END
+    FROM jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb) AS s(id)
+    ON CONFLICT (audience, step_id) DO UPDATE SET seen = tour_funnel.seen + 1, exits = tour_funnel.exits + EXCLUDED.exits`)
+  return true
+}
+
+export type TourFunnelStep = { id: string; title: string; seen: number; exits: number }
+export type TourFunnel = Record<TourAudience, { runs: number; finished: number; steps: TourFunnelStep[] }>
+
+export const EMPTY_FUNNEL: TourFunnel = { guest: { runs: 0, finished: 0, steps: [] }, member: { runs: 0, finished: 0, steps: [] } }
+
+export async function tourFunnel(settings: TourSettings): Promise<TourFunnel> {
+  await ensureTable()
+  const data = await rows<{ audience: string; step_id: string; seen: number; exits: number }>(sql`SELECT audience, step_id, seen, exits FROM tour_funnel`)
+  const at = (audience: TourAudience, id: string) => data.find((r) => r.audience === audience && r.step_id === id)
+  return Object.fromEntries(
+    TOUR_AUDIENCES.map((audience) => [
+      audience,
+      {
+        runs: Number(at(audience, RUN_ROW)?.seen ?? 0),
+        finished: Number(at(audience, DONE_ROW)?.seen ?? 0),
+        steps: tourSteps(settings, audience).map((s) => ({
+          id: s.id,
+          title: s.title,
+          seen: Number(at(audience, s.id)?.seen ?? 0),
+          exits: Number(at(audience, s.id)?.exits ?? 0),
+        })),
+      },
+    ]),
+  ) as TourFunnel
+}
+
+export async function resetTourFunnel() {
+  await ensureTable()
+  await rows(sql`DELETE FROM tour_funnel`)
+}
+
+/** Shows the tour once more to everyone who already saw it. The reward stays once per member. */
+export async function reshowTour(note: string) {
+  const current = await getTourSettings()
+  return saveTourSettings({ ...current, version: current.version + 1, versionNote: note })
 }

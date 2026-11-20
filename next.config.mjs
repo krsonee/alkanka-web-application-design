@@ -1,3 +1,5 @@
+import { CODE_REDIRECTS } from './lib/seo-redirects.mjs'
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   poweredByHeader: false,
@@ -27,19 +29,7 @@ const nextConfig = {
     }
   },
   async redirects() {
-    return [
-      { source: '/firsatlar', destination: '/ozel-oranlar', permanent: true },
-      { source: '/firsatlar/:slug*', destination: '/ozel-oranlar', permanent: true },
-      { source: '/biletler', destination: '/tahminler', permanent: true },
-      { source: '/tahmin-ligi', destination: '/tahminler', permanent: true },
-      { source: '/turnuva', destination: '/turnuvalar', permanent: true },
-      { source: '/shop', destination: '/market', permanent: true },
-      { source: '/oyunlar/canli', destination: '/oyunlar', permanent: true },
-      { source: '/oyunlar/sans-carki', destination: '/oyunlar/cark', permanent: true },
-      { source: '/oyunlar/gizemli-sandik', destination: '/oyunlar/sandik', permanent: true },
-      { source: '/oyunlar/zar-at', destination: '/oyunlar/zar', permanent: true },
-      { source: '/oyunlar/jakopoly', destination: '/oyunlar/monopoly', permanent: true },
-    ]
+    return CODE_REDIRECTS.map(([source, destination]) => ({ source, destination, permanent: true }))
   },
   async headers() {
     const noindex = [{ key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' }]

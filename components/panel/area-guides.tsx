@@ -463,6 +463,18 @@ const SEO_STEPS: GuideStep[] = [
     ),
   },
   {
+    title: 'Hazır yazılar: önceden yazılmış metinleri eklemek',
+    body: (
+      <ul className={ul}>
+        <li>Aşağıdaki <b>Hazır yazılar</b> kutusunda senin için önceden yazılmış rehber metinleri durur. Düğmeye basmadan hiçbiri siteye çıkmaz.</li>
+        <li><b>Yeni yazı</b>: “Taslak olarak ekle” yazıyı taslak olarak kaydeder. Rehber yazıları listesinden açıp oku, gerekiyorsa düzelt, sonra “Yayında” işaretleyip kaydet.</li>
+        <li><b>Mevcut yazıya ek</b>: Kısa kalan bir yazıya yeni bölümler ekler. Eski metin silinmez, bölümler “Sıkça sorulan sorular” başlığının hemen üstüne girer. Yazı yayındaysa değişiklik sitede de görünür.</li>
+        <li>Eklenen yazının yanında “Eklendi” yazar; aynı metin ikinci kez eklenmez.</li>
+        <li><b>Sayfa başlığı uyarıları</b>: SEO sağlığı listesinde “Sayfa: /market” gibi satırlar, sitenin sabit sayfalarının başlık ve açıklama uzunluğunu denetler. Bu metinler kodda durur; uyarı çıkarsa geliştiriciye ilet.</li>
+      </ul>
+    ),
+  },
+  {
     title: 'Kesinlikle yapma listesi',
     body: (
       <ul className={ul}>
