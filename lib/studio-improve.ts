@@ -12,7 +12,7 @@ import {
   type StudioFlow,
 } from '@/lib/studio-brief'
 
-const MODEL = 'google/gemini-3.5-flash-lite'
+const MODEL = 'google/gemini-3.5-flash'
 
 const FLOW_NOTE: Record<StudioFlow, string> = {
   banner: 'The result is a still advertising banner.',

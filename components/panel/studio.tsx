@@ -31,22 +31,36 @@ import {
   saveStudioCapAction,
   studioToSlideAction,
 } from '@/app/panel/studio-actions'
+import { BriefFields, MotionFields } from '@/components/panel/studio-brief-form'
 import { StudioGuide, StudioHint } from '@/components/panel/studio-guide'
 import { amountInput } from '@/lib/amount'
+import {
+  briefProblem,
+  EMPTY_BRIEF,
+  EMPTY_MOTION,
+  matchAssets,
+  type Brief,
+  type Motion,
+  type Recipe,
+  type StudioFlow,
+} from '@/lib/studio-brief'
 import {
   budgetState,
   usd,
   DEFAULT_IMAGE_SIZE,
   EMPTY_TEXTS,
+  GIF_DURATIONS,
+  gifCost,
   IMAGE_SIZES,
   imageCost,
   sameTexts,
+  STICKER_MOTION_COST,
   STUDIO_CATEGORIES,
   STUDIO_FORMATS,
   TEXT_LIMITS,
-  VIDEO_DURATIONS,
   videoCost,
   type ImageSize,
+  type MotionQuality,
   type StudioAsset,
   type StudioBrand,
   type StudioJob,
@@ -57,7 +71,9 @@ import {
 import { cn } from '@/lib/utils'
 
 type StudioView = 'guide' | 'create' | 'brands' | 'library'
-type AnimateOptions = { mode: 'gif' | 'aigif' | 'video' | 'tgsticker' | 'tgicon'; duration: number; audio: boolean; motion: string }
+type AnimateMode = 'gif' | 'aigif' | 'video' | 'tgsticker' | 'tgmotion' | 'tgicon'
+type AnimateOptions = { mode: AnimateMode; duration: number; audio: boolean; motion: Motion; quality: MotionQuality }
+const PAID_MOTION: AnimateMode[] = ['aigif', 'video', 'tgmotion']
 
 type Props = {
   brands: StudioBrand[]
@@ -219,11 +235,11 @@ export function Studio({ brands, assets, jobs, spend, budget, canSlide }: Props)
 
 function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' | 'assets' | 'jobs' | 'canSlide'> & { left: number | null }) {
   const router = useRouter()
-  const [kind, setKind] = useState<StudioKind>('banner')
+  const [flow, setFlow] = useState<StudioFlow>('banner')
   const [brandId, setBrandId] = useState<number | ''>(brands[0]?.id ?? '')
   const [formats, setFormats] = useState<string[]>(['1:1'])
   const [category, setCategory] = useState<string>(STUDIO_CATEGORIES[0])
-  const [prompt, setPrompt] = useState('')
+  const [brief, setBrief] = useState<Brief>(EMPTY_BRIEF)
   const [picked, setPicked] = useState<number[]>([])
   const [running, setRunning] = useState(0)
   const [error, setError] = useState('')
@@ -232,8 +248,15 @@ function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' 
   const [revision, setRevision] = useState('')
   const [animating, setAnimating] = useState<StudioJob | null>(null)
   const [duration, setDuration] = useState<number>(6)
+  const [gifSeconds, setGifSeconds] = useState<number>(GIF_DURATIONS[0])
   const [audio, setAudio] = useState(false)
-  const [motion, setMotion] = useState('')
+  const [motion, setMotion] = useState<Motion>(EMPTY_MOTION)
+  const [quality, setQuality] = useState<MotionQuality>('sd')
+  // The GIF flow can also make the free light effect, where the picture itself does not move.
+  const [gifReal, setGifReal] = useState(true)
+  const [outline, setOutline] = useState(true)
+  const [stickerMoves, setStickerMoves] = useState(false)
+  const [animFlow, setAnimFlow] = useState<'gif' | 'video'>('gif')
   const [videoRuns, setVideoRuns] = useState(0)
 
   const [mascotOn, setMascotOn] = useState(true)
@@ -243,8 +266,29 @@ function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' 
 
   const brand = brands.find((b) => b.id === brandId)
   const useMascot = Boolean(brand?.mascot) && mascotOn
-  const runs = kind === 'sticker' ? ['1:1'] : formats
-  const unitCost = imageCost(kind === 'sticker' ? '1K' : size) + (kind === 'video' ? videoCost(duration, audio) : 0)
+  const runs = flow === 'sticker' ? ['1:1'] : formats
+  const clipCost = videoCost(duration, audio, quality === 'hd')
+  const realGifCost = gifCost(gifSeconds, quality)
+  const followUp: AnimateMode | null =
+    flow === 'video' ? 'video' : flow === 'gif' ? (gifReal ? 'aigif' : 'gif') : flow === 'sticker' && stickerMoves ? 'tgmotion' : null
+  const followCost = followUp === 'video' ? clipCost : followUp === 'aigif' ? realGifCost : followUp === 'tgmotion' ? STICKER_MOTION_COST : 0
+  const unitCost = imageCost(flow === 'sticker' ? '1K' : size) + followCost
+  const animCost = animFlow === 'gif' ? realGifCost : clipCost
+  const motionOptions = (mode: AnimateMode): AnimateOptions => ({
+    mode,
+    duration: mode === 'aigif' ? gifSeconds : duration,
+    audio,
+    motion,
+    quality,
+  })
+  const suggested = matchAssets(`${brief.subject} ${brief.scene} ${brief.character}`, assets).filter((id) => !picked.includes(id))
+
+  function applyRecipe(recipe: Recipe) {
+    setBrief({ ...EMPTY_BRIEF, ...recipe.brief })
+    setMotion({ ...EMPTY_MOTION, ...recipe.motion })
+    // Copy the user already typed is never replaced by the recipe's example.
+    if (flow !== 'sticker' && recipe.texts && sameTexts(texts, EMPTY_TEXTS)) setTexts({ ...EMPTY_TEXTS, ...recipe.texts })
+  }
   const textsChanged = revising?.kind === 'banner' && !sameTexts(revisedTexts, revising.texts)
   // Copy-only changes are re-printed on the stored text-free picture, so they cost nothing.
   const retextOnly = Boolean(revising?.retextable) && textsChanged && revision.trim().length < 5
@@ -280,7 +324,7 @@ function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' 
   }
 
   async function animate(job: StudioJob, options: AnimateOptions) {
-    const isVideo = options.mode === 'video' || options.mode === 'aigif'
+    const isVideo = PAID_MOTION.includes(options.mode)
     if (isVideo) setVideoRuns((n) => n + 1)
     else setRunning((n) => n + 1)
     try {
@@ -293,15 +337,14 @@ function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' 
 
   async function start() {
     setError('')
-    if (prompt.trim().length < 5) return setError('Talimatı yaz (en az 5 karakter).')
+    const problem = briefProblem(brief)
+    if (problem) return setError(problem)
     if (!runs.length) return setError('En az bir format seç.')
-    const baseKind = kind === 'sticker' ? 'sticker' : 'banner'
+    const baseKind = flow === 'sticker' ? 'sticker' : 'banner'
     await Promise.all(
       runs.map(async (format) => {
-        const banner = await generate({ kind: baseKind, format, category, prompt, brandId, assetIds: picked, useMascot, size, texts })
-        if (banner && (kind === 'gif' || kind === 'video')) {
-          await animate(banner, { mode: kind, duration, audio, motion })
-        }
+        const made = await generate({ kind: baseKind, format, category, brief, brandId, assetIds: picked, useMascot, size, texts, outline })
+        if (made && followUp) await animate(made, motionOptions(followUp))
       }),
     )
     router.refresh()
@@ -312,7 +355,7 @@ function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' 
     setError('')
     const job = animating
     setAnimating(null)
-    await animate(job, { mode, duration, audio, motion })
+    await animate(job, motionOptions(mode))
     router.refresh()
   }
 
@@ -350,19 +393,19 @@ function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' 
           {(
             [
               ['banner', 'Görsel / Banner', ImagePlus],
-              ['sticker', 'Sticker', Sticker],
               ['gif', 'Hareketli GIF', Film],
               ['video', 'Video', Clapperboard],
+              ['sticker', 'Sticker', Sticker],
             ] as const
           ).map(([key, text, Icon]) => (
             <button
               key={key}
               type="button"
-              onClick={() => setKind(key)}
-              aria-pressed={kind === key}
+              onClick={() => setFlow(key)}
+              aria-pressed={flow === key}
               className={cn(
                 'flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold',
-                kind === key ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground',
+                flow === key ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground',
               )}
             >
               <Icon className="size-4" aria-hidden />
@@ -412,7 +455,7 @@ function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' 
           </label>
         ) : null}
 
-        {kind !== 'sticker' ? (
+        {flow !== 'sticker' ? (
           <>
             <fieldset className={label}>
               <legend className="mb-1.5">Formatlar (birden fazla seçersen hepsi aynı anda üretilir)</legend>
@@ -471,29 +514,69 @@ function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' 
           </>
         ) : null}
 
-        <label className={label}>
-          {kind === 'sticker' ? 'Talimat' : 'Talimat (sadece görseli anlat)'}
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            rows={5}
-            maxLength={1500}
-            placeholder={
-              kind === 'sticker'
-                ? 'Örn: Zeus karakteri göz kırpıyor, üstünde "Kod Geliyor!" yazısı'
-                : 'Örn: Zeus karakteri şimşek tutuyor, arkada altın paralar ve mor bulutlar, sinematik ışık'
-            }
-            className={cn(input, 'resize-y leading-relaxed')}
-          />
-        </label>
-
-        {kind === 'gif' ? (
-          <p className="rounded-xl bg-secondary p-3 text-xs leading-relaxed text-muted-foreground">
-            Önce banner üretilir, sonra sabit banner üstünden ışık süpürmesi, yanıp sönen yıldız parıltıları ve kenar parlaması olan döngülü bir GIF yapılır. Ücretsizdir, logo ve yazılar hiç kıpırdamaz. Karakterin gerçekten hareket etmesini istersen banner hazır olunca &quot;Hareketlendir&quot; içinden &quot;Yapay zeka GIF&quot; seç.
-          </p>
+        <BriefFields flow={flow} brief={brief} onBrief={setBrief} motion={motion} onMotion={setMotion} onRecipe={applyRecipe} />
+        {suggested.length && picked.length < 3 ? (
+          <button type="button" onClick={() => setPicked((p) => [...p, ...suggested].slice(0, 3))} className={ghostBtn}>
+            {`Kütüphanede adı geçen ${suggested.length} görsel var · referans olarak ekle`}
+          </button>
         ) : null}
-        {kind === 'video' ? (
-          <VideoOptions duration={duration} setDuration={setDuration} audio={audio} setAudio={setAudio} motion={motion} setMotion={setMotion} />
+
+        {flow === 'gif' ? (
+          <fieldset className={label}>
+            <legend className="mb-1.5">GIF nasıl hareket etsin</legend>
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  [true, 'Gerçek hareket', 'Karakter ve sahne oynar · ücretli'],
+                  [false, 'Işık efekti', 'Görsel durur, üstünden ışık geçer · ücretsiz'],
+                ] as const
+              ).map(([real, name, about]) => (
+                <button
+                  key={name}
+                  type="button"
+                  aria-pressed={gifReal === real}
+                  onClick={() => setGifReal(real)}
+                  className={cn(
+                    'flex flex-col items-center gap-0.5 rounded-xl border px-2 py-2 text-center text-xs',
+                    gifReal === real ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground',
+                  )}
+                >
+                  <span className="font-bold">{name}</span>
+                  <span className="text-pretty font-normal">{about}</span>
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        ) : null}
+        {flow === 'video' || flow === 'sticker' || (flow === 'gif' && gifReal) ? (
+          <MotionFields
+            flow={flow}
+            motion={motion}
+            onMotion={setMotion}
+            duration={duration}
+            setDuration={setDuration}
+            gifSeconds={gifSeconds}
+            setGifSeconds={setGifSeconds}
+            audio={audio}
+            setAudio={setAudio}
+            quality={quality}
+            setQuality={setQuality}
+          />
+        ) : null}
+        {flow === 'sticker' ? (
+          <div className="flex flex-col gap-2 rounded-xl border border-border p-3 text-xs font-semibold text-muted-foreground">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={outline} onChange={(e) => setOutline(e.target.checked)} className="size-4 accent-primary" />
+              Beyaz kenar çizgisi ekle
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={stickerMoves} onChange={(e) => setStickerMoves(e.target.checked)} className="size-4 accent-primary" />
+              {`Hareketlisini de üret (Telegram video sticker) · ~${usd(STICKER_MOTION_COST)}`}
+            </label>
+            <p className="font-normal leading-relaxed">
+              Sticker şeffaf arka planla, Telegram ölçüsünde (512 px) çıkar. Hareketlisini sonradan sticker kartındaki düğmeyle de üretebilirsin.
+            </p>
+          </div>
         ) : null}
 
         {assets.length ? (
@@ -584,24 +667,55 @@ function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' 
             <div className="flex flex-col gap-4 md:flex-row">
               <img src={animating.url || '/placeholder.svg'} alt="Hareketlendirilecek banner" className="h-32 self-start rounded-lg object-contain" />
               <div className="flex flex-1 flex-col gap-3">
-                <VideoOptions duration={duration} setDuration={setDuration} audio={audio} setAudio={setAudio} motion={motion} setMotion={setMotion} />
+                <div className="flex gap-1.5" role="group" aria-label="Çıktı türü">
+                  {(
+                    [
+                      ['gif', 'Hareketli GIF'],
+                      ['video', 'Video'],
+                    ] as const
+                  ).map(([key, name]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      aria-pressed={animFlow === key}
+                      onClick={() => setAnimFlow(key)}
+                      className={cn(
+                        'rounded-lg border px-3 py-1.5 text-xs font-bold',
+                        animFlow === key ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground',
+                      )}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+                <MotionFields
+                  flow={animFlow}
+                  motion={motion}
+                  onMotion={setMotion}
+                  duration={duration}
+                  setDuration={setDuration}
+                  gifSeconds={gifSeconds}
+                  setGifSeconds={setGifSeconds}
+                  audio={audio}
+                  setAudio={setAudio}
+                  quality={quality}
+                  setQuality={setQuality}
+                />
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => runAnimation('gif')} className={ghostBtn}>
-                <Film className="size-3.5" aria-hidden /> Efekt GIF · ücretsiz
+              <button type="button" onClick={() => runAnimation(animFlow === 'gif' ? 'aigif' : 'video')} disabled={overCap(animCost)} className={primaryBtn}>
+                {animFlow === 'gif' ? <Film className="size-4" aria-hidden /> : <Clapperboard className="size-4" aria-hidden />}
+                {`${animFlow === 'gif' ? 'Hareketli GIF üret' : 'Video üret'} · ~${usd(animCost)}`}
               </button>
-              <button type="button" onClick={() => runAnimation('aigif')} disabled={overCap(videoCost(4, false, false))} className={ghostBtn}>
-                <Film className="size-3.5" aria-hidden /> Yapay zeka GIF · ~{usd(videoCost(4, false, false))}
-              </button>
-              <button type="button" onClick={() => runAnimation('video')} disabled={overCap(videoCost(duration, audio))} className={primaryBtn}>
-                <Clapperboard className="size-4" aria-hidden /> Video üret · ~{usd(videoCost(duration, audio))}
+              <button type="button" onClick={() => runAnimation('gif')} className={ghostBtn} title="Görsel durur, üstünden ışık geçer">
+                <Film className="size-3.5" aria-hidden /> Işık efektli GIF · ücretsiz
               </button>
               <button type="button" onClick={() => setAnimating(null)} className={ghostBtn}>
                 Vazgeç
               </button>
             </div>
-            {overCap(videoCost(duration, audio)) ? <CapNote cost={videoCost(duration, audio)} left={left} /> : null}
+            {overCap(animCost) ? <CapNote cost={animCost} left={left} /> : null}
           </div>
         ) : null}
 
@@ -610,7 +724,7 @@ function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' 
             <Sparkles className="size-8 text-primary" aria-hidden />
             <p className="font-semibold text-foreground">Henüz üretim yok</p>
             <p className="max-w-sm text-sm text-muted-foreground">
-              Soldan markayı seç, talimatı yaz ve üret. Logo yapay zekaya çizdirilmez, kitteki orijinal logo birebir basılır.
+              Soldan işi ve markayı seç, formu doldur ve üret. Logo yapay zekaya çizdirilmez, kitteki orijinal logo birebir basılır.
             </p>
           </div>
         ) : null}
@@ -625,7 +739,7 @@ function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' 
           {Array.from({ length: videoRuns }).map((_, i) => (
             <div key={`video-${i}`} className="flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card p-4 text-center">
               <Clapperboard className="size-6 animate-pulse text-primary" aria-hidden />
-              <span className="text-xs text-muted-foreground">Video üretiliyor, 1-3 dk sürer. Sayfadan ayrılma.</span>
+              <span className="text-xs text-muted-foreground">Hareket üretiliyor, 1-3 dk sürer. Sayfadan ayrılma.</span>
             </div>
           ))}
           {shown.map((job) => (
@@ -635,9 +749,10 @@ function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' 
               canSlide={canSlide}
               onRevise={() => openRevision(job)}
               onAnimate={() => setAnimating(job)}
+              motionOff={overCap(STICKER_MOTION_COST)}
               onTelegram={async (mode) => {
                 setError('')
-                await animate(job, { mode, duration, audio, motion })
+                await animate(job, motionOptions(mode))
                 router.refresh()
               }}
             />
@@ -694,75 +809,21 @@ function TextFields({ value, onChange }: { value: StudioTexts; onChange: (texts:
   )
 }
 
-function VideoOptions({
-  duration,
-  setDuration,
-  audio,
-  setAudio,
-  motion,
-  setMotion,
-}: {
-  duration: number
-  setDuration: (n: number) => void
-  audio: boolean
-  setAudio: (b: boolean) => void
-  motion: string
-  setMotion: (s: string) => void
-}) {
-  return (
-    <div className="flex flex-col gap-3">
-      <label className={label}>
-        Hareket talimatı (opsiyonel)
-        <textarea
-          value={motion}
-          onChange={(e) => setMotion(e.target.value)}
-          rows={2}
-          maxLength={600}
-          placeholder="Örn: karakter kılıcını kaldırıyor, arkada altın paralar yağıyor, kamera yavaşça yaklaşıyor"
-          className={cn(input, 'resize-y')}
-        />
-      </label>
-      <div className="flex flex-wrap items-end gap-4">
-        <fieldset className={label}>
-          <legend className="mb-1.5">Video süresi</legend>
-          <div className="flex gap-1">
-            {VIDEO_DURATIONS.map((d) => (
-              <button
-                key={d}
-                type="button"
-                aria-pressed={duration === d}
-                onClick={() => setDuration(d)}
-                className={cn(
-                  'rounded-lg border px-3 py-1.5 text-xs font-bold',
-                  duration === d ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground',
-                )}
-              >
-                {d} sn
-              </button>
-            ))}
-          </div>
-        </fieldset>
-        <label className="flex items-center gap-2 pb-1.5 text-xs font-semibold text-muted-foreground">
-          <input type="checkbox" checked={audio} onChange={(e) => setAudio(e.target.checked)} className="size-4 accent-primary" />
-          Ses / müzik ekle
-        </label>
-      </div>
-    </div>
-  )
-}
-
 function JobCard({
   job,
   onRevise,
   onAnimate,
   onTelegram,
+  motionOff,
   canSlide,
 }: {
   job: StudioJob
   canSlide: boolean
   onRevise: () => void
   onAnimate: () => void
-  onTelegram?: (mode: 'tgsticker' | 'tgicon') => void
+  onTelegram?: (mode: 'tgsticker' | 'tgmotion' | 'tgicon') => void
+  /** The monthly cap has no room left for a model-animated sticker. */
+  motionOff?: boolean
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -829,8 +890,22 @@ function JobCard({
           ) : null}
           {job.kind === 'sticker' && onTelegram ? (
             <>
-              <button type="button" onClick={() => onTelegram('tgsticker')} className={ghostBtn} title={TELEGRAM_LIMITS.tgsticker.label}>
-                <Film className="size-3.5" aria-hidden /> Telegram hareketli
+              <button
+                type="button"
+                onClick={() => onTelegram('tgmotion')}
+                disabled={motionOff}
+                className={ghostBtn}
+                title={`Karakter gerçekten hareket eder; soldaki "Ne hareket etsin" alanını kullanır. ${TELEGRAM_LIMITS.tgsticker.label}`}
+              >
+                <Film className="size-3.5" aria-hidden /> {`Hareketlendir · ~${usd(STICKER_MOTION_COST)}`}
+              </button>
+              <button
+                type="button"
+                onClick={() => onTelegram('tgsticker')}
+                className={ghostBtn}
+                title={`Sticker olduğu gibi hafifçe sallanır. ${TELEGRAM_LIMITS.tgsticker.label}`}
+              >
+                Sallanma · ücretsiz
               </button>
               <button type="button" onClick={() => onTelegram('tgicon')} className={ghostBtn} title={TELEGRAM_LIMITS.tgicon.label}>
                 Paket ikonu
