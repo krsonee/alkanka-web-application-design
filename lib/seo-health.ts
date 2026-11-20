@@ -1,6 +1,8 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { listPosts } from '@/lib/blog'
+import { MEMBERS_ONLY_PATHS, PAGE_SEO, SITE_NAME } from '@/lib/seo'
+import { codeRedirected } from '@/lib/seo-redirects.mjs'
 
 export type HealthIssue = { level: 'hata' | 'uyari'; target: string; href: string; message: string }
 export type NotFoundHit = { path: string; hits: number; referrer: string; lastSeen: string }
@@ -44,7 +46,7 @@ export async function log404(rawPath: string, referrer: string) {
   // Preview/dev servers share the production database; their compile-time 404s would pollute the report.
   if (process.env.NODE_ENV !== 'production' || process.env.VERCEL_ENV === 'preview') return
   const path = normalizePath(rawPath)
-  if (!path || path === '/' || IGNORED_404.test(path) || STATIC_PAGES.has(path)) return
+  if (!path || path === '/' || IGNORED_404.test(path) || STATIC_PAGES.has(path) || codeRedirected(path)) return
   await ensureSeoTables()
   const ref = referrer.slice(0, 300)
   await rows(sql`INSERT INTO seo_404 (path, referrer) VALUES (${path}, ${ref})
@@ -60,7 +62,7 @@ export async function list404(limit = 50): Promise<NotFoundHit[]> {
       ORDER BY n.hits DESC, n.last_seen DESC LIMIT ${limit}`,
   )
   return data
-    .filter((r) => !STATIC_PAGES.has(r.path))
+    .filter((r) => !STATIC_PAGES.has(r.path) && !codeRedirected(r.path))
     .map((r) => ({ path: r.path, hits: Number(r.hits), referrer: r.referrer, lastSeen: new Date(r.last_seen).toISOString() }))
 }
 
@@ -194,6 +196,16 @@ export async function seoHealth(): Promise<HealthIssue[]> {
 
     const age = Date.now() - new Date(p.updatedAt).getTime()
     if (age > 1000 * 60 * 60 * 24 * 180) add('uyari', '6 aydır güncellenmemiş. Bilgileri tazele, tarih otomatik güncellenir.')
+  }
+
+  for (const [key, page] of Object.entries(PAGE_SEO) as [string, { path: string; title: string; description: string }][]) {
+    // The home page is edited in the panel (Site SEO card); members-only pages are noindex.
+    if (key === 'anasayfa' || MEMBERS_ONLY_PATHS.has(page.path)) continue
+    const add = (message: string) => issues.push({ level: 'uyari', target: `Sayfa: ${page.path}`, href: page.path, message })
+    const full = page.title.length + SITE_NAME.length + 3
+    if (full > 62) add(`Sayfa başlığı ${full} karakter. Google 60 karakterden sonrasını keser. Metin kodda durur, düzeltmeyi geliştiriciye ilet.`)
+    if (page.description.length < 100) add(`Sayfa açıklaması ${page.description.length} karakter, çok kısa (120–155 ideal). Metin kodda durur, düzeltmeyi geliştiriciye ilet.`)
+    if (page.description.length > 160) add(`Sayfa açıklaması ${page.description.length} karakter, 155 civarına inmeli. Metin kodda durur, düzeltmeyi geliştiriciye ilet.`)
   }
 
   try {

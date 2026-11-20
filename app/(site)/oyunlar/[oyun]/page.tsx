@@ -32,6 +32,12 @@ const MINI_DESCRIPTIONS: Record<MiniKey, string> = {
   zar: 'Zar At oyununda zarları salla, gelen sayıya göre Kanka Coin kazan. Ücretsiz günlük haklarla oyna.',
 }
 
+const MINI_SEO_TITLES: Record<MiniKey, string> = {
+  cark: 'Şans Çarkı: Her Gün Ücretsiz Çevir, Coin Kazan',
+  sandik: 'Gizemli Sandık: Her Gün Ücretsiz Sandık Aç',
+  zar: 'Zar At: Ücretsiz Günlük Zar Oyunu',
+}
+
 const describe = (oyun: string) =>
   isArenaGame(oyun)
     ? `${ARENA_META[oyun].short} AL KANKA’da ücretsiz ${TITLES[oyun]} oyna, Kanka Coin kazan.`
@@ -67,7 +73,7 @@ function gameLd(oyun: string) {
 export async function generateMetadata({ params }: { params: Promise<{ oyun: string }> }): Promise<Metadata> {
   const { oyun } = await params
   if (!(oyun in TITLES)) notFound()
-  const title = TITLES[oyun]
+  const title = isArenaGame(oyun) ? `${TITLES[oyun]} Oyna — Ücretsiz, Kanka Coin Kazan` : MINI_SEO_TITLES[oyun as MiniKey]
   const description = describe(oyun)
   const path = `/oyunlar/${oyun}`
   const image = shareImage(imageOf(oyun))
