@@ -17,6 +17,7 @@ import {
 import type { ActionState } from '@/app/panel/actions'
 import type { MirrorBot, MirrorTarget } from '@/lib/telegram-mirror'
 import type { ApprovalKind, BotSuite, OddsDeal, ShareRule, ShareStatus } from '@/lib/telegram-bots'
+import { ButtonRows, type LinkChoice } from './tg-button-rows'
 
 const input = 'rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none'
 const label = 'flex flex-col gap-1.5 text-sm font-medium text-foreground'
@@ -81,7 +82,19 @@ function TargetChecks({ targets, selected, emptyText }: { targets: MirrorTarget[
   )
 }
 
-export function ShareSection({ suite, bots, targets, status }: { suite: BotSuite; bots: MirrorBot[]; targets: MirrorTarget[]; status: ShareStatus }) {
+export function ShareSection({
+  suite,
+  bots,
+  targets,
+  status,
+  links = [],
+}: {
+  suite: BotSuite
+  bots: MirrorBot[]
+  targets: MirrorTarget[]
+  status: ShareStatus
+  links?: LinkChoice[]
+}) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveShareAction, {})
   const [adding, setAdding] = useState(false)
   const s = suite.share
@@ -142,17 +155,17 @@ export function ShareSection({ suite, bots, targets, status }: { suite: BotSuite
           )}
         </div>
         {!s.botId && <p className={hint}>Sponsor eklemek için önce paylaşım botunu seçip kaydet.</p>}
-        {adding && <ShareRuleForm targets={targets} onDone={() => setAdding(false)} />}
+        {adding && <ShareRuleForm targets={targets} links={links} onDone={() => setAdding(false)} />}
         {s.rules.length === 0 && !adding && s.botId && <p className={hint}>Henüz sponsor yok. &quot;Sponsor ekle&quot; ile başla.</p>}
         {s.rules.map((rule) => (
-          <ShareRuleCard key={rule.id} rule={rule} targets={targets} />
+          <ShareRuleCard key={rule.id} rule={rule} targets={targets} links={links} />
         ))}
       </div>
     </section>
   )
 }
 
-function ShareRuleCard({ rule, targets }: { rule: ShareRule; targets: MirrorTarget[] }) {
+function ShareRuleCard({ rule, targets, links }: { rule: ShareRule; targets: MirrorTarget[]; links: LinkChoice[] }) {
   const [open, setOpen] = useState(false)
   const [delState, delAction, deleting] = useActionState<ActionState, FormData>(deleteShareRuleAction, {})
   const targetNames = targets.filter((t) => rule.targetIds.includes(t.id)).map((t) => t.title)
@@ -166,7 +179,8 @@ function ShareRuleCard({ rule, targets }: { rule: ShareRule; targets: MirrorTarg
             {!rule.enabled && <span className="text-xs text-muted-foreground">(kapalı)</span>}
           </div>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Grup: {rule.sourceTitle} · Tetik: {rule.trigger || 'her post'} · Kanallar: {targetNames.join(', ') || 'yok'}
+            Grup: {rule.sourceTitle} · Tetik: {rule.trigger || 'her post'} · Kanallar: {targetNames.join(', ') || 'yok'} ·{' '}
+            {rule.buttons.length ? `${rule.buttons.length} buton` : 'buton yok'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -200,12 +214,12 @@ function ShareRuleCard({ rule, targets }: { rule: ShareRule; targets: MirrorTarg
         </div>
       </div>
       <Status state={delState} />
-      {open && <ShareRuleForm rule={rule} targets={targets} onDone={() => setOpen(false)} />}
+      {open && <ShareRuleForm rule={rule} targets={targets} links={links} onDone={() => setOpen(false)} />}
     </div>
   )
 }
 
-function ShareRuleForm({ rule, targets, onDone }: { rule?: ShareRule; targets: MirrorTarget[]; onDone: () => void }) {
+function ShareRuleForm({ rule, targets, links, onDone }: { rule?: ShareRule; targets: MirrorTarget[]; links: LinkChoice[]; onDone: () => void }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(async (prev: ActionState, form: FormData) => {
     const result = await saveShareRuleAction(prev, form)
     if (result.ok && !rule) onDone()
@@ -242,6 +256,13 @@ function ShareRuleForm({ rule, targets, onDone }: { rule?: ShareRule; targets: M
         Post altına eklenecek sabit metin
         <textarea name="appendText" defaultValue={rule?.appendText ?? 'Güncel giriş ve bonuslar: alkanka.com'} maxLength={600} rows={3} className={input} />
       </label>
+      <div className="flex flex-col gap-1.5">
+        <ButtonRows initial={rule?.buttons} links={links} />
+        <p className={hint}>
+          Bu sponsor için paylaşılan her postun altına eklenir. Albümlerde Telegram buton kabul etmediği için yazı ve butonlar albümün altına ayrı
+          mesaj olarak gider.
+        </p>
+      </div>
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-1 text-sm font-medium text-foreground">Paylaşılacak kanallar</legend>
         <TargetChecks targets={targets} selected={rule?.targetIds ?? []} emptyText="Önce yukarıdan hedef kanal ekle." />

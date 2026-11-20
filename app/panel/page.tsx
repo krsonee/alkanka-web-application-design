@@ -363,7 +363,7 @@ async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Prom
         content: <TvBetsManager config={betsConfig} status={betsStatus} stats={betsToday} markets={betsMarkets} log={betsHistory} targets={targets} />,
       },
       { id: 'approvals', group: 'Botlar', label: 'Bildirim Botu', ...tabState([!suite.approvals.enabled, 'Kapalı', 'idle'], [suite.approvals.botId == null, 'Bot seçilmemiş', 'off'], [!suite.approvals.chatId, 'Bildirimin gideceği sohbet seçilmemiş', 'off']), content: <ApprovalSection suite={suite} bots={bots} /> },
-      { id: 'share', group: 'Otomasyonlar', label: 'Post Paylaşım', ...tabState([!suite.share.enabled, 'Kapalı', 'idle'], [Boolean(shareInfo.lastError), lastErr(shareInfo.lastError), 'off'], [suite.share.botId == null, 'Paylaşım botu seçilmemiş', 'off']), content: <ShareSection suite={suite} bots={bots} targets={targets} status={shareInfo} /> },
+      { id: 'share', group: 'Otomasyonlar', label: 'Post Paylaşım', ...tabState([!suite.share.enabled, 'Kapalı', 'idle'], [Boolean(shareInfo.lastError), lastErr(shareInfo.lastError), 'off'], [suite.share.botId == null, 'Paylaşım botu seçilmemiş', 'off']), content: <ShareSection suite={suite} bots={bots} targets={targets} status={shareInfo} links={linkOptions} /> },
       { id: 'invite', group: 'Kanallar', label: 'Davet linkleri', ...tabState([invite == null, 'Davet linki ayarı yapılmamış', 'idle']), content: <TelegramInviteSetup bots={bots} status={invite} /> },
       { id: 'channels', group: 'Kanallar', label: 'Kanallar', content: <TelegramChannelsSetup usernames={addresses?.usernames ?? null} /> },
       {

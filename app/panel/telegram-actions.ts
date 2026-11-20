@@ -294,6 +294,7 @@ export async function saveShareRuleAction(_: ActionState, form: FormData): Promi
       appendText: String(form.get('appendText') ?? ''),
       replyText: String(form.get('replyText') ?? ''),
       targetIds: formIds(form, 'targetIds'),
+      buttons: String(form.get('buttons') ?? ''),
     })
     revalidatePath('/panel')
     return logged('telegram', { ok: true, message: `${id ? 'Kaydedildi' : 'Eklendi'}: "${rule.name}" (${rule.sourceTitle}) grubu dinleniyor.` })
