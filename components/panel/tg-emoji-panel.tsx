@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { addEmojiPackAction, emojiPacksAction, removeEmojiPackAction } from '@/app/panel/tg-post-actions'
 import { EMOJI_GROUPS } from '@/components/panel/emoji-picker'
 import { btn, btnDanger, btnGhost, input } from '@/components/panel/tg-hub-ui'
+import { retryEmojiImages } from '@/components/panel/tg-post-preview'
 import { EMOJI_IMAGE_PATH, type EmojiPack } from '@/lib/tg-posts-shared'
 
 type Bot = { id: number; name: string; username: string }
@@ -194,6 +195,7 @@ export function EmojiPanel({
           onAdded={(name, r) => {
             setResult(r)
             if (!r.ok) return
+            retryEmojiImages()
             void mutate()
             if (name) setTab(name)
           }}

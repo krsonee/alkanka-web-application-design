@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { Bot, Copy, ExternalLink, FileText, Film, Gift, MessageSquareText, ThumbsUp, UserCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -21,21 +21,45 @@ import {
 
 /** How Telegram's formatting looks, shared by the writing area and the preview so both show the same thing. */
 export const RICH =
-  'whitespace-pre-wrap [overflow-wrap:anywhere] [&_a]:text-primary [&_a]:underline [&_b]:font-semibold [&_code]:rounded [&_code]:bg-foreground/10 [&_code]:px-1 [&_code]:font-mono [&_pre]:my-1 [&_pre]:rounded-md [&_pre]:bg-foreground/10 [&_pre]:p-2 [&_pre]:font-mono [&_blockquote]:my-1 [&_blockquote]:rounded-r-md [&_blockquote]:border-l-4 [&_blockquote]:border-primary [&_blockquote]:bg-primary/10 [&_blockquote]:px-2 [&_blockquote]:py-1 [&_.tg-spoiler]:rounded [&_.tg-spoiler]:bg-foreground/25 [&_tg-spoiler]:rounded [&_tg-spoiler]:bg-foreground/25 [&_img.tg-emoji:not(.tg-emoji-off)]:inline-block [&_img.tg-emoji:not(.tg-emoji-off)]:size-[1.3em] [&_img.tg-emoji:not(.tg-emoji-off)]:align-[-0.25em]'
+  'whitespace-pre-wrap [overflow-wrap:anywhere] [&_a]:text-primary [&_a]:underline [&_b]:font-semibold [&_code]:rounded [&_code]:bg-foreground/10 [&_code]:px-1 [&_code]:font-mono [&_pre]:my-1 [&_pre]:rounded-md [&_pre]:bg-foreground/10 [&_pre]:p-2 [&_pre]:font-mono [&_blockquote]:my-1 [&_blockquote]:rounded-r-md [&_blockquote]:border-l-4 [&_blockquote]:border-primary [&_blockquote]:bg-primary/10 [&_blockquote]:px-2 [&_blockquote]:py-1 [&_.tg-spoiler]:rounded [&_.tg-spoiler]:bg-foreground/25 [&_tg-spoiler]:rounded [&_tg-spoiler]:bg-foreground/25 [&_img.tg-emoji]:inline-block [&_img.tg-emoji]:size-[1.3em] [&_img.tg-emoji]:align-[-0.25em]'
 
 /**
  * A premium emoji is drawn as an image. When the image cannot be loaded (the pack was removed, or the emoji has no
- * still picture) the image gives way to its alt text, which is the plain emoji it stands for.
+ * still picture) the plain emoji it stands for is shown in its place.
  */
+/** Premium emoji whose picture could not be loaded on this page; they are shown as their plain emoji. */
+export const failedEmoji = new Set<string>()
+
+/** Called when a pack is added, so pictures that could not be loaded before are tried again. */
+export const retryEmojiImages = () => failedEmoji.clear()
+
+/** Puts the plain emoji in the picture's place. It keeps the emoji's id, so the text is still saved with the premium emoji. */
+function showPlain(img: HTMLImageElement) {
+  const id = img.dataset.emojiId
+  if (!id) return
+  failedEmoji.add(id)
+  const span = document.createElement('span')
+  span.dataset.emojiId = id
+  // One piece in the writing area, like the picture it replaces.
+  span.contentEditable = 'false'
+  span.textContent = img.alt
+  img.replaceWith(span)
+}
+
 export function useEmojiFallback(ref: RefObject<HTMLElement | null>) {
+  // Runs after every render: the text is written as HTML, so its images are new each time. One that failed before
+  // is not asked for again, and one that failed before the listener below was attached is caught here.
+  useLayoutEffect(() => {
+    for (const img of ref.current?.querySelectorAll<HTMLImageElement>('img[data-emoji-id]') ?? []) {
+      if (failedEmoji.has(img.dataset.emojiId ?? '') || (img.complete && img.naturalWidth === 0)) showPlain(img)
+    }
+  })
+
   useEffect(() => {
     const el = ref.current
     if (!el) return
     const onError = (e: Event) => {
-      const img = e.target
-      if (!(img instanceof HTMLImageElement) || !img.dataset.emojiId) return
-      img.removeAttribute('src')
-      img.classList.add('tg-emoji-off')
+      if (e.target instanceof HTMLImageElement && e.target.dataset.emojiId) showPlain(e.target)
     }
     // Image errors do not bubble, so they are caught on the way down.
     el.addEventListener('error', onError, true)
@@ -104,7 +128,7 @@ function Bubble({ media, text, children }: { media: PostMedia[]; text: string; c
           <div
             className={cn(RICH, 'px-3 py-2 text-sm leading-relaxed text-foreground')}
             // The text has already been reduced to Telegram's safe tag list by cleanTgHtml.
-            dangerouslySetInnerHTML={{ __html: showPremiumEmoji(text) }}
+            dangerouslySetInnerHTML={{ __html: showPremiumEmoji(text, failedEmoji) }}
           />
         )}
       </div>

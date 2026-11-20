@@ -5,12 +5,12 @@ import { Bold, Code, EyeOff, Italic, Link2, Quote, RemoveFormatting, Smile, Stri
 import { cn } from '@/lib/utils'
 import { EmojiPanel } from '@/components/panel/tg-emoji-panel'
 import { btn, btnGhost, input } from '@/components/panel/tg-hub-ui'
-import { RICH, useEmojiFallback } from '@/components/panel/tg-post-preview'
+import { RICH, failedEmoji, useEmojiFallback } from '@/components/panel/tg-post-preview'
 import { cleanTgHtml, emojiImageTag, escapeText, safeLink, showPremiumEmoji } from '@/lib/tg-posts-shared'
 
 /** Telegram HTML as the browser needs it to be editable: real line breaks, premium emoji as images, and room for the caret below a closing block. */
 function toEditorHtml(html: string) {
-  const body = showPremiumEmoji(html).replace(/<tg-spoiler>/g, '<span class="tg-spoiler">').replace(/<\/tg-spoiler>/g, '</span>').replace(/\n/g, '<br>')
+  const body = showPremiumEmoji(html, failedEmoji).replace(/<tg-spoiler>/g, '<span class="tg-spoiler">').replace(/<\/tg-spoiler>/g, '</span>').replace(/\n/g, '<br>')
   return /<\/(blockquote|pre)>$/.test(body) ? `${body}<br>` : body
 }
 

@@ -21,7 +21,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     console.error('[tg-emoji]', error)
     return null
   })
-  if (!image) return none(404)
+  // Kept for a few minutes: the preview draws the text again on every keystroke and would ask for a missing picture each time.
+  if (!image) return new Response(null, { status: 404, headers: { 'cache-control': 'private, max-age=300', 'x-robots-tag': 'noindex, nofollow' } })
   return new Response(new Uint8Array(image.bytes), {
     headers: {
       'content-type': image.mime,

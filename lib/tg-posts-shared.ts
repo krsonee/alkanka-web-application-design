@@ -290,7 +290,8 @@ function attrOf(attrs: string, name: string) {
 export function cleanTgHtml(input: string): string {
   const out: string[] = []
   const stack: string[] = []
-  const spans: boolean[] = []
+  /** What each open span stands for: a Telegram tag, or nothing. */
+  const spans: string[] = []
   const closeDownTo = (tag: string) => {
     const at = stack.lastIndexOf(tag)
     if (at < 0) return
@@ -326,14 +327,19 @@ export function cleanTgHtml(input: string): string {
     }
     if (name === 'span') {
       if (closing) {
-        if (spans.pop()) closeDownTo('tg-spoiler')
+        const tag = spans.pop()
+        if (tag) closeDownTo(tag)
         continue
       }
-      const spoiler = /class\s*=\s*["']?[^"'>]*\btg-spoiler\b/i.test(attrs) && !literal && !stack.includes('tg-spoiler') && !stack.includes('tg-emoji')
-      spans.push(spoiler)
-      if (spoiler) {
-        stack.push('tg-spoiler')
-        out.push('<tg-spoiler>')
+      const plain = literal || stack.includes('tg-emoji')
+      // A premium emoji whose picture could not be loaded stands in the writing area as a span around its plain emoji.
+      const emojiId = attrOf(attrs, 'data-emoji-id')
+      const spoiler = /class\s*=\s*["']?[^"'>]*\btg-spoiler\b/i.test(attrs) && !stack.includes('tg-spoiler')
+      const tag = plain ? '' : EMOJI_ID.test(emojiId) ? 'tg-emoji' : spoiler ? 'tg-spoiler' : ''
+      spans.push(tag)
+      if (tag) {
+        stack.push(tag)
+        out.push(tag === 'tg-emoji' ? `<tg-emoji emoji-id="${emojiId}">` : '<tg-spoiler>')
       }
       continue
     }
@@ -401,8 +407,12 @@ export const hasPremiumEmoji = (html: string) => html.includes('<tg-emoji ')
 export const emojiImageTag = (id: string, emoji: string) =>
   `<img class="tg-emoji" data-emoji-id="${id}" alt="${escapeAttr(emoji)}" src="${EMOJI_IMAGE_PATH}${id}" draggable="false">`
 
-/** Clean Telegram HTML with every premium emoji as its image, for the writing area and the preview. */
-export const showPremiumEmoji = (html: string) => html.replace(TG_EMOJI, (_, id: string, alt: string) => emojiImageTag(id, decodeText(alt)))
+/**
+ * Clean Telegram HTML with every premium emoji as its image, for the writing area and the preview.
+ * Ids in `plain` are known to have no picture and are shown as their plain emoji straight away.
+ */
+export const showPremiumEmoji = (html: string, plain?: ReadonlySet<string>) =>
+  html.replace(TG_EMOJI, (_, id: string, alt: string) => (plain?.has(id) ? `<span data-emoji-id="${id}" contenteditable="false">${alt}</span>` : emojiImageTag(id, decodeText(alt))))
 
 /** The same text with every premium emoji replaced by the plain emoji it stands for. */
 export const plainEmoji = (html: string) => html.replace(TG_EMOJI, '$2')
