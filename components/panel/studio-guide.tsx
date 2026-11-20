@@ -18,7 +18,7 @@ const QUICK_START: { title: string; body: string; target: Section }[] = [
   },
   {
     title: 'Üret',
-    body: '"Üret" sekmesinde türü (Banner, Sticker, GIF, Video) ve markayı seç, formatları işaretle, talimatı yaz, "Üret"e bas.',
+    body: '"Üret" sekmesinde işi (Banner, Hareketli GIF, Video, Sticker) ve markayı seç, formu doldur ya da hazır bir tarif seç, "Üret"e bas.',
     target: 'create',
   },
   {
@@ -34,36 +34,41 @@ const PRICES: [string, string, string][] = [
   ['Sticker (şeffaf PNG)', '~$0.07', '10-30 sn'],
   ['Revize', 'Görsel ücreti kadar', '10-40 sn'],
   ['Sadece yazı değişikliği', 'Ücretsiz', '2-5 sn'],
-  ['Hareketli GIF', 'Banner + $0 (GIF ücretsiz)', '+3-5 sn'],
-  ['Video 4 sn (1080p, sessiz)', 'Banner + ~$0.20', '1-2 dk'],
-  ['Video 6 sn (1080p, sessiz)', 'Banner + ~$0.30', '1-3 dk'],
-  ['Video 8 sn (1080p, sessiz)', 'Banner + ~$0.40', '1-3 dk'],
-  ['Video + ses', 'saniye başı ~$0.08', '1-3 dk'],
+  ['İsteği geliştir', 'Kuruşun altında (tavana yazılmaz)', '3-10 sn'],
+  ['Hareketli GIF, gerçek hareket (4 sn, standart)', 'Banner + ~$0.12', '1-2 dk'],
+  ['Hareketli GIF, gerçek hareket (6 sn, yüksek)', 'Banner + ~$0.30', '1-3 dk'],
+  ['Işık efektli GIF (görsel durur)', 'Banner + $0', '+3-5 sn'],
+  ['Video 4 sn (standart 720p, sessiz)', 'Banner + ~$0.12', '1-2 dk'],
+  ['Video 6 sn (yüksek 1080p, sessiz)', 'Banner + ~$0.30', '1-3 dk'],
+  ['Video 8 sn (yüksek 1080p, sessiz)', 'Banner + ~$0.40', '1-3 dk'],
+  ['Video + ses', 'saniye başı ~$0.05 (standart) / ~$0.08 (yüksek)', '1-3 dk'],
+  ['Hareketli sticker, gerçek hareket', 'Sticker + ~$0.12', '1-2 dk'],
+  ['Sallanan sticker, paket ikonu', 'Ücretsiz', '5-20 sn'],
 ]
 
 const PROMPT_EXAMPLES = [
   {
     kind: 'Banner',
-    text: 'Yazı alanları: Başlık "%500 FREESPIN BONUSU", Buton "HEMEN KATIL". Talimat: Zeus karakteri şimşek tutuyor, arka planda altın paralar ve mor bulutlar.',
+    text: 'Yazılar: Başlık "%500 FREESPIN BONUSU", Buton "HEMEN KATIL". Konu: freespin kampanyası. Karakter: şimşek tutan Zeus. Sahne: altın paralar ve mor bulutlar. Stil: 3D.',
   },
   {
     kind: 'Banner',
-    text: 'Yazı alanları: Başlık "FENERBAHÇE - GALATASARAY", Alt yazı "ORAN 3.50". Talimat: derbi atmosferi, stadyum ışıkları, futbol topu ön planda.',
+    text: 'Yazılar: Başlık "FENERBAHÇE - GALATASARAY", Alt yazı "ORAN 3.50". Konu: derbi için özel oran. Sahne: stadyum ışıkları, ön planda futbol topu. Stil: Gerçekçi.',
   },
   {
     kind: 'Sticker',
-    text: 'Sevimli altın aslan maskotu göz kırpıyor, elinde para torbası, üstünde "KOD GELİYOR!" yazısı.',
+    text: 'Konu: kod geliyor haberi. Karakter: göz kırpan sevimli altın aslan, elinde para torbası. Sticker üstü yazı: KOD GELİYOR!',
   },
   {
-    kind: 'Video hareketi',
-    text: 'Karakter yavaşça kılıcını kaldırıyor, arkadan altın paralar yağıyor, kamera hafifçe yaklaşıyor, parlamalar geçiyor.',
+    kind: 'Hareket (GIF, video, sticker)',
+    text: 'Ne hareket etsin: karakter yavaşça kılıcını kaldırıyor, arkadan altın paralar yağıyor. Kamera: yavaşça yaklaşır.',
   },
 ]
 
 const HINTS: Record<Exclude<Section, 'guide'>, { title: string; body: string }> = {
   create: {
     title: 'Nasıl üretilir?',
-    body: 'Tür ve markayı seç, format(lar)ı işaretle, başlık ve buton yazısını kendi alanlarına yaz, talimatta sadece görseli anlat. Logo ve yazılar yapay zekaya çizdirilmez; orijinal logo ve gerçek fontla birebir basılır.',
+    body: 'İşi ve markayı seç, format(lar)ı işaretle, başlık ve buton yazısını kendi alanlarına yaz; konu, sahne, karakter ve stil alanlarında sadece görseli anlat. Hazır tarif seçersen alanlar dolar, "İsteği geliştir" kısa yazdığını ayrıntılandırır. Logo ve yazılar yapay zekaya çizdirilmez; orijinal logo ve gerçek fontla birebir basılır.',
   },
   brands: {
     title: 'Marka kiti nedir?',
@@ -190,7 +195,10 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
               <>{b('Kategori')} seç (Casino, Spor Bahisi, Slot vb.).</>,
               <>{b('Çözünürlük')}: Yüksek (2048 px) paylaşım için, Standart (1024 px) hızlı deneme için.</>,
               <>{b('Görsel üstü yazılar')}: başlık, alt yazı ve buton metnini kendi kutularına yaz. Bunlar gerçek fontla basılır, harf hatası olmaz.</>,
-              <>{b('Talimat')} kutusunda sadece görseli anlat: karakter, ortam, renk, ışık. Yazı kutularını doldurduysan buraya yazı yazma.</>,
+              <>Formu doldur: {b('Konu')} (zorunlu), {b('Sahne ve arka plan')}, {b('Karakter ya da ana nesne')}, {b('Stil')} (Otomatik, 3D, Çizgi, Gerçekçi) ve istersen {b('Renkler')}. Bu alanlara yazı yazma; yazılar kendi kutularına girer.</>,
+              <>Sıfırdan yazmak istemezsen {b('Hazır tarifler')}den birine bas (freespin, maç günü, canlı casino, turnuva); alanlar dolar, sonra kendine göre değiştirirsin.</>,
+              <>Kısa yazdıysan {b('İsteği geliştir')} düğmesi alanları daha ayrıntılı hale getirir. Görsel üretmez; sonucu okuyup düzeltirsin.</>,
+              <>Formda bir oyunun ya da sağlayıcının adı geçiyorsa ve kütüphanede görseli varsa, tek tıkla referans olarak ekleme düğmesi çıkar.</>,
               <>{b('Üret')} butonuna bas. Butonda tahmini maliyet yazar. 15-40 saniyede sağ tarafta çıkar.</>,
             ]}
           />
@@ -200,8 +208,11 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
           <Steps
             items={[
               <>{b('Sticker')} türünü seç ve markayı belirle.</>,
-              <>Talimata maskotu, ifadesini ve üstündeki kısa yazıyı tırnakla yaz: "KOD GELİYOR!".</>,
-              <>Sticker şeffaf arka planlı PNG olarak çıkar, arkası damalı görünür, bu normaldir.</>,
+              <>{b('Konu')} ve {b('Karakter')} alanlarını doldur ya da hazır tarif seç (Kod geldi, Kazandık, Bol şans, Az kaldı). Üstündeki kısa yazıyı {b('Sticker üstü yazı')} kutusuna yaz: KOD GELİYOR!</>,
+              <>{b('Beyaz kenar çizgisi ekle')} açıkken stickerın çevresine her yerde aynı kalınlıkta beyaz kenar basılır.</>,
+              <>Sticker şeffaf arka planla, Telegram ölçüsünde (512 px) çıkar; arkası damalı görünür, bu normaldir.</>,
+              <>{b('Hareketli sticker')}: {b('Ne hareket etsin')} alanını yaz, {b('Hareketlisini de üret')} kutusunu işaretle ya da hazır stickerın altındaki {b('Hareketlendir')} düğmesine bas. Karakter gerçekten hareket eder; çıktı Telegram&apos;ın kabul ettiği 3 saniyelik, şeffaf video stickerdır. 1-2 dakika sürer ve ücretlidir.</>,
+              <>{b('Sallanma · ücretsiz')} düğmesi stickerı olduğu gibi hafifçe sallar; yapay zeka çalışmaz.</>,
               <>{b('İndir')} ile al. Telegram&apos;da @Stickers botuna gönderip paketine ekleyebilirsin.</>,
             ]}
           />
@@ -210,10 +221,11 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
         <Block icon={<Film className="size-5" aria-hidden />} title="5. Hareketli GIF">
           <Steps
             items={[
-              <>Yöntem A: {b('Hareketli GIF')} türünü seçip üret. Önce banner yapılır, ardından otomatik GIF&apos;e çevrilir.</>,
-              <>Yöntem B: Daha önce ürettiğin bir banner&apos;ın altındaki {b('Hareketlendir')} butonuna bas, açılan panelde {b('GIF yap')} de.</>,
-              <>GIF&apos;te üstten parlama geçer ve görsel hafifçe nefes alır. Döngülüdür. Logo ve yazılar asla bozulmaz.</>,
-              <>GIF adımı {b('ücretsizdir')}, sadece banner&apos;ın üretim ücreti ödenir.</>,
+              <>Yöntem A: {b('Hareketli GIF')} işini seçip üret. Önce banner yapılır, ardından otomatik GIF&apos;e çevrilir.</>,
+              <>Yöntem B: Daha önce ürettiğin bir banner&apos;ın altındaki {b('Hareketlendir')} butonuna bas, açılan panelde {b('Hareketli GIF')} seç.</>,
+              <>{b('Gerçek hareket')}: karakter ve sahne gerçekten oynar. {b('Ne hareket etsin')} ve {b('Kamera ne yapsın')} alanlarını doldur, süreyi (4 ya da 6 sn) ve kaliteyi (Standart / Yüksek) seç. Ücretlidir, 1-3 dakika sürer.</>,
+              <>{b('Işık efekti')}: görsel durur, üstünden ışık geçer. {b('Ücretsizdir')}, birkaç saniyede biter.</>,
+              <>İki yöntemde de logo ve yazılar hareket bittikten sonra üstüne basılır, bu yüzden bozulmaz.</>,
             ]}
           />
         </Block>
@@ -222,15 +234,15 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
           <Steps
             items={[
               <>{b('Video')} türünü seç ya da hazır bir banner&apos;da {b('Hareketlendir')} butonuna bas.</>,
-              <>{b('Hareket talimatı')}na ne olacağını yaz: "karakter kılıcını kaldırıyor, paralar yağıyor". Boş bırakırsan hafif sinematik hareket yapılır.</>,
-              <>{b('Süre')}: 4, 6 veya 8 saniye. {b('Ses / müzik')} kutusunu istersen işaretle (biraz daha pahalı).</>,
+              <>{b('Ne hareket etsin')} alanına ne olacağını yaz: "karakter kılıcını kaldırıyor, paralar yağıyor". Boş bırakırsan hafif sinematik hareket yapılır. {b('Kamera ne yapsın')} listesinden kamerayı seç (sabit, yaklaşır, uzaklaşır, döner, yana kayar).</>,
+              <>{b('Süre')}: 4, 6 veya 8 saniye. {b('Kalite')}: Standart (720p, ucuz) ya da Yüksek (1080p). {b('Ses / müzik')} kutusunu istersen işaretle (biraz daha pahalı).</>,
               <>{b('Video üret')}. 1-3 dakika sürer, bu sürede sayfayı kapatma. Bitince kartın içinde oynatılır.</>,
               <>Video banner&apos;ın formatında çıkar: 1:1 banner kare, 9:16 dikey, 16:9 yatay video olur.</>,
             ]}
           />
           <p className="flex gap-2 rounded-xl bg-secondary p-3 text-xs leading-relaxed text-muted-foreground">
             <TriangleAlert className="size-4 shrink-0 text-primary" aria-hidden />
-            Video 1080p çıkar. Model sadece yazısız ve logosuz görseli hareketlendirir; logo ve yazı kutularına yazdıkların video bittikten sonra üstüne basılır, bu yüzden eğilmez ve bozulmaz. Yazıyı talimatla yapay zekaya çizdirdiğin eski üretimlerde model yazıyı hâlâ kaydırabilir.
+            Video seçtiğin kalitede çıkar (yeni üretimlerde varsayılan Standart, 720p). Video çerçevesini tam doldurmayan formatlarda (ör. kare) kamera sabit durur. Model sadece yazısız ve logosuz görseli hareketlendirir; logo ve yazı kutularına yazdıkların video bittikten sonra üstüne basılır, bu yüzden eğilmez ve bozulmaz. Yazıyı talimatla yapay zekaya çizdirdiğin eski üretimlerde model yazıyı hâlâ kaydırabilir.
           </p>
         </Block>
 
@@ -272,13 +284,13 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
           </p>
           <p className="text-xs leading-relaxed text-muted-foreground">
             Ana yönetici ekranın sağ üstünden aylık harcama tavanı koyabilir. Tavanın %80&apos;i dolunca uyarı çıkar, tavan dolunca ücretli üretim
-            ay başına kadar kapanır; yazı güncelleme, efekt GIF ve Telegram çıktıları gibi ücretsiz işlemler çalışmaya devam eder. Sayaç liste
+            ay başına kadar kapanır; yazı güncelleme, ışık efektli GIF, sallanan sticker ve paket ikonu gibi ücretsiz işlemler çalışmaya devam eder. Sayaç liste
             fiyatlarından hesaplanan tahmindir, kesin tutar Vercel faturasında yazar.
           </p>
         </Block>
       </div>
 
-      <Block icon={<Lightbulb className="size-5" aria-hidden />} title="İyi talimat örnekleri">
+      <Block icon={<Lightbulb className="size-5" aria-hidden />} title="İyi istek örnekleri">
         <div className="grid gap-3 md:grid-cols-2">
           {PROMPT_EXAMPLES.map((ex) => (
             <div key={ex.text} className="flex flex-col gap-1.5 rounded-xl border border-border bg-background p-4">
@@ -288,7 +300,7 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
           ))}
         </div>
         <ul className="flex flex-col gap-2 text-sm leading-relaxed text-muted-foreground">
-          <li>{b('Yazıları tırnakla ver.')} Tırnaksız yazılar yapay zekaya fikir olarak gider, birebir basılmaz.</li>
+          <li>{b('Yazıyı yazı kutusuna yaz.')} Başlık, alt yazı, buton ve sticker yazısı kendi kutularından birebir basılır. Konu ya da sahne alanına yazdığın yazı fikir olarak gider, birebir basılmaz.</li>
           <li>{b('Kısa başlık kullan.')} 2-5 kelimelik başlıklar en net sonucu verir.</li>
           <li>{b('Renk söyleme.')} Renkler marka kitinden gelir. Sadece istisna varsa yaz.</li>
           <li>{b('Logo isteme.')} Logo zaten otomatik ve kusursuz basılır. Talimata logo yazarsan ikinci, bozuk bir logo çıkabilir.</li>

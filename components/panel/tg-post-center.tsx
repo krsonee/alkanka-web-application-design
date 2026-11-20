@@ -103,7 +103,7 @@ export function PostComposer({ data }: { data: PostCenterData }) {
     return (
       <Card title="Yeni post">
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Post göndermek için önce bir bot gerekli. “Otomasyonlar → Bağlantı & Cron” sekmesinden botunu ekle, sonra buraya dön.
+          Post göndermek için önce bir bot gerekli. “Botlar → Bağlantı & Cron” sekmesinden botunu ekle, sonra buraya dön.
         </p>
       </Card>
     )
@@ -211,7 +211,7 @@ export function PostComposer({ data }: { data: PostCenterData }) {
           </div>
         )}
         <Card title="Yazı" hint="Biçim vermek için yazıyı seçip üstteki düğmelere bas. Yanda Telegram’da nasıl görüneceğini görürsün.">
-          <PostEditor key={form.key} initial={form.text} label="Post yazısı" onChange={set.text} />
+          <PostEditor key={form.key} initial={form.text} label="Post yazısı" onChange={set.text} bots={data.bots} />
           <Counter length={length} limit={TEXT_LIMIT} note={content.media.length ? `medyanın altına ${CAPTION_LIMIT} karaktere kadar sığar` : undefined} />
         </Card>
         {fields.length > 0 && <TemplateFill key={form.key} fields={fields} sponsors={data.sponsors} onFill={fill} />}
@@ -477,7 +477,7 @@ function EditForm({ post, data, pending, run, onClose }: { post: PostRow; data: 
         ) : (
           <div className="flex flex-col gap-2">
             <h4 className="text-sm font-semibold text-foreground">Yazı</h4>
-            <PostEditor initial={post.content.text} label={`${post.id} numaralı postun yazısı`} onChange={set.text} />
+            <PostEditor initial={post.content.text} label={`${post.id} numaralı postun yazısı`} onChange={set.text} bots={data.bots} />
             <Counter length={visibleLength(text)} limit={underMedia ? CAPTION_LIMIT : TEXT_LIMIT} note={underMedia ? 'yazı medyanın altında duruyor' : undefined} />
           </div>
         )}

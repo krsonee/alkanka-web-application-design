@@ -46,12 +46,12 @@ import { RewardsEditor } from '@/components/panel/rewards-editor'
 import { miniPlayStats } from '@/lib/rewards-stats'
 import type { MiniPlayStats } from '@/lib/rewards-forecast'
 import { CatalogEditor } from '@/components/panel/catalog-editor'
-import { getCronKey, listBots, listLog, listSources, listTargets } from '@/lib/telegram-mirror'
+import { getCronKey, listBots, listLog, listSources, listTargets, sharedRules } from '@/lib/telegram-mirror'
 import { TelegramMirror } from '@/components/panel/telegram-mirror'
 import { TelegramChatSetup } from '@/components/panel/telegram-chat-setup'
 import { ApprovalSection, ShareSection } from '@/components/panel/telegram-bot-suite'
 import { OddsBotManager } from '@/components/panel/odds-bot-manager'
-import { getOddsBotConfig, listOddsSources, oddsBotStatus, searchAdminOdds } from '@/lib/special-odds'
+import { getOddsBotConfig, listOddsQueue, listOddsSources, oddsBotStatus, searchAdminOdds } from '@/lib/special-odds'
 import { DEFAULT_ODDS_BOT, EMPTY_ODDS_STATUS } from '@/lib/special-odds-shared'
 import { KankaTvManager } from '@/components/panel/kankatv-manager'
 import { getTvConfig, tvBotStatus, tvStats } from '@/lib/kankatv-engage'
@@ -86,7 +86,8 @@ import { ADS_KEY, type AdMap } from '@/lib/ads'
 import { ShareEditor } from '@/components/panel/share-editor'
 import { HomeV2Editor } from '@/components/panel/home-v2-editor'
 import { HOME_V2_KEY, mergeHomeV2 } from '@/lib/home-v2-shared'
-import { MarketManager } from '@/components/panel/market-manager'
+import { MarketProducts } from '@/components/panel/market-products'
+import { MarketRequests } from '@/components/panel/market-requests'
 import { ThemeManager } from '@/components/panel/theme-manager'
 import { getThemeCatalog } from '@/lib/table-themes-server'
 import { DEFAULT_OFFERS } from '@/lib/table-themes'
@@ -97,7 +98,7 @@ import { getTracking, listCampaigns, listEarnings } from '@/lib/marketing'
 import { SocialManager } from '@/components/panel/social-manager'
 import { adminEntries, adminSocialAccounts, getSocialLinks, listSocialEvents, type SocialLinks } from '@/lib/social'
 import { affLinkViews } from '@/lib/aff-links'
-import { linkReport } from '@/lib/links'
+import { linkChoices, linkReport } from '@/lib/links'
 import { earningsBySite, type LinkReport, type SiteEarning } from '@/lib/links-shared'
 import { LinksTable } from '@/components/panel/links-table'
 import { adminSponsorAccounts, currentPeriod, flaggedMembers, followerCounts, getSiteLinks, trafficReport } from '@/lib/growth'
@@ -201,6 +202,7 @@ import { PanelDashboard } from '@/components/panel/dashboard'
 import { loadSystemStatus } from '@/lib/system-status'
 import { dashStats, parseQuery } from '@/lib/panel-stats'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
+import { SourcesOverview } from '@/components/panel/tg-sources-overview'
 import { TgGuide } from '@/components/panel/tg-guide'
 import { TgHubManager } from '@/components/panel/tg-hub-manager'
 import { DmPanel } from '@/components/panel/tg-dm-panel'
@@ -272,6 +274,23 @@ async function section({ session, active }: SectionCtx, id: PanelModule | PanelV
 
 type TgTab = { id: string; group?: string; label: string; status?: 'on' | 'off' | 'idle' | null; issue?: string | null; content: ReactNode }
 
+const CHANNELS_GROUP = 'Kanallar & kaynaklar'
+/** Telegram's groups in the order of the work: write, run the bots, look after the channels, protect, check. */
+const TG_GROUPS = ['Postlar', 'Botlar', CHANNELS_GROUP, 'Koruma', 'Durum']
+/** Bots in the order they are set up: the page that connects them first. */
+const BOT_TABS = ['mirror', 'odds', 'share', 'chat', 'approvals', 'kankatv', 'tvbets']
+
+function orderTgTabs(tabs: TgTab[]) {
+  const rank = (list: string[], value: string | undefined) => {
+    const at = list.indexOf(value ?? '')
+    return at < 0 ? list.length : at
+  }
+  return tabs
+    .map((tab, at) => ({ tab, at }))
+    .sort((a, b) => rank(TG_GROUPS, a.tab.group) - rank(TG_GROUPS, b.tab.group) || rank(BOT_TABS, a.tab.id) - rank(BOT_TABS, b.tab.id) || a.at - b.at)
+    .map((x) => x.tab)
+}
+
 // The first failing check decides the light: 'idle' for switched off or never set up, 'off' for switched on but failing.
 function tabState(...checks: Array<[bad: boolean, issue: string, as: 'off' | 'idle']>) {
   const hit = checks.find(([bad]) => bad)
@@ -289,19 +308,22 @@ type TgShared = {
 
 /** Bots, automations and channel settings: the tabs that need the setup permission, and the data only they use. */
 async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Promise<{ tabs: TgTab[]; chats: Array<{ chatId?: string | null; title?: string | null }> }> {
-  const [oddsConfig, oddsStatus, oddsSources, oddsPage] = await Promise.all([
+  const [oddsConfig, oddsStatus, oddsSources, oddsPage, oddsQueue, linkOptions] = await Promise.all([
     getOddsBotConfig().catch(miss(DEFAULT_ODDS_BOT)),
     oddsBotStatus().catch(miss(EMPTY_ODDS_STATUS)),
     listOddsSources().catch(miss([])),
     searchAdminOdds({}).catch(miss({ rows: [], hasMore: false })),
+    listOddsQueue().catch(miss([])),
+    linkChoices(SITE_URL).catch(miss([])),
   ])
-  const [sources, log, cronKey, invite, addresses, shareInfo] = await Promise.all([
+  const [sources, log, cronKey, invite, addresses, shareInfo, tgRules] = await Promise.all([
     listSources().catch(miss([])),
     listLog().catch(miss([])),
     getCronKey().catch(miss('ANAHTAR')),
     getInviteConfig().catch(miss(null)),
     getTelegramAddresses(TELEGRAM_URL).catch(miss(null)),
     shareStatus().catch(miss({ lastError: null, lastRunAt: null, shared: 0 })),
+    sharedRules().catch(miss([])),
   ])
   const [tvConfig, tvStatus, tvToday] = await Promise.all([
     getTvConfig().catch(miss(DEFAULT_TV)),
@@ -325,7 +347,7 @@ async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Prom
       { chatId: oddsConfig.channelId, title: oddsConfig.channelTitle },
     ],
     tabs: [
-      { id: 'mirror', group: 'Otomasyonlar', label: 'Bağlantı & Cron', ...tabState([bots.length === 0, 'Hiç bot eklenmemiş', 'idle'], [sources.length === 0, 'Kaynak kanal eklenmemiş, aktarılacak bir şey yok', 'idle']), content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} /> },
+      { id: 'mirror', group: 'Botlar', label: 'Bağlantı & Cron', ...tabState([bots.length === 0, 'Hiç bot eklenmemiş', 'idle'], [sources.length === 0, 'Kaynak kanal eklenmemiş, aktarılacak bir şey yok', 'idle']), content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} sharedRules={tgRules} links={linkOptions} /> },
       { id: 'chat', group: 'Botlar', label: 'Canlı Sohbet', ...tabState([!chat?.webhook?.url, 'Webhook kurulmamış', 'idle'], [Boolean(chat?.webhook?.lastError), lastErr(chat?.webhook?.lastError), 'off']), content: <TelegramChatSetup bots={bots} status={chat} /> },
       {
         id: 'odds',
@@ -339,11 +361,11 @@ async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Prom
           [oddsStatus.activeSources === 0, 'Kaynak kanal eklenmemiş', 'off'],
           [!oddsStatus.webhookUrl, 'Webhook kurulmamış', 'off'],
         ),
-        content: <OddsBotManager config={oddsConfig} status={oddsStatus} bots={bots} sources={oddsSources} odds={oddsPage} />,
+        content: <OddsBotManager config={oddsConfig} status={oddsStatus} bots={bots} sources={oddsSources} odds={oddsPage} queue={oddsQueue} links={linkOptions} sharedRules={tgRules} />,
       },
       {
         id: 'kankatv',
-        group: 'Otomasyonlar',
+        group: 'Botlar',
         label: 'KankaTV Gol Botu',
         ...tabState(
           [!(tvConfig.goalBot.enabled || tvConfig.goalBot.push), 'Kapalı (Telegram ve bildirim gönderimi ikisi de kapalı)', 'idle'],
@@ -353,18 +375,32 @@ async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Prom
       },
       {
         id: 'tvbets',
-        group: 'Otomasyonlar',
+        group: 'Botlar',
         label: 'KankaTV Canlı Etkinlik',
         ...tabState([!betsConfig.enabled, 'Kapalı', 'idle'], [Boolean(betsStatus.lastError), lastErr(betsStatus.lastError), 'off']),
         content: <TvBetsManager config={betsConfig} status={betsStatus} stats={betsToday} markets={betsMarkets} log={betsHistory} targets={targets} />,
       },
       { id: 'approvals', group: 'Botlar', label: 'Bildirim Botu', ...tabState([!suite.approvals.enabled, 'Kapalı', 'idle'], [suite.approvals.botId == null, 'Bot seçilmemiş', 'off'], [!suite.approvals.chatId, 'Bildirimin gideceği sohbet seçilmemiş', 'off']), content: <ApprovalSection suite={suite} bots={bots} /> },
-      { id: 'share', group: 'Otomasyonlar', label: 'Post Paylaşım', ...tabState([!suite.share.enabled, 'Kapalı', 'idle'], [Boolean(shareInfo.lastError), lastErr(shareInfo.lastError), 'off'], [suite.share.botId == null, 'Paylaşım botu seçilmemiş', 'off']), content: <ShareSection suite={suite} bots={bots} targets={targets} status={shareInfo} /> },
-      { id: 'invite', group: 'Kanallar', label: 'Davet linkleri', ...tabState([invite == null, 'Davet linki ayarı yapılmamış', 'idle']), content: <TelegramInviteSetup bots={bots} status={invite} /> },
-      { id: 'channels', group: 'Kanallar', label: 'Kanallar', content: <TelegramChannelsSetup usernames={addresses?.usernames ?? null} /> },
+      { id: 'share', group: 'Botlar', label: 'Post Paylaşım', ...tabState([!suite.share.enabled, 'Kapalı', 'idle'], [Boolean(shareInfo.lastError), lastErr(shareInfo.lastError), 'off'], [suite.share.botId == null, 'Paylaşım botu seçilmemiş', 'off']), content: <ShareSection suite={suite} bots={bots} targets={targets} status={shareInfo} links={linkOptions} /> },
+      { id: 'invite', group: CHANNELS_GROUP, label: 'Davet linkleri', ...tabState([invite == null, 'Davet linki ayarı yapılmamış', 'idle']), content: <TelegramInviteSetup bots={bots} status={invite} /> },
+      { id: 'channels', group: CHANNELS_GROUP, label: 'Kanallar', content: <TelegramChannelsSetup usernames={addresses?.usernames ?? null} /> },
+      {
+        id: 'sources',
+        group: CHANNELS_GROUP,
+        label: 'Kaynaklar',
+        content: (
+          <SourcesOverview
+            rows={[
+              ...sources.map((s) => ({ key: `mirror-${s.id}`, tab: 'mirror', bot: 'Kanal aktarımı', name: s.brand, chat: s.channel, active: s.active, buttons: s.buttons.length, problem: s.lastError, detail: s.keywords ? 'anahtar kelimeyle süzülür' : '' })),
+              ...oddsSources.map((s) => ({ key: `odds-${s.id}`, tab: 'odds', bot: 'Özel Oran Botu', name: s.siteName || s.title, chat: s.title || s.chatId, active: s.active, buttons: s.buttons.length, problem: s.webError, detail: `${s.total} oran` })),
+              ...suite.share.rules.map((r) => ({ key: `share-${r.id}`, tab: 'share', bot: 'Post Paylaşım', name: r.name, chat: r.sourceTitle || r.sourceChat, active: r.enabled && suite.share.enabled, buttons: r.buttons.length, problem: null, detail: r.trigger ? `tetikleyici ${r.trigger}` : '' })),
+            ]}
+          />
+        ),
+      },
       {
         id: 'strip',
-        group: 'Kanallar',
+        group: CHANNELS_GROUP,
         label: 'Site şeridi',
         ...tabState([!tgPromo.enabled, 'Kapalı', 'idle']),
         content: (
@@ -430,7 +466,7 @@ async function telegramPanel(access: TelegramAccess) {
     const h = hubData.hub
     tabs.push({
       id: 'hub',
-      group: 'Botlar',
+      group: 'Koruma',
       label: 'Telegram Merkezi',
       ...tabState(
         [!(h.guard.enabled || h.support.enabled), 'Koruma ve destek botu ikisi de kapalı', 'idle'],
@@ -465,7 +501,8 @@ async function telegramPanel(access: TelegramAccess) {
     <TgPanelProvider access={access} chats={chats}>
       <div className="flex flex-col gap-4">
         <TgGuide access={access} />
-        <TelegramTabs issues={access.mod ? 'none' : 'box'} tabs={tabs} />
+        {/* Without the post screens the status screen is the one to land on, wherever its group stands. */}
+        <TelegramTabs issues={access.mod ? 'none' : 'box'} tabs={orderTgTabs(tabs)} initial={access.posts ? undefined : STATUS_TAB} />
       </div>
     </TgPanelProvider>
   )
@@ -485,8 +522,15 @@ async function telegramSection({ session, active }: SectionCtx): Promise<ReactNo
 }
 
 async function marketPanel(themesHere: boolean) {
-  const [products, requests, sites] = await Promise.all([listProducts({ includeInactive: true }), listRequests(), listSites()])
+  const [products, requests, sites, badgeList] = await Promise.all([
+    listProducts({ includeInactive: true }),
+    listRequests(),
+    listSites(),
+    listSpecialBadges({ includeInactive: true }).catch(miss([])),
+  ])
   const sponsors = sites.filter((site) => site.slug).map((site) => ({ id: String(site.id), name: site.name }))
+  const badges = badgeList.map((b) => ({ id: String(b.id), name: String(b.name) }))
+  const waiting = requests.filter((r) => r.status === 'beklemede').length
   const themeCatalog = themesHere ? await getThemeCatalog().catch(miss(DEFAULT_OFFERS)) : null
   const [avatars, stats, coverRows] = await Promise.all([
     listCatalog({ includeInactive: true }),
@@ -498,7 +542,8 @@ async function marketPanel(themesHere: boolean) {
     <TelegramTabs
       label="Market bölümleri"
       tabs={[
-        { id: 'products', label: `Ürünler & talepler${requests.length ? ` (${requests.length})` : ''}`, content: <MarketManager products={products} requests={requests} sponsors={sponsors} /> },
+        { id: 'requests', label: `Talepler${waiting ? ` (${waiting} bekliyor)` : ''}`, content: <MarketRequests requests={requests} /> },
+        { id: 'products', label: `Ürünler (${products.length})`, content: <MarketProducts products={products} sponsors={sponsors} badges={badges} /> },
         { id: 'avatars', label: 'Avatarlar & kapaklar', content: <AvatarManager avatars={avatars} stats={stats} covers={COVERS} coverUsage={coverUsage} /> },
         ...(themeCatalog ? [{ id: 'themes', label: 'Masa temaları', content: <ThemeManager catalog={themeCatalog} /> }] : []),
       ]}

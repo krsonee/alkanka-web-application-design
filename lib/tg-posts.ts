@@ -15,10 +15,12 @@ import {
   buttonText,
   cleanTgHtml,
   finalText,
+  hasPremiumEmoji,
   mediaKindOf,
   needsListener,
   needsSplit,
   normalizeContent,
+  plainEmoji,
   postProblems,
   visibleLength,
   type PostButton,
@@ -42,9 +44,12 @@ type TgSent = {
   video?: { file_id: string }
   animation?: { file_id: string }
   document?: { file_id: string }
+  entities?: { type: string }[]
+  caption_entities?: { type: string }[]
 }
 type Markup = { inline_keyboard: Record<string, unknown>[][] }
-type Delivered = { ids: number[]; mainId: number; mainMedia: boolean }
+/** `emojiLost`: the text had premium emoji and Telegram showed them as plain emoji. */
+type Delivered = { ids: number[]; mainId: number; mainMedia: boolean; emojiLost?: boolean }
 type ChatInfo = { id: number; type: string; title?: string; username?: string; linked_chat_id?: number }
 type Member = { status: string; can_post_messages?: boolean; can_edit_messages?: boolean; can_pin_messages?: boolean; can_send_messages?: boolean }
 type Checked = TargetCheck & { username: string | null }
@@ -288,8 +293,28 @@ async function sendMedia(token: string, base: Record<string, unknown>, media: Po
   return { sent, captionAt }
 }
 
+const EMOJI_LOST = 'premium emojiler normal emoji olarak çıktı (bu botun bu sohbette premium emoji hakkı yok)'
+
+/** Telegram decides per bot and per chat whether premium emoji may be sent; a 400 on such a text may be that refusal. */
+const emojiRefused = (text: string, error: unknown) => hasPremiumEmoji(text) && error instanceof TelegramError && error.code === 400
+
+/**
+ * Sends the post. When Telegram refuses it with premium emoji, it goes again with the plain emoji each one
+ * stands for, so the right to send them never decides whether a post goes out.
+ */
 async function deliverContent(token: string, chatId: string, content: PostContent, text: string, markup: Markup | null): Promise<Delivered> {
+  try {
+    return await deliverOnce(token, chatId, content, text, markup)
+  } catch (error) {
+    if (!emojiRefused(text, error)) throw error
+    return { ...(await deliverOnce(token, chatId, content, plainEmoji(text), markup)), emojiLost: true }
+  }
+}
+
+async function deliverOnce(token: string, chatId: string, content: PostContent, text: string, markup: Markup | null): Promise<Delivered> {
   const { options, media } = content
+  // Telegram also drops them silently; the message it returns then carries no premium emoji.
+  const emojiLost = (m: TgSent) => hasPremiumEmoji(text) && ![...(m.entities ?? []), ...(m.caption_entities ?? [])].some((e) => e.type === 'custom_emoji')
   const base = {
     chat_id: chatId,
     ...(options.silent ? { disable_notification: true } : {}),
@@ -306,14 +331,14 @@ async function deliverContent(token: string, chatId: string, content: PostConten
 
   if (!media.length) {
     const m = await sendText()
-    return { ids: [m.message_id], mainId: m.message_id, mainMedia: false }
+    return { ids: [m.message_id], mainId: m.message_id, mainMedia: false, emojiLost: emojiLost(m) }
   }
   if (needsSplit(media.length, visibleLength(text), Boolean(markup))) {
     const { sent } = await sendMedia(token, base, media, {}, null)
     const mediaIds = sent.map((m) => m.message_id)
     try {
       const m = await sendText()
-      return { ids: [...mediaIds, m.message_id], mainId: m.message_id, mainMedia: false }
+      return { ids: [...mediaIds, m.message_id], mainId: m.message_id, mainMedia: false, emojiLost: emojiLost(m) }
     } catch (error) {
       // Half a post is worse than none: the media is taken back when its text could not follow.
       await callBot(token, 'deleteMessages', { chat_id: chatId, message_ids: mediaIds }).catch(() => null)
@@ -322,7 +347,7 @@ async function deliverContent(token: string, chatId: string, content: PostConten
   }
   const caption = text ? { caption: text, parse_mode: 'HTML' } : {}
   const { sent, captionAt } = await sendMedia(token, base, media, caption, media.length === 1 ? markup : null)
-  return { ids: sent.map((m) => m.message_id), mainId: sent[captionAt].message_id, mainMedia: true }
+  return { ids: sent.map((m) => m.message_id), mainId: sent[captionAt].message_id, mainMedia: true, emojiLost: emojiLost(sent[captionAt]) }
 }
 
 // --- Targets ---------------------------------------------------------------------
@@ -437,15 +462,17 @@ async function deliverTo(post: { id: number; botId: number; content: PostContent
   try {
     const delivered = await deliverContent(token, chat.chatId, post.content, text, await markupFor(post.id, post.content.buttons))
     let pinned = false
-    let note: string | null = null
+    const notes: string[] = []
+    if (delivered.emojiLost) notes.push(EMOJI_LOST)
     if (options.pin) {
       try {
         await callBot(token, 'pinChatMessage', { chat_id: chat.chatId, message_id: delivered.mainId, disable_notification: true })
         pinned = true
       } catch (error) {
-        note = `Gönderildi ama sabitlenemedi: ${explain(error)}`
+        notes.push(`sabitlenemedi: ${explain(error)}`)
       }
     }
+    const note = notes.length ? `Gönderildi ama ${notes.join('; ')}` : null
     await insertSend({ postId: post.id, botId: post.botId, chat: target, delivered, error: note, pinned, unpinHours: options.unpinHours, deleteHours: options.deleteHours })
     return note
   } catch (error) {
@@ -533,7 +560,8 @@ export async function sendTest(input: { content: unknown; botId: number; chat: s
   try {
     const delivered = await deliverContent(token, chat, { ...content, options: { ...content.options, pin: false } }, text, keyboardFor('t', content.buttons))
     const splitNote = delivered.ids.length > 1 && !delivered.mainMedia ? ' Medya ve yazı iki ayrı mesaj olarak gitti.' : ''
-    return { ok: true, message: `Deneme gönderildi.${splitNote} Link butonları denemede doğrudan adrese gider, tıklama sayılmaz.` }
+    const emojiNote = delivered.emojiLost ? ' Premium emojiler normal emoji olarak çıktı: bu botun bu sohbette premium emoji hakkı yok.' : ''
+    return { ok: true, message: `Deneme gönderildi.${splitNote}${emojiNote} Link butonları denemede doğrudan adrese gider, tıklama sayılmaz.` }
   } catch (error) {
     const problem = explain(error)
     const hint = /bulunamadı|chat not found/i.test(problem) ? ' Kendi hesabına denemek için önce bu bota Telegram’dan /start yaz; grup için botu gruba ekle.' : ''
@@ -625,7 +653,13 @@ export async function editPost(postId: number, raw: unknown): Promise<SendOutcom
   for (const send of live) {
     try {
       if (!send.botId) throw new Error('Bu mesajı gönderen bot kayıtlı değil')
-      await editSend(await botToken(send.botId), send, post.content, next, text, markup, auto)
+      const token = await botToken(send.botId)
+      try {
+        await editSend(token, send, post.content, next, text, markup, auto)
+      } catch (error) {
+        if (!emojiRefused(text, error)) throw error
+        await editSend(token, send, post.content, next, plainEmoji(text), markup, auto)
+      }
       await rows(sql`UPDATE tg_post_sends SET edited_at = now(), error = NULL WHERE id = ${send.id}`)
       results.push({ title: send.chatTitle, problem: null, failed: false })
     } catch (error) {

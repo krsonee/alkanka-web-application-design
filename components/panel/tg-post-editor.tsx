@@ -1,15 +1,16 @@
 'use client'
 
 import { useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react'
-import { Bold, Code, EyeOff, Italic, Link2, Quote, RemoveFormatting, Strikethrough, Underline } from 'lucide-react'
+import { Bold, Code, EyeOff, Italic, Link2, Quote, RemoveFormatting, Smile, Strikethrough, Underline } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { EmojiPanel } from '@/components/panel/tg-emoji-panel'
 import { btn, btnGhost, input } from '@/components/panel/tg-hub-ui'
-import { RICH } from '@/components/panel/tg-post-preview'
-import { cleanTgHtml, escapeText, safeLink } from '@/lib/tg-posts-shared'
+import { RICH, failedEmoji, useEmojiFallback } from '@/components/panel/tg-post-preview'
+import { cleanTgHtml, emojiImageTag, escapeText, safeLink, showPremiumEmoji } from '@/lib/tg-posts-shared'
 
-/** Telegram HTML as the browser needs it to be editable: real line breaks, and room for the caret below a closing block. */
+/** Telegram HTML as the browser needs it to be editable: real line breaks, premium emoji as images, and room for the caret below a closing block. */
 function toEditorHtml(html: string) {
-  const body = html.replace(/<tg-spoiler>/g, '<span class="tg-spoiler">').replace(/<\/tg-spoiler>/g, '</span>').replace(/\n/g, '<br>')
+  const body = showPremiumEmoji(html, failedEmoji).replace(/<tg-spoiler>/g, '<span class="tg-spoiler">').replace(/<\/tg-spoiler>/g, '</span>').replace(/\n/g, '<br>')
   return /<\/(blockquote|pre)>$/.test(body) ? `${body}<br>` : body
 }
 
@@ -26,12 +27,25 @@ const toolButton = 'inline-flex size-9 items-center justify-center rounded-md te
  * Writing area that shows the formatting as it is typed. `initial` is read once; give the component a new `key`
  * to load different text. `onChange` always receives Telegram-safe HTML.
  */
-export function PostEditor({ initial, onChange, label }: { initial: string; onChange: (html: string) => void; label: string }) {
+export function PostEditor({
+  initial,
+  onChange,
+  label,
+  bots = [],
+}: {
+  initial: string
+  onChange: (html: string) => void
+  label: string
+  /** Bots that can read a premium emoji pack, for the emoji panel. */
+  bots?: { id: number; name: string; username: string }[]
+}) {
   const ref = useRef<HTMLDivElement>(null)
   const saved = useRef<Range | null>(null)
   const [html] = useState(() => ({ __html: toEditorHtml(initial) }))
   const [empty, setEmpty] = useState(!initial)
   const [linking, setLinking] = useState(false)
+  const [picking, setPicking] = useState(false)
+  useEmojiFallback(ref)
   const [url, setUrl] = useState('')
   const [urlError, setUrlError] = useState('')
 
@@ -92,7 +106,34 @@ export function PostEditor({ initial, onChange, label }: { initial: string; onCh
     const current = range ? hostOf(range, 'a') : null
     setUrl(current?.getAttribute('href') ?? '')
     setUrlError('')
+    setPicking(false)
     setLinking(true)
+  }
+
+  const toggleEmoji = () => {
+    const range = selection()
+    saved.current = range ? range.cloneRange() : null
+    setLinking(false)
+    setPicking((open) => !open)
+  }
+
+  /** Puts an emoji where the caret was when the panel opened, and leaves the caret after it for the next one. */
+  const insertEmoji = (command: 'insertText' | 'insertHTML', value: string) => {
+    const el = ref.current
+    if (!el) return
+    if (!selection()) {
+      el.focus()
+      const sel = window.getSelection()
+      sel?.removeAllRanges()
+      if (saved.current) sel?.addRange(saved.current)
+      else {
+        sel?.selectAllChildren(el)
+        sel?.collapseToEnd()
+      }
+    }
+    exec(command, value)
+    const range = selection()
+    saved.current = range ? range.cloneRange() : null
   }
 
   const restore = () => {
@@ -136,7 +177,7 @@ export function PostEditor({ initial, onChange, label }: { initial: string; onCh
     if (range && !range.collapsed) exec('insertText', range.toString())
   }
 
-  const tools: { label: string; icon: typeof Bold; run: () => void }[] = [
+  const tools: { label: string; icon: typeof Bold; run: () => void; open?: boolean }[] = [
     { label: 'Kalın (Ctrl+B)', icon: Bold, run: () => exec('bold') },
     { label: 'İtalik (Ctrl+I)', icon: Italic, run: () => exec('italic') },
     { label: 'Altı çizili (Ctrl+U)', icon: Underline, run: () => exec('underline') },
@@ -145,6 +186,7 @@ export function PostEditor({ initial, onChange, label }: { initial: string; onCh
     { label: 'Alıntı', icon: Quote, run: () => toggle('blockquote') },
     { label: 'Kod', icon: Code, run: () => toggle('code') },
     { label: 'Link', icon: Link2, run: openLink },
+    { label: 'Emoji ve premium emoji', icon: Smile, run: toggleEmoji, open: picking },
     { label: 'Seçili yazının biçimini temizle', icon: RemoveFormatting, run: clearFormat },
   ]
 
@@ -158,7 +200,8 @@ export function PostEditor({ initial, onChange, label }: { initial: string; onCh
               type="button"
               title={t.label}
               aria-label={t.label}
-              className={toolButton}
+              aria-expanded={t.open}
+              className={cn(toolButton, t.open && 'bg-secondary')}
               // Keeps the text selection in the writing area while the button is pressed.
               onMouseDown={(e) => e.preventDefault()}
               onClick={t.run}
@@ -188,6 +231,14 @@ export function PostEditor({ initial, onChange, label }: { initial: string; onCh
           dangerouslySetInnerHTML={html}
         />
       </div>
+      {picking && (
+        <EmojiPanel
+          bots={bots}
+          onEmoji={(emoji) => insertEmoji('insertText', emoji)}
+          onPremium={(id, emoji) => insertEmoji('insertHTML', emojiImageTag(id, emoji))}
+          onClose={() => setPicking(false)}
+        />
+      )}
       {linking && (
         <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3">
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">

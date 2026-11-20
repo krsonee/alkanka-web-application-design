@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Smile } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const GROUPS: { label: string; emojis: string[] }[] = [
+export const EMOJI_GROUPS: { label: string; emojis: string[] }[] = [
   { label: 'Sık', emojis: ['🔥', '🎉', '🎁', '💰', '💎', '🏆', '🚀', '⚡', '✅', '❤️', '👑', '⭐'] },
   { label: 'Yüz', emojis: ['😀', '😂', '🤣', '😍', '😎', '🤩', '😉', '🥳', '😱', '🤑', '😇', '🤔', '😅', '🙏', '👏', '💪'] },
   { label: 'Oyun', emojis: ['🎰', '🎲', '🃏', '♠️', '♥️', '♦️', '♣️', '🎯', '🎮', '🕹️', '🍀', '🎡', '🪙', '💵', '💸', '📈'] },
@@ -44,7 +44,7 @@ export function EmojiPicker({ onPick, label = 'Emoji ekle' }: { onPick: (emoji: 
       </button>
       {open && (
         <div role="dialog" aria-label="Emoji seç" className="absolute right-0 z-20 mt-2 flex w-72 flex-col gap-2 rounded-xl border border-border bg-card p-3 shadow-xl">
-          {GROUPS.map((g) => (
+          {EMOJI_GROUPS.map((g) => (
             <div key={g.label} className="flex flex-col gap-1">
               <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{g.label}</span>
               <div className="grid grid-cols-8 gap-0.5">

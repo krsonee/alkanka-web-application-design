@@ -39,8 +39,11 @@ export function TelegramTabs({
   legend = true,
   issues = 'box',
   param = 's',
+  initial,
 }: {
   tabs: Tab[]
+  /** Tab that opens when the address names none; the first tab when left out or not in the set. */
+  initial?: string
   label?: string
   legend?: boolean
   /** 'none' when one of the tabs is a status screen that already lists every failing section. */
@@ -50,7 +53,7 @@ export function TelegramTabs({
 }) {
   const [active, setActive] = useUrlTab(
     tabs.map((t) => t.id),
-    tabs[0]?.id ?? '',
+    (initial && tabs.some((t) => t.id === initial) ? initial : tabs[0]?.id) ?? '',
     param,
   )
   const uid = useId()

@@ -34,6 +34,11 @@ function sanitize(raw: unknown): ParsedOdd[] {
 }
 
 export async function parseOddsPost(text: string): Promise<ParsedOdd[]> {
+  return (await readOddsPost(text)).odds
+}
+
+/** `failed` tells "the reader could not be reached" apart from "the post has no odds". */
+export async function readOddsPost(text: string): Promise<{ odds: ParsedOdd[]; failed: boolean }> {
   try {
     const { text: answer } = await generateText({
       model: PARSE_MODEL,
@@ -47,9 +52,9 @@ POST:
 ${text.slice(0, 3000)}`,
     })
     const json = answer.match(/\[[\s\S]*\]/)?.[0]
-    return json ? sanitize(JSON.parse(json)) : []
+    return { odds: json ? sanitize(JSON.parse(json)) : [], failed: !json }
   } catch (error) {
     console.error('[odds] post çözümlenemedi', error)
-    return []
+    return { odds: [], failed: true }
   }
 }

@@ -5,7 +5,19 @@ import { appSecrets, openWithAny } from '@/lib/secrets'
 import { filterWords } from '@/lib/telegram-filters'
 import { decodeEntities } from '@/lib/html-entities'
 import { recordDeal } from '@/lib/deals'
-import { applyReplacements, parseReplacements, pickLink, type ReplaceRule } from '@/lib/text-replace'
+import {
+  MAX_SENT_BUTTONS,
+  applyReplacements,
+  carriedButtons,
+  mergeRules,
+  parseReplacements,
+  pickLink,
+  ruleError,
+  serializeRules,
+  usernameLink,
+  type ReplaceRule,
+} from '@/lib/text-replace'
+import { buttonError, buttonMarkup, cleanButtons, type PostButton } from '@/lib/tg-buttons'
 
 export type MirrorSource = {
   id: number
@@ -14,6 +26,10 @@ export type MirrorSource = {
   link: string
   replacements: string
   footer: string
+  /** Buttons placed under every post shared from this source. */
+  buttons: PostButton[]
+  /** Also carry the source post's own buttons, with their links passed through the rules. */
+  carryButtons: boolean
   keywords: string
   active: boolean
   targetId: number | null
@@ -38,8 +54,8 @@ export type MirrorLog = {
 
 export type MirrorResult = { checked: number; sent: number; skipped: number; failed: number; primed: number; errors: string[] }
 
-type MediaItem = { type: 'photo' | 'video' | 'gif'; url: string | null }
-type ScrapedPost = {
+export type MediaItem = { type: 'photo' | 'video' | 'gif'; url: string | null }
+export type ScrapedPost = {
   id: number
   html: string
   photos: string[]
@@ -48,8 +64,10 @@ type ScrapedPost = {
   date?: string | null
   ref?: string
   items?: MediaItem[]
+  /** Link buttons under the source post. */
+  buttons?: PostButton[]
 }
-type Destination = { token: string; chatId: string; title: string; botId?: number }
+export type Destination = { token: string; chatId: string; title: string; botId?: number }
 
 const MAX_PER_RUN = 5
 const CAPTION_LIMIT = 1000
@@ -73,6 +91,8 @@ export function ensureTables() {
     await rows(sql`ALTER TABLE tg_sources ADD COLUMN IF NOT EXISTS target_id int REFERENCES tg_targets(id) ON DELETE SET NULL`)
     await rows(sql`ALTER TABLE tg_sources ADD COLUMN IF NOT EXISTS replacements text NOT NULL DEFAULT ''`)
     await rows(sql`ALTER TABLE tg_sources ADD COLUMN IF NOT EXISTS footer text NOT NULL DEFAULT ''`)
+    await rows(sql`ALTER TABLE tg_sources ADD COLUMN IF NOT EXISTS buttons text NOT NULL DEFAULT '[]'`)
+    await rows(sql`ALTER TABLE tg_sources ADD COLUMN IF NOT EXISTS carry_buttons boolean NOT NULL DEFAULT false`)
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_log (
       id serial PRIMARY KEY, source_id int NOT NULL REFERENCES tg_sources(id) ON DELETE CASCADE, post_id int NOT NULL,
       status text NOT NULL, detail text, created_at timestamptz NOT NULL DEFAULT now(), UNIQUE (source_id, post_id))`)
@@ -251,8 +271,11 @@ export function toTelegramHtml(html: string, link: string, rules: ReplaceRule[] 
     .replace(/<a\s[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (_, href: string, label: string) => {
       const plain = stripTags(label).trim()
       if (href.startsWith('?q=')) return escapeHtml(plain)
-      if (/(^|\/\/)(t|telegram)\.me\//i.test(href)) return DEAD_LINK
-      const safeLink = escapeHtml(pickLink(href.replace(/&amp;/g, '&'), rules, link))
+      // Telegram links are dropped unless a username rule renames the channel they point to.
+      const telegram = /(^|\/\/)(t|telegram)\.me\//i.test(href)
+      const renamed = telegram ? usernameLink(href, rules) : null
+      if (telegram && !renamed) return DEAD_LINK
+      const safeLink = escapeHtml(renamed ?? pickLink(href.replace(/&amp;/g, '&'), rules, link))
       if (/^(https?:\/\/|www\.)\S+$/i.test(plain)) return `\u0000a href="${safeLink}"\u0001${safeLink}\u0000/a\u0001`
       return `\u0000a href="${safeLink}"\u0001${escapeHtml(plain)}\u0000/a\u0001`
     })
@@ -294,9 +317,17 @@ export async function fetchChannel(channel: string): Promise<ScrapedPost[]> {
     const video = sticker ? null : (chunk.match(/<video[^>]+src="([^"]+)"/)?.[1] ?? null)
     const thumb = sticker ? null : (chunk.match(/tgme_widget_message_video_thumb"[^>]*background-image:url\('([^']+)'\)/)?.[1] ?? null)
     const date = chunk.match(/<time[^>]+datetime="([^"]+)"/)?.[1] ?? null
-    posts.push({ id, html: text?.[1] ?? '', photos, video, thumb, date, ref, items: sticker ? [] : mediaItems(chunk) })
+    posts.push({ id, html: text?.[1] ?? '', photos, video, thumb, date, ref, items: sticker ? [] : mediaItems(chunk), buttons: linkButtons(chunk) })
   }
   return posts
+}
+
+/** Link buttons under a post on the channel's web page. Buttons without a web link (callbacks, games) are skipped. */
+function linkButtons(chunk: string): PostButton[] {
+  const tags = [...chunk.matchAll(/<a\b([^>]*\btgme_widget_message_inline_button\b[^>]*)>([\s\S]*?)<\/a>/g)]
+  return cleanButtons(
+    tags.map((tag) => ({ text: stripTags(tag[2]).trim(), url: decodeEntities(tag[1].match(/\bhref="([^"]+)"/)?.[1] ?? '') })),
+  )
 }
 
 /** Every photo, video and GIF of a post (albums included) in their original order. */
@@ -463,44 +494,65 @@ type Sent = { message_id: number }
 /** Which messages a post became, so the panel can later edit, pin or delete it. `mainId` carries the text. */
 type Delivered = { ids: number[]; mainId: number; mainMedia: boolean }
 
-async function deliver(dest: Destination, post: ScrapedPost, text: string, parseMode: 'HTML' | undefined): Promise<Delivered> {
+/** The post's own media could not be carried over; the caller decides whether to wait or send text only. */
+export class MediaError extends Error {}
+
+export type DeliverOptions = {
+  buttons?: PostButton[]
+  /** `original` (default) falls back to Telegram's preview of the source post; `throw` raises MediaError instead. */
+  mediaFail?: 'original' | 'throw'
+}
+
+export async function deliver(
+  dest: Destination,
+  post: ScrapedPost,
+  text: string,
+  parseMode: 'HTML' | undefined,
+  options: DeliverOptions = {},
+): Promise<Delivered> {
   const send = <T = Sent>(method: string, body: Record<string, unknown>) => callBot<T>(dest.token, method, { chat_id: dest.chatId, ...body })
   const visible = parseMode ? stripTags(text).length : text.length
   const fmt = parseMode ? { parse_mode: parseMode } : {}
   const fitsCaption = visible <= CAPTION_LIMIT
   const captioned = fitsCaption ? { caption: text, ...fmt } : {}
+  const markup = buttonMarkup(options.buttons)
+  const hasButtons = Boolean(options.buttons?.length)
   const isParseError = (error: unknown) => /parse entities|can't parse/i.test(String((error as Error).message))
   const scraped = post.items ?? [
     ...post.photos.map((url) => ({ type: 'photo' as const, url })),
     ...(post.video ? [{ type: 'video' as const, url: post.video }] : []),
   ]
   const textOnly = async (extra: Record<string, unknown> = {}): Promise<Delivered> => {
-    const m = await send('sendMessage', { text, ...fmt, ...extra })
+    const m = await send('sendMessage', { text, ...fmt, ...markup, ...extra })
     return { ids: [m.message_id], mainId: m.message_id, mainMedia: false }
   }
   if (!scraped.length) return textOnly()
   const items = await resolveMissingVideos(post, scraped.slice(0, 10))
-  const finish = async (media: Sent[]): Promise<Delivered> => {
+  const finish = async (media: Sent[], textInCaption: boolean): Promise<Delivered> => {
     const ids = media.map((m) => m.message_id)
-    if (fitsCaption) return { ids, mainId: ids[0], mainMedia: true }
-    const m = await send('sendMessage', { text, ...fmt, link_preview_options: { is_disabled: true } })
+    if (textInCaption) return { ids, mainId: ids[0], mainMedia: true }
+    const m = await send('sendMessage', { text, ...fmt, ...markup, link_preview_options: { is_disabled: true } })
     return { ids: [...ids, m.message_id], mainId: m.message_id, mainMedia: false }
   }
   // Never substitute a video/GIF cover frame: if the real file can't be sent, Telegram's own preview of the original post is used.
-  const viaOriginal = () =>
-    textOnly({
+  const viaOriginal = async (reason: string) => {
+    if (options.mediaFail === 'throw') throw new MediaError(reason)
+    return textOnly({
       link_preview_options: post.ref ? { url: `https://t.me/${post.ref}`, prefer_large_media: true, show_above_text: true } : { is_disabled: true },
     })
-  if (items.some((item) => !item.url)) return viaOriginal()
+  }
+  if (items.some((item) => !item.url)) return viaOriginal('Videonun dosyası kaynak kanalın sayfasında yok (büyük video)')
 
   try {
     if (items.length > 1) {
+      // Telegram albums can't carry buttons, so with buttons the text follows the album as its own message.
+      const albumCaption = fitsCaption && !hasButtons
       // Albums can't hold animations; Telegram plays GIF files inside albums as videos.
       const media = items.map((item, i) => ({
         type: item.type === 'photo' ? 'photo' : 'video',
         media: `attach://m${i}`,
         ...(item.type === 'photo' ? {} : { supports_streaming: true }),
-        ...(i === 0 ? captioned : {}),
+        ...(i === 0 && albumCaption ? captioned : {}),
       }))
       let album: Sent[]
       try {
@@ -512,16 +564,17 @@ async function deliver(dest: Destination, post: ScrapedPost, text: string, parse
         if (isParseError(error)) throw error
         album = await send<Sent[]>('sendMediaGroup', { media: media.map((m, i) => ({ ...m, media: items[i].url })) })
       }
-      return await finish(album)
+      return await finish(album, albumCaption)
     }
 
     const [item] = items
+    const onMedia = fitsCaption ? { ...captioned, ...markup } : {}
     if (item.type === 'photo') {
-      return await finish([await sendPhotoFile<Sent>(dest.token, { chat_id: dest.chatId, ...captioned }, item.url!)])
+      return await finish([await sendPhotoFile<Sent>(dest.token, { chat_id: dest.chatId, ...onMedia }, item.url!)], fitsCaption)
     }
     const method = item.type === 'gif' ? 'sendAnimation' : 'sendVideo'
     const field = item.type === 'gif' ? 'animation' : 'video'
-    const body = { chat_id: dest.chatId, ...(item.type === 'video' ? { supports_streaming: true } : {}), ...captioned }
+    const body = { chat_id: dest.chatId, ...(item.type === 'video' ? { supports_streaming: true } : {}), ...onMedia }
     let single: Sent
     try {
       single = await callBotFiles<Sent>(dest.token, method, body, { [field]: { url: item.url!, kind: 'video', name: item.type === 'gif' ? 'animation.mp4' : 'video.mp4' } })
@@ -529,15 +582,65 @@ async function deliver(dest: Destination, post: ScrapedPost, text: string, parse
       if (isParseError(error)) throw error
       single = await callBot<Sent>(dest.token, method, { ...body, [field]: item.url })
     }
-    return await finish([single])
+    return await finish([single], fitsCaption)
   } catch (error) {
     if (isParseError(error)) throw error
-    console.error('[mirror] media send failed, sharing original post instead', error)
-    return viaOriginal()
+    console.error('[mirror] media send failed', error)
+    return viaOriginal(String((error as Error).message))
   }
 }
 
-type PostSource = { brand: string; link: string; replacements?: string; footer?: string }
+type PostSource = { brand: string; link: string; replacements?: string; footer?: string; buttons?: PostButton[]; carryButtons?: boolean }
+
+// --- Rules shared by every source ------------------------------------------
+
+const SHARED_RULES_KEY = 'replace_rules'
+
+/** Rules applied to every source of the post mirror and the special odds bot, after the source's own. */
+export async function sharedRules(): Promise<ReplaceRule[]> {
+  await ensureTables()
+  const r = await rows<{ value: string }>(sql`SELECT value FROM tg_settings WHERE key = ${SHARED_RULES_KEY}`)
+  return parseReplacements(r[0]?.value ?? '')
+}
+
+async function writeSharedRules(rules: ReplaceRule[]) {
+  const value = serializeRules(rules)
+  await rows(sql`INSERT INTO tg_settings (key, value) VALUES (${SHARED_RULES_KEY}, ${value}) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`)
+}
+
+export async function saveSharedRules(text: string) {
+  await ensureTables()
+  await writeSharedRules(parseReplacements(checkedRules(text)))
+}
+
+/** Rules a source's form marked "for every source": added to the shared list, replacing a shared rule for the same thing. */
+export async function addSharedRules(text: string) {
+  const added = parseReplacements(checkedRules(text))
+  if (added.length) await writeSharedRules(mergeRules(added, await sharedRules()))
+  return added.length
+}
+
+/** A source's rules followed by the shared ones, in the stored form `buildMessage` and `rewriteText` read. */
+export const withSharedRules = (replacements: string, shared: ReplaceRule[]) => serializeRules(mergeRules(parseReplacements(replacements), shared))
+
+/** Validates a rules field from a form and returns it in the stored form. Older `old => new` text is converted. */
+export function checkedRules(text: string) {
+  const invalid = ruleError(text)
+  if (invalid) throw new Error(invalid)
+  return serializeRules(parseReplacements(text))
+}
+
+export function checkedButtons(input: unknown) {
+  const invalid = buttonError(input)
+  if (invalid) throw new Error(invalid)
+  return JSON.stringify(cleanButtons(input))
+}
+
+/** Buttons under a shared post: the source post's own (when carried over), then ours. */
+export function postButtons(source: { link: string; buttons?: PostButton[]; carryButtons?: boolean }, own: PostButton[] | undefined, rules: ReplaceRule[]) {
+  const carried = source.carryButtons ? carriedButtons(own ?? [], rules, source.link) : []
+  return [...carried, ...(source.buttons ?? [])].slice(0, MAX_SENT_BUTTONS)
+}
 
 function buildMessage(post: ScrapedPost, source: PostSource, note: string) {
   const rules = parseReplacements(source.replacements ?? '')
@@ -555,11 +658,12 @@ function buildMessage(post: ScrapedPost, source: PostSource, note: string) {
 /** Returns the messages the post became and the text as sent (Telegram HTML), for the panel's post list. */
 async function sendPost(dest: Destination, post: ScrapedPost, source: PostSource, note = '') {
   const { html, plain } = buildMessage(post, source, note)
+  const buttons = postButtons(source, post.buttons, parseReplacements(source.replacements ?? ''))
   try {
-    return { ...(await deliver(dest, post, html, 'HTML')), text: html }
+    return { ...(await deliver(dest, post, html, 'HTML', { buttons })), text: html }
   } catch (error) {
     if (!/parse entities|can't parse/i.test(String((error as Error).message))) throw error
-    return { ...(await deliver(dest, post, plain, undefined)), text: escapeHtml(plain) }
+    return { ...(await deliver(dest, post, plain, undefined, { buttons })), text: escapeHtml(plain) }
   }
 }
 
@@ -578,6 +682,8 @@ function mapSource(r: Record<string, unknown>): MirrorSource {
     link: String(r.link),
     replacements: String(r.replacements ?? ''),
     footer: String(r.footer ?? ''),
+    buttons: cleanButtons(r.buttons),
+    carryButtons: Boolean(r.carry_buttons),
     keywords: String(r.keywords ?? ''),
     active: Boolean(r.active),
     targetId: r.target_id == null ? null : Number(r.target_id),
@@ -701,17 +807,27 @@ export async function addSource(input: {
   targetId: number | null
   replacements: string
   footer: string
+  buttons?: unknown
+  carryButtons?: boolean
 }) {
   await ensureTables()
-  await rows(sql`INSERT INTO tg_sources (channel, brand, link, keywords, target_id, replacements, footer)
-    VALUES (${input.channel}, ${input.brand}, ${input.link}, ${input.keywords}, ${input.targetId}, ${input.replacements}, ${input.footer})
+  const replacements = checkedRules(input.replacements)
+  const buttons = checkedButtons(input.buttons ?? [])
+  await rows(sql`INSERT INTO tg_sources (channel, brand, link, keywords, target_id, replacements, footer, buttons, carry_buttons)
+    VALUES (${input.channel}, ${input.brand}, ${input.link}, ${input.keywords}, ${input.targetId}, ${replacements}, ${input.footer}, ${buttons}, ${Boolean(input.carryButtons)})
     ON CONFLICT (channel) DO UPDATE SET brand = EXCLUDED.brand, link = EXCLUDED.link, keywords = EXCLUDED.keywords,
-      target_id = EXCLUDED.target_id, replacements = EXCLUDED.replacements, footer = EXCLUDED.footer, active = true`)
+      target_id = EXCLUDED.target_id, replacements = EXCLUDED.replacements, footer = EXCLUDED.footer,
+      buttons = EXCLUDED.buttons, carry_buttons = EXCLUDED.carry_buttons, active = true`)
 }
 
 export async function updateSourceText(id: number, input: { link: string; replacements: string; footer: string }) {
   await ensureTables()
-  await rows(sql`UPDATE tg_sources SET link = ${input.link}, replacements = ${input.replacements}, footer = ${input.footer} WHERE id = ${id}`)
+  await rows(sql`UPDATE tg_sources SET link = ${input.link}, replacements = ${checkedRules(input.replacements)}, footer = ${input.footer} WHERE id = ${id}`)
+}
+
+export async function updateSourceButtons(id: number, input: { buttons: unknown; carryButtons: boolean }) {
+  await ensureTables()
+  await rows(sql`UPDATE tg_sources SET buttons = ${checkedButtons(input.buttons)}, carry_buttons = ${input.carryButtons} WHERE id = ${id}`)
 }
 
 export async function setSourceActive(id: number, active: boolean) {
@@ -752,7 +868,10 @@ export async function runMirror(): Promise<MirrorResult> {
   await ensureTables()
   const destinations = await activeDestinations()
   if (!destinations.size) throw new Error('Bağlı ve aktif hedef kanal yok. Önce bot ve hedef kanal ekle')
-  const sources = (await rows(sql`SELECT * FROM tg_sources WHERE active ORDER BY id`)).map(mapSource)
+  const shared = await sharedRules()
+  const sources = (await rows(sql`SELECT * FROM tg_sources WHERE active ORDER BY id`))
+    .map(mapSource)
+    .map((source) => ({ ...source, replacements: withSharedRules(source.replacements, shared) }))
   const result: MirrorResult = { checked: 0, sent: 0, skipped: 0, failed: 0, primed: 0, errors: [] }
   // Imported lazily: telegram-bots depends on this module.
   const bots = await import('@/lib/telegram-bots')

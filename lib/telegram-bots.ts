@@ -5,6 +5,7 @@ import { FILTER_PRESETS } from '@/lib/telegram-filters'
 import { decodeEntities } from '@/lib/html-entities'
 import type { TgMessage, TgUpdate } from '@/lib/telegram-chat'
 import { TG_HTML, tgNotice, type TgNotice } from '@/lib/tg-format'
+import { buttonError, buttonMarkup, cleanButtons, type PostButton } from '@/lib/tg-buttons'
 
 export type ApprovalKind = 'market' | 'task' | 'complaint'
 
@@ -18,6 +19,8 @@ export type ShareRule = {
   appendText: string
   replyText: string
   targetIds: number[]
+  /** Link buttons put under every post shared for this sponsor. */
+  buttons: PostButton[]
 }
 
 export const MAX_SHARE_RULES = 30
@@ -114,6 +117,7 @@ function parseRule(r: Record<string, unknown>, fallbackId: string): ShareRule {
     appendText: str(r.appendText, DEFAULT_RULE.appendText),
     replyText: str(r.replyText, DEFAULT_RULE.replyText),
     targetIds: ids(r.targetIds),
+    buttons: cleanButtons(r.buttons),
   }
 }
 
@@ -214,11 +218,14 @@ export async function saveShareRule(input: {
   appendText: string
   replyText: string
   targetIds: number[]
+  buttons?: unknown
 }) {
   const suite = await getBotSuite()
   const botId = suite.share.botId
   if (!botId) throw new Error('Önce yukarıdan paylaşım botunu seçip kaydet')
   if (!input.sourceChat.trim()) throw new Error('Sponsor destek grubunu yaz')
+  const badButton = buttonError(input.buttons)
+  if (badButton) throw new Error(badButton)
   const existing = suite.share.rules.find((r) => r.id === input.id)
   if (!existing && suite.share.rules.length >= MAX_SHARE_RULES) throw new Error(`En fazla ${MAX_SHARE_RULES} sponsor eklenebilir`)
   const targets = await validTargetIds(input.targetIds)
@@ -240,6 +247,7 @@ export async function saveShareRule(input: {
     appendText: input.appendText.trim().slice(0, 600),
     replyText: input.replyText.trim().slice(0, 200) || DEFAULT_RULE.replyText,
     targetIds: targets,
+    buttons: cleanButtons(input.buttons),
   }
   suite.share.rules = existing ? suite.share.rules.map((r) => (r.id === rule.id ? rule : r)) : [...suite.share.rules, rule]
   await saveSuite(suite)
@@ -456,6 +464,7 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
   }
 
   const targets = await targetsFor(share.targetIds, false)
+  const markup = buttonMarkup(share.buttons)
   const links: string[] = []
   const failures: string[] = []
   const group = albumPart(m)
@@ -483,22 +492,36 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
       let sentId: number
       // What the panel's post list needs to edit or delete this copy later.
       let sentIds: number[]
-      let onMedia = Boolean(media)
+      // Set when the text went out as its own message under an album; that message is the one edited later.
+      let textId: number | null = null
       let sentText: ReturnType<typeof composeShare> | null = null
       if (album.length > 1) {
-        const caption = composeShare(body, share.appendText, CAPTION_LIMIT)
-        sentText = caption
+        // Telegram albums can't carry buttons, so with buttons the text follows the album as its own message.
+        const below = share.buttons.length ? composeShare(body, share.appendText, MESSAGE_LIMIT) : null
+        const split = Boolean(below?.text)
+        const caption = split ? null : composeShare(body, share.appendText, CAPTION_LIMIT)
         const sent = await callBot<{ message_id: number }[]>(sourceToken, 'sendMediaGroup', {
           chat_id: target.chatId,
           media: album.map((part, i) => ({
             type: part.type,
             media: part.fileId,
-            ...(i === 0 && caption.text ? { caption: caption.text, ...(caption.parse_mode ? { parse_mode: caption.parse_mode } : {}) } : {}),
+            ...(i === 0 && caption?.text ? { caption: caption.text, ...(caption.parse_mode ? { parse_mode: caption.parse_mode } : {}) } : {}),
           })),
         })
         sentId = sent[0].message_id
         sentIds = sent.map((x) => x.message_id)
-        onMedia = true
+        sentText = caption
+        if (split && below) {
+          const res = await callBot<{ message_id: number }>(sourceToken, 'sendMessage', {
+            chat_id: target.chatId,
+            ...below,
+            ...markup,
+            link_preview_options: { is_disabled: true },
+          })
+          sentIds.push(res.message_id)
+          textId = res.message_id
+          sentText = below
+        }
       } else if (media) {
         // copyMessage only works with the bot that can see the source, so the share bot must also be admin in every target.
         try {
@@ -509,6 +532,7 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
             message_id: m.message_id,
             caption: c.text,
             ...(c.parse_mode ? { parse_mode: c.parse_mode } : {}),
+            ...markup,
           })
           sentId = res.message_id
           sentText = c
@@ -518,6 +542,7 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
             chat_id: target.chatId,
             from_chat_id: m.chat.id,
             message_id: m.message_id,
+            ...markup,
           })
           sentId = res.message_id
           if (share.appendText) await callBot(sourceToken, 'sendMessage', { chat_id: target.chatId, text: share.appendText })
@@ -525,7 +550,7 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
         sentIds = [sentId]
       } else {
         sentText = composeShare(body, share.appendText, MESSAGE_LIMIT)
-        const res = await callBot<{ message_id: number }>(sourceToken, 'sendMessage', { chat_id: target.chatId, ...sentText })
+        const res = await callBot<{ message_id: number }>(sourceToken, 'sendMessage', { chat_id: target.chatId, ...sentText, ...markup })
         sentId = res.message_id
         sentIds = [sentId]
       }
@@ -537,8 +562,8 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
         chatId: target.chatId,
         chatTitle: target.title,
         ids: sentIds,
-        mainId: sentId,
-        mainMedia: onMedia,
+        mainId: textId ?? sentId,
+        mainMedia: textId == null && (Boolean(media) || album.length > 1),
         text: sentText ? (sentText.parse_mode ? sentText.text : escapeHtml(sentText.text)) : '',
       })
       const link = postLink(infos.get(target.chatId) ?? { id: target.chatId }, sentId)

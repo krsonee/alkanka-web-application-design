@@ -3,6 +3,7 @@ import { canPanel } from '@/lib/admin-auth'
 import { logPanel } from '@/lib/panel-log'
 import { rejectCrossSite } from '@/lib/same-origin'
 import { addJob, assetsByIds, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
+import { briefLabel, briefProblem, briefText, cleanBrief } from '@/lib/studio-brief'
 import { budgetBlock } from '@/lib/studio-budget'
 import { runGeneration } from '@/lib/studio-generate'
 import { applyOverlay, brushOf } from '@/lib/studio-overlay'
@@ -24,7 +25,9 @@ export async function POST(request: NextRequest) {
   const kind = body.kind === 'sticker' ? 'sticker' : 'banner'
   const format = STUDIO_FORMATS.some((f) => f.id === body.format) ? String(body.format) : '1:1'
   const category = STUDIO_CATEGORIES.find((c) => c === body.category) ?? STUDIO_CATEGORIES[0]
-  const prompt = String(body.prompt ?? '').trim().slice(0, 1500)
+  // New pictures come from the form's fields; a revision is a free instruction about one picture.
+  const brief = body.brief && typeof body.brief === 'object' ? cleanBrief(body.brief) : null
+  const prompt = brief ? briefText(brief) : String(body.prompt ?? '').trim().slice(0, 1500)
 
   const brandId = Number.parseInt(String(body.brandId ?? ''), 10)
   const brand = Number.isFinite(brandId) ? await getBrand(brandId) : null
@@ -37,7 +40,10 @@ export async function POST(request: NextRequest) {
   // Changing only the copy re-prints it on the stored text-free picture, with no model call.
   const retext = body.retext === true && kind === 'banner' && parent?.kind === 'banner' && Boolean(parent.cleanPathname)
 
-  if (!retext && prompt.length < 5) return NextResponse.json({ error: 'Talimat en az 5 karakter olmalı.' }, { status: 400 })
+  const problem = retext ? null : brief ? briefProblem(brief) : prompt.length < 5 ? 'Talimat en az 5 karakter olmalı.' : null
+  if (problem) return NextResponse.json({ error: problem }, { status: 400 })
+  // A revised sticker already carries its edge, so a second one is never drawn on top of it.
+  const outline = kind === 'sticker' && !parent && body.outline !== false
   const overCap = retext ? null : await budgetBlock(imageCost(size))
   if (overCap) return NextResponse.json({ error: overCap }, { status: 409 })
 
@@ -67,7 +73,23 @@ export async function POST(request: NextRequest) {
     const assetRefs = await Promise.all((await assetsByIds(assetIds)).map(readFile))
     const references = mascot ? [mascot, ...assetRefs] : assetRefs
     const revisionOf = parent?.cleanPathname ? await readFile(parent.cleanPathname) : parent ? await readFile(parent.pathname) : null
-    const result = await runGeneration({ kind, format, category, prompt, brand, references, revisionOf, mascot: Boolean(mascot), texts, size })
+    const result = await runGeneration({
+      kind,
+      format,
+      category,
+      prompt,
+      brand,
+      references,
+      revisionOf,
+      mascot: Boolean(mascot),
+      texts,
+      size,
+      style: brief?.style,
+      palette: brief?.colors,
+      caption: kind === 'sticker' ? brief?.caption : '',
+      outline,
+    })
+    const shown = brief ? briefLabel(brief) : prompt
     const folder = kind === 'sticker' ? 'stickers' : 'banners'
     const [pathname, clean] = await Promise.all([
       storeFile(folder, result.data, result.contentType, result.ext),
@@ -78,13 +100,13 @@ export async function POST(request: NextRequest) {
       brandId: brand?.id ?? null,
       kind,
       format: kind === 'sticker' ? '1:1' : format,
-      prompt,
+      prompt: shown,
       pathname,
       parentId: parent?.id ?? null,
       cost: imageCost(size),
       texts,
     })
-    await logPanel('studio', 'Görsel üretildi', brand?.name || null, `Görsel #${job.id} · ${prompt.slice(0, 200)}`)
+    await logPanel('studio', 'Görsel üretildi', brand?.name || null, `Görsel #${job.id} · ${shown.slice(0, 200)}`)
     return NextResponse.json({ job: { ...job, brandName: brand?.name ?? '' } })
   } catch (error) {
     console.error('Studio generation failed:', error)

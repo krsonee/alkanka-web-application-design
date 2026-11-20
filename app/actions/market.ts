@@ -5,7 +5,7 @@ import { getBalance, getMember } from '@/lib/member'
 import { myRequests, requestProduct, type Delivered, type MarketRequest } from '@/lib/market'
 import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
 
-type Result = { ok: true; balance: number; message: string } | { ok: false; error: string }
+type Result = { ok: true; balance: number; message: string; delivered: boolean } | { ok: false; error: string }
 
 const PLAY_NAMES = { cark: 'çark', zar: 'zar', sandik: 'sandık' }
 
@@ -15,6 +15,9 @@ function deliveredMessage(delivered: Delivered) {
     return `+${delivered.amount} ${name} hakkı hesabına eklendi. Şu an ${delivered.total} ekstra ${name} hakkın var, hemen kullanabilirsin.`
   }
   if (delivered?.kind === 'shield') return `Seri kalkanı hesabına eklendi. Toplam ${delivered.total} kalkanın var.`
+  if (delivered?.kind === 'kc') return `+${delivered.amount.toLocaleString('tr-TR')} KC bakiyene eklendi.`
+  if (delivered?.kind === 'kp') return `+${delivered.amount.toLocaleString('tr-TR')} Kanka Puan hesabına eklendi.`
+  if (delivered?.kind === 'badge') return `${delivered.name} rozeti profiline takıldı.`
   return 'Talebin alındı. Ekibimiz onayladığında hesabına tanımlanacak.'
 }
 
@@ -29,6 +32,7 @@ export async function requestMarketItem(itemId: string, siteUsername: string | n
     return {
       ok: true,
       balance: await getBalance(member.id),
+      delivered: Boolean(item.delivered),
       message: item.kind === 'sponsor'
         ? `Talebin alındı. Onaylandığında bonus ${item.sponsorName} hesabına eklenecek.`
         : deliveredMessage(item.delivered),

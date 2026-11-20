@@ -77,25 +77,52 @@ const LIMIT_STEPS: GuideStep[] = [
 
 const MARKET_STEPS: GuideStep[] = [
   {
-    title: 'Ürün ve sponsor bonusu ekleme',
+    title: 'Ürün listesi: arama, süzgeç, görünüm ve sıra',
     body: (
       <ol className={ol}>
-        <li><b>Ürünler</b> sekmesinde <b>Yeni ürün / sponsor bonusu</b> butonuna bas. <b>Tür</b> sponsor bonusuysa bir <b>Sponsor site</b> seç; ürün o sitenin logosuyla görünür.</li>
-        <li><b>Fiyat (KC)</b> üyenin ödeyeceği Kanka Coin’dir. <b>Toplam stok</b> başta kaç adet olduğunu, <b>Kalan stok</b> şu an kaç adet kaldığını gösterir. Kalan 0 olunca ürün “tükendi” olur.</li>
-        <li>Yayındaki bir ürünün stoku azalınca (toplamın beşte biri, en az 3 adet) ya da bitince bu ekranın üstünde ve Genel bakışta uyarı çıkar; üründe “Stok azaldı” ya da “Stok bitti” etiketi görünür. Stok eklemek için ürünün kalemine bas, <b>Kalan stok</b>’u artır. Gizli ürün için uyarı çıkmaz.</li>
-        <li><b>Kişi başı limit</b> bir üyenin aynı üründen kaç kez alabileceğidir.</li>
-        <li><b>Görsel URL</b> alanına link yapıştır ya da yükle; boşsa varsayılan market görseli çıkar.</li>
+        <li>Market dört sekmedir: <b>Talepler</b> (bekleyen iş), <b>Ürünler</b>, <b>Avatarlar &amp; kapaklar</b> ve yetkin varsa <b>Masa temaları</b>.</li>
+        <li><b>Ürünler</b> sekmesinde üstteki kutudan ürün ya da sponsor adıyla ararsın. Yanındaki iki liste ürünleri <b>türe</b> (sponsor bonusu / site içi ürün) ve <b>stoka</b> (stokta / azaldı / bitti / gizli) göre süzer.</li>
+        <li><b>Kart / Tablo</b> düğmesi görünümü değiştirir: kartta görsel öndedir, tabloda aynı ekrana daha çok ürün sığar. İkisinde de aynı düğmeler vardır.</li>
+        <li>Soldaki <b>tutamaçtan sürükleyerek</b> sırayı değiştirirsin; klavyeyle de tutamaca gelip boşluk + ok tuşlarıyla taşıyabilirsin. Market sayfası ürünleri bu sırayla gösterir. Süzgeç açıkken yaptığın sıralama sadece görünen ürünlerin kendi aralarındaki yerini değiştirir.</li>
+        <li><b>Yıldız</b> ürünü öne çıkarır: market sayfasının en üstünde büyük kartla görünür (en fazla 4 ürün, stoku biten öne çıkmaz). Zincir ve makas simgeleri ürünün linkini verir, göz simgesi ürünü gizler, kalem düzenler, çöp kutusu siler.</li>
       </ol>
     ),
   },
   {
-    title: 'Teslimat ve kurallar',
+    title: 'Ürün ekleme ve düzenleme',
     body: (
       <ol className={ol}>
-        <li><b>Teslimat notu</b> üye satın alınca ona gösterilen bilgidir (ör. “24 saat içinde hesabına yüklenir”).</li>
+        <li><b>Yeni ürün</b> düğmesi formu yandan açar; liste yerinde kalır. Yazdığın bir şeyi kaydetmeden kapatmak istersen panel önce sorar.</li>
+        <li><b>Tür</b>: <b>Sponsor bonusu</b> seçersen bir sponsor site seçersin, ürün o sitenin logosuyla görünür ve üyeden o sitedeki kullanıcı adı istenir. <b>Site içi ürün</b> bu sitede verilen ödüldür. Kayıtlı ürünün türü sonradan değişmez.</li>
+        <li><b>Fiyat (KC)</b> üyenin ödeyeceği Kanka Coin’dir. <b>Toplam stok</b> başta kaç adet olduğunu, <b>Kalan stok</b> şu an kaç adet kaldığını gösterir. Kalan 0 olunca ürün “tükendi” olur. <b>Kişi başı sınır</b> bir üyenin aynı üründen kaç kez alabileceğidir.</li>
+        <li>Yayındaki bir ürünün stoku azalınca (toplamın beşte biri, en az 3 adet) ya da bitince bu ekranın üstünde ve Genel bakışta uyarı çıkar. Uyarıdaki ürün adına basınca form açılır; <b>Kalan stok</b>’u artır. Gizli ürün için uyarı çıkmaz.</li>
+        <li><b>Görsel</b> alanına link yapıştır ya da yükle; boşsa varsayılan market görseli çıkar.</li>
+      </ol>
+    ),
+  },
+  {
+    title: 'Teslim: otomatik mi, elle mi?',
+    body: (
+      <>
+        <ol className={ol}>
+          <li><b>Otomatik</b>: Üye satın alır almaz ödül hesabına eklenir, sana iş düşmez. Hesaba ne ekleneceğini seçersin: <b>Kanka Coin, Kanka Puan, çark hakkı, zar hakkı, sandık hakkı, seri kalkanı</b> ya da bir <b>rozet</b>. Miktarı yazarsın (rozette miktar yoktur, rozeti listeden seçersin).</li>
+          <li><b>Elle</b>: Coin üyeden düşer, talep <b>Talepler</b> sekmesine gelir. Ödülü sen teslim edip onaylarsın. Sponsor bonusu sponsorun sitesinde yüklendiği için her zaman elledir.</li>
+          <li>Coin veren üründe ödül fiyattan az olmak zorundadır; panel, bedava coin dağıtan ürünü kaydetmez.</li>
+          <li>Rozet veren ürünü aynı üye ikinci kez alamaz; site &quot;Bu rozet zaten sende&quot; der ve coin düşmez.</li>
+          <li>Otomatik teslim satın alma anında bir sorun yüzünden olmazsa üye coinini kaybetmez: talep <b>Talepler</b>’e &quot;ödül hesaba eklenemedi&quot; notuyla düşer. <b>Onayla</b>’ya bastığında ödül o an hesaba eklenir; elle bir şey vermene gerek yoktur.</li>
+        </ol>
+        <p className="mt-3 rounded-lg border border-border bg-background p-3 text-xs leading-relaxed text-muted-foreground">Eski ürünlerden çark hakkı, zar hakkı ve seri kalkanı otomatik teslimdir. Rozet, hediye kutusu, çekiliş bileti ve profil çerçevesi <b>elle teslime</b> alındı: eskiden bunlar &quot;teslim edildi&quot; diye kapanıyor ama hesaba bir şey eklenmiyordu. Artık talepleri sırana düşer. Birini otomatiğe çevirmek istersen ürünü açıp ne ekleneceğini seç.</p>
+      </>
+    ),
+  },
+  {
+    title: 'Teslimat notu, kurallar ve görünüm',
+    body: (
+      <ol className={ol}>
+        <li><b>Teslimat notu</b> ürün detayında üyeye gösterilen bilgidir (ör. “24 saat içinde hesabına yüklenir”).</li>
         <li><b>Kurallar</b> alanında her satır ayrı bir madde olur (ör. çevrim şartı, son kullanma).</li>
-        <li><b>Kullanıcı adı sor</b> açıksa üye satın alırken sponsor sitedeki kullanıcı adını yazmak zorunda kalır, teslimatı ona göre yaparsın.</li>
-        <li><b>Markette göster</b> kapalıysa ürün kayıtlı kalır ama sitede görünmez.</li>
+        <li><b>Satın alırken kullanıcı adı sor</b> açıksa üye bir kullanıcı adı yazmak zorunda kalır, teslimatı ona göre yaparsın. Sponsor bonusunda hep açıktır.</li>
+        <li><b>Markette göster</b> kapalıysa ürün kayıtlı kalır ama sitede görünmez. <b>Öne çıkar</b> listedeki yıldızla aynı ayardır.</li>
       </ol>
     ),
   },
@@ -103,8 +130,20 @@ const MARKET_STEPS: GuideStep[] = [
     title: 'Talepleri onaylama',
     body: (
       <ol className={ol}>
-        <li>Üye satın aldığında coin hemen düşer ve talep <b>Talepler</b> sekmesine gelir.</li>
-        <li>Teslim ettiysen <b>Onayla</b>; teslim edemiyorsan <b>Reddet</b>. Reddedilen talebin coini üyeye otomatik iade edilir.</li>
+        <li><b>Talepler</b> sekmesi <b>Bekleyen</b> süzgeciyle açılır; sekme adındaki sayı bekleyen talep sayısıdır. <b>Onaylanan / Reddedilen / Hepsi</b> ile geçmişe bakarsın, kutudan ürün, üye ya da site kullanıcı adıyla ararsın.</li>
+        <li>Ödülü teslim ettiysen <b>Onayla</b>; teslim edemiyorsan <b>Reddet ve iade et</b>. Reddedilen talebin coini üyeye otomatik iade edilir ve stok geri eklenir. Red sebebini üye görür.</li>
+        <li>Otomatik teslim edilen ürünler burada iş olarak görünmez; kendiliğinden onaylanır ve <b>Onaylanan</b> altında &quot;Otomatik teslim edildi&quot; notuyla kayıt olarak durur.</li>
+      </ol>
+    ),
+  },
+  {
+    title: 'Sitede market nasıl görünür?',
+    body: (
+      <ol className={ol}>
+        <li>Sayfanın üstünde üyenin bakiyesi ve coininin kaç ürüne yettiği yazar. Altında <b>öne çıkan</b> ürünler büyük kartla durur.</li>
+        <li>Ürünler dört kategoride gezilir: <b>Sponsor ödülleri</b>, <b>Site içi ödüller</b>, <b>Avatar &amp; kapak</b>, <b>Masa temaları</b>. Avatarlar ve temalar kendi ekranlarından yönetilir; burada sadece nerede göründükleri değişti.</li>
+        <li>Her kartta stok çubuğu (stokta / son birkaç adet / tükendi), kişi başı sınır ve üyenin kaç tane aldığı yazar. Coini yetmeyen üye düğmede kaç coin eksiği olduğunu görür; sınırına ulaşan üyede düğme kapanır.</li>
+        <li>Otomatik teslim edilen üründe kartta &quot;anında&quot; yazar ve düğme <b>Satın al</b> olur; elle teslim edilende <b>Talep et</b>.</li>
       </ol>
     ),
   },
@@ -491,7 +530,7 @@ export function LimitsGuide() {
 }
 
 export function MarketGuide() {
-  return <FeatureGuide title="Market rehberi" subtitle="Ürün ve sponsor bonusu ekleme, stok, teslimat ve talep onayı nasıl çalışır" steps={MARKET_STEPS} />
+  return <FeatureGuide title="Market rehberi" subtitle="Ürün ekleme, otomatik ve elle teslim, stok, sıralama ve talep onayı nasıl çalışır" steps={MARKET_STEPS} />
 }
 
 export function TournamentGuide() {

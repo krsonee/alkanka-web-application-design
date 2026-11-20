@@ -275,7 +275,13 @@ const TAGS: Record<string, string> = {
 }
 const LINE_BREAKERS = new Set(['div', 'p', 'li', 'tr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
 const TOKEN = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)((?:"[^"]*"|'[^']*'|[^'">])*)>|([^<]+)|(<)/g
-const EMPTY_PAIR = /<(b|i|u|s|code|pre|blockquote|tg-spoiler)><\/\1>|<a href="[^"]*"><\/a>/g
+const EMPTY_PAIR = /<(b|i|u|s|code|pre|blockquote|tg-spoiler)><\/\1>|<a href="[^"]*"><\/a>|<tg-emoji emoji-id="\d+"><\/tg-emoji>/g
+const EMOJI_ID = /^\d{1,20}$/
+
+function attrOf(attrs: string, name: string) {
+  const m = new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(attrs)
+  return m ? decodeText(m[1] ?? m[2] ?? m[3] ?? '') : ''
+}
 
 /**
  * Reduces any HTML to the tags Telegram accepts, always properly nested and closed.
@@ -284,7 +290,8 @@ const EMPTY_PAIR = /<(b|i|u|s|code|pre|blockquote|tg-spoiler)><\/\1>|<a href="[^
 export function cleanTgHtml(input: string): string {
   const out: string[] = []
   const stack: string[] = []
-  const spans: boolean[] = []
+  /** What each open span stands for: a Telegram tag, or nothing. */
+  const spans: string[] = []
   const closeDownTo = (tag: string) => {
     const at = stack.lastIndexOf(tag)
     if (at < 0) return
@@ -320,15 +327,38 @@ export function cleanTgHtml(input: string): string {
     }
     if (name === 'span') {
       if (closing) {
-        if (spans.pop()) closeDownTo('tg-spoiler')
+        const tag = spans.pop()
+        if (tag) closeDownTo(tag)
         continue
       }
-      const spoiler = /class\s*=\s*["']?[^"'>]*\btg-spoiler\b/i.test(attrs) && !literal && !stack.includes('tg-spoiler')
-      spans.push(spoiler)
-      if (spoiler) {
-        stack.push('tg-spoiler')
-        out.push('<tg-spoiler>')
+      const plain = literal || stack.includes('tg-emoji')
+      // A premium emoji whose picture could not be loaded stands in the writing area as a span around its plain emoji.
+      const emojiId = attrOf(attrs, 'data-emoji-id')
+      const spoiler = /class\s*=\s*["']?[^"'>]*\btg-spoiler\b/i.test(attrs) && !stack.includes('tg-spoiler')
+      const tag = plain ? '' : EMOJI_ID.test(emojiId) ? 'tg-emoji' : spoiler ? 'tg-spoiler' : ''
+      spans.push(tag)
+      if (tag) {
+        stack.push(tag)
+        out.push(tag === 'tg-emoji' ? `<tg-emoji emoji-id="${emojiId}">` : '<tg-spoiler>')
       }
+      continue
+    }
+    if (name === 'img') {
+      // The writing area shows a premium emoji as an image; Telegram wants a tag around the plain emoji it stands for.
+      const id = attrOf(attrs, 'data-emoji-id')
+      const alt = [...attrOf(attrs, 'alt').trim()].slice(0, 10).join('')
+      if (!closing && !literal && !stack.includes('tg-emoji') && EMOJI_ID.test(id) && alt) out.push(`<tg-emoji emoji-id="${id}">${escapeText(alt)}</tg-emoji>`)
+      continue
+    }
+    if (name === 'tg-emoji') {
+      if (closing) {
+        closeDownTo('tg-emoji')
+        continue
+      }
+      const id = attrOf(attrs, 'emoji-id')
+      if (literal || stack.includes('tg-emoji') || !EMOJI_ID.test(id)) continue
+      stack.push('tg-emoji')
+      out.push(`<tg-emoji emoji-id="${id}">`)
       continue
     }
     const tag = TAGS[name]
@@ -338,7 +368,8 @@ export function cleanTgHtml(input: string): string {
       if (!literal || tag === 'code' || tag === 'pre') closeDownTo(tag)
       continue
     }
-    if (literal || stack.includes(tag)) continue
+    // A premium emoji holds nothing but its plain emoji.
+    if (literal || stack.includes(tag) || stack.includes('tg-emoji')) continue
     if (tag === 'blockquote' || tag === 'pre') breakLine()
     if (tag === 'a') {
       const href = /href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attrs)
@@ -360,6 +391,31 @@ export function cleanTgHtml(input: string): string {
   }
   return html.replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim()
 }
+
+// --- Premium emoji ---------------------------------------------------------------
+
+/** Served only to a signed-in panel account; see app/panel/tg-emoji/[id]/route.ts. */
+export const EMOJI_IMAGE_PATH = '/panel/tg-emoji/'
+
+export type EmojiPack = { name: string; title: string; emojis: { id: string; emoji: string }[] }
+
+const TG_EMOJI = /<tg-emoji emoji-id="(\d+)">([^<]*)<\/tg-emoji>/g
+
+export const hasPremiumEmoji = (html: string) => html.includes('<tg-emoji ')
+
+/** A premium emoji as the panel shows it. cleanTgHtml turns it back into Telegram's tag. */
+export const emojiImageTag = (id: string, emoji: string) =>
+  `<img class="tg-emoji" data-emoji-id="${id}" alt="${escapeAttr(emoji)}" src="${EMOJI_IMAGE_PATH}${id}" draggable="false">`
+
+/**
+ * Clean Telegram HTML with every premium emoji as its image, for the writing area and the preview.
+ * Ids in `plain` are known to have no picture and are shown as their plain emoji straight away.
+ */
+export const showPremiumEmoji = (html: string, plain?: ReadonlySet<string>) =>
+  html.replace(TG_EMOJI, (_, id: string, alt: string) => (plain?.has(id) ? `<span data-emoji-id="${id}" contenteditable="false">${alt}</span>` : emojiImageTag(id, decodeText(alt))))
+
+/** The same text with every premium emoji replaced by the plain emoji it stands for. */
+export const plainEmoji = (html: string) => html.replace(TG_EMOJI, '$2')
 
 export const plainText = (html: string) => decodeText(html.replace(/<[^>]+>/g, ''))
 

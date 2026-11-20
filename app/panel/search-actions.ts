@@ -29,7 +29,12 @@ type Row = PanelModule | PanelView | 'account' | 'audit' | 'staff'
  * Screens and settings that sit inside a section, so the menu filter alone cannot find them.
  * `words` are what people type when they look for one; a `moved` tab opens wherever this account sees it.
  */
-const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row } | { moved: MovedTab }))[] = [
+const SETTINGS: ({ title: string; words?: string; query?: string; anyOf?: PanelModule[] } & ({ row: Row } | { moved: MovedTab }))[] = [
+  { title: 'Telegram premium emoji', words: 'emoji paketi addemoji özel emoji hareketli emoji post', row: 'telegram', query: 's=post-new', anyOf: ['telegram', 'tg_posts'] },
+  { title: 'Telegram kaynakları', words: 'kaynak kanal kaynak grup botların okuduğu liste', row: 'telegram', query: 's=sources' },
+  { title: 'Özel oran botu paylaşım kuralı', words: 'alakasız post oran içermeyen atlandı anahtar kelime video albüm görselsiz bekleyen', row: 'telegram', query: 's=odds' },
+  { title: 'Değiştirme kuralları', words: 'kelime kullanıcı adı link alan adı buton linki değiştir ortak kural aktarma kaynak butonu', row: 'telegram', query: 's=mirror' },
+  { title: 'Post paylaşım butonları', words: 'sponsor butonu tetikleyici post paylaşım botu albüm', row: 'telegram', query: 's=share' },
   { title: 'Yasal metinler', words: 'kvkk gizlilik kullanım şartları çerez sözleşme', row: 'texts', query: 's=legal' },
   { title: 'Paylaşım görseli', words: 'whatsapp önizleme og sosyal kart', row: 'logo', query: 's=share' },
   { title: 'Sponsor logosu', words: 'sponsor logoları logo yükle', row: 'sponsors' },
@@ -46,6 +51,9 @@ const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row
   { title: 'Arama motoru doğrulaması', words: 'google bing yandex search console', row: 'seo' },
   { title: 'Stüdyo aylık tavanı', words: 'harcama bütçe limit', row: 'studio' },
   { title: 'Stüdyo görselini slider\'a ekle', words: 'banner slayt gönder aktar', row: 'studio' },
+  { title: 'Stüdyo hazır tarifler ve isteği geliştir', words: 'form konu sahne karakter stil tarif şablon prompt talimat', row: 'studio' },
+  { title: 'Stüdyo hareketli GIF ve video kalitesi', words: 'gerçek hareket ışık efekti standart yüksek 720p 1080p süre kamera', row: 'studio' },
+  { title: 'Stüdyo hareketli sticker', words: 'telegram video sticker kenar çizgisi şeffaf sallanma webm', row: 'studio' },
   { title: 'Slayt telefon görseli', words: 'mobil dikey görsel slider telefon', row: 'slide', query: 's=slider' },
   { title: 'Rehber yazısını ileri tarihe zamanla', words: 'yayın zamanı tarih saat zamanla blog yazı', row: 'seo' },
   { title: 'Turnuva şablonları', words: 'şablon kalıp tekrar aç haftalık kupa', row: 'tournaments' },
@@ -76,7 +84,9 @@ const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row
   { title: 'Coin dökümü', words: 'coin hareket bakiye geçmiş döküm ekstre nereden geldi nereye gitti', row: 'users' },
   { title: 'Süreli kısıtlama', words: 'geçici kısıt bitiş tarihi süre kendiliğinden kalkar', row: 'limits' },
   { title: 'Görev kopyala / arşivle', words: 'görev kopya çoğalt arşiv eski görev kaldır', row: 'tasks' },
-  { title: 'Market stok uyarıları', words: 'stok azaldı bitti tükendi uyarı', row: 'market', query: 's=products&v=urunler' },
+  { title: 'Market stok uyarıları', words: 'stok azaldı bitti tükendi uyarı', row: 'market', query: 's=products' },
+  { title: 'Ürün teslim şekli', words: 'otomatik teslim elle teslim ödül hesaba eklenir kc kp çark zar sandık seri kalkanı rozet', row: 'market', query: 's=products' },
+  { title: 'Öne çıkan ürünler', words: 'öne çıkar vitrin market üstü yıldız sıralama sürükle', row: 'market', query: 's=products' },
   { title: 'Hazır cevaplar', words: 'hazır cevap red sebebi kalıp yorum şikayet', row: 'community', query: 's=reviews' },
   { title: 'Mini oyun beklenen günlük çıkış', words: 'beklenen coin çıkış tahmin günlük maliyet çark zar sandık', row: 'rewards' },
   { title: 'Personelin 2FA kaydını yenilet', words: '2fa yenile yeni barkod yeni yedek kod personel', row: 'staff' },
@@ -100,8 +110,8 @@ const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row
   { title: 'KP sıralaması', words: 'liderlik tablosu', row: 'badges', query: 's=board' },
   { title: 'Online ödülleri', words: 'çevrim içi süre ödülü', row: 'badges', query: 's=online' },
   { title: 'Kazananlar şeridi', words: 'kayan yazı ticker', row: 'badges', query: 's=ticker' },
-  { title: 'Market ürünleri', words: 'ürün ekle stok fiyat', row: 'market', query: 's=products&v=urunler' },
-  { title: 'Market talepleri', words: 'sipariş teslim', row: 'market', query: 's=products&v=talepler' },
+  { title: 'Market ürünleri', words: 'ürün ekle stok fiyat kart tablo görünüm süzgeç', row: 'market', query: 's=products' },
+  { title: 'Market talepleri', words: 'sipariş teslim onay red iade bekleyen', row: 'market', query: 's=requests' },
   { title: 'Avatarlar & kapaklar', words: 'profil resmi kapak', row: 'market', query: 's=avatars' },
   { title: 'Masa temaları', words: 'tema fiyatı masa görünümü', query: 's=themes', moved: 'themes' },
   { title: 'Kasa oranı', words: 'kazanma oranı bot zorluğu', row: 'games' },
@@ -159,7 +169,7 @@ export async function panelSearchAction(raw: string): Promise<SearchHit[]> {
   for (const s of SETTINGS) {
     if (hits.length >= SETTING_LIMIT) break
     if (!has(`${s.title} ${s.words ?? ''}`)) continue
-    const row = 'moved' in s ? tabHome(s.moved, can) : opens(s.row) ? s.row : null
+    const row = 'moved' in s ? tabHome(s.moved, can) : (s.anyOf ? s.anyOf.some(can) : opens(s.row)) ? s.row : null
     if (!row) continue
     hits.push({ kind: 'setting', id: s.title, title: s.title, detail: '', ...address(row, s.query) })
   }
@@ -189,7 +199,7 @@ export async function panelSearchAction(raw: string): Promise<SearchHit[]> {
   }
   for (const p of products.filter((p) => has(p.name)).slice(0, LIMIT)) {
     const detail = `${Number(p.price).toLocaleString('tr-TR')} coin${p.active ? '' : ' · Gizli'}`
-    hits.push({ kind: 'product', id: String(p.id), title: p.name, detail, tab: 'market', href: `/panel?b=market&s=products&v=urunler&f=product-${p.id}` })
+    hits.push({ kind: 'product', id: String(p.id), title: p.name, detail, tab: 'market', href: `/panel?b=market&s=products&f=product-${p.id}` })
   }
   for (const t of tournaments.filter((t) => has(t.title)).slice(0, LIMIT)) {
     hits.push({ kind: 'tournament', id: String(t.id), title: t.title, detail: STATUS_LABEL[t.status] ?? '', tab: 'tournaments', href: `/panel?b=tournaments&f=tournament-${t.id}` })

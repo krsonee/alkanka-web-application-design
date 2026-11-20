@@ -3,16 +3,25 @@ import { canPanel } from '@/lib/admin-auth'
 import { logPanel } from '@/lib/panel-log'
 import { rejectCrossSite } from '@/lib/same-origin'
 import { addJob, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
+import { makeGif, makeMotionSticker, makeVideo, videoToGif } from '@/lib/studio-animate'
+import { cleanMotion, motionLabel } from '@/lib/studio-brief'
 import { budgetBlock } from '@/lib/studio-budget'
-import { AI_GIF_SECONDS, makeGif, makeVideo, videoToGif } from '@/lib/studio-animate'
 import { brushOf } from '@/lib/studio-overlay'
 import { makeStickerIcon, makeVideoSticker } from '@/lib/studio-telegram'
-import { VIDEO_DURATIONS, videoCost } from '@/lib/studio-types'
+import { GIF_DURATIONS, gifCost, STICKER_MOTION_COST, toMotionQuality, VIDEO_DURATIONS, videoCost } from '@/lib/studio-types'
 
 export const maxDuration = 300
 
-type Mode = 'gif' | 'aigif' | 'video' | 'tgsticker' | 'tgicon'
-const MODES: Mode[] = ['gif', 'aigif', 'video', 'tgsticker', 'tgicon']
+/**
+ * `gif` is the free light effect over a still banner, `aigif` a GIF cut from a generated clip.
+ * `tgsticker` is the free wobble, `tgmotion` a sticker whose character is animated by the model.
+ */
+type Mode = 'gif' | 'aigif' | 'video' | 'tgsticker' | 'tgmotion' | 'tgicon'
+const MODES: Mode[] = ['gif', 'aigif', 'video', 'tgsticker', 'tgmotion', 'tgicon']
+const STICKER_MODES: Mode[] = ['tgsticker', 'tgmotion', 'tgicon']
+
+const kb = (data: Buffer) => `${Math.max(1, Math.round(data.length / 1024))} KB`
+const mb = (data: Buffer) => `${(data.length / 1024 / 1024).toFixed(1)} MB`
 
 export async function POST(request: NextRequest) {
   const crossSite = rejectCrossSite(request)
@@ -23,7 +32,7 @@ export async function POST(request: NextRequest) {
   const jobId = Number.parseInt(String(body?.jobId ?? ''), 10)
   const source = Number.isFinite(jobId) ? await getJob(jobId) : null
   const mode: Mode = MODES.find((m) => m === body?.mode) ?? 'gif'
-  const telegram = mode === 'tgsticker' || mode === 'tgicon'
+  const telegram = STICKER_MODES.includes(mode)
 
   if (!source || source.kind !== (telegram ? 'sticker' : 'banner')) {
     return NextResponse.json(
@@ -32,10 +41,22 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const duration = VIDEO_DURATIONS.find((d) => d === Number(body?.duration)) ?? 6
+  // Older screens sent the motion as one line of text.
+  const motion = cleanMotion(typeof body?.motion === 'string' ? { action: body.motion } : body?.motion)
   const audio = body?.audio === true
-  const motion = String(body?.motion ?? '').trim().slice(0, 600)
-  const paid = mode === 'aigif' ? videoCost(AI_GIF_SECONDS, false, false) : mode === 'video' ? videoCost(duration, audio) : 0
+  const duration = VIDEO_DURATIONS.find((d) => d === Number(body?.duration)) ?? 6
+  const gifSeconds = GIF_DURATIONS.find((d) => d === Number(body?.duration)) ?? GIF_DURATIONS[0]
+  // Videos were always 1080p before the quality choice existed.
+  const quality = toMotionQuality(body?.quality, mode === 'video' ? 'hd' : 'sd')
+  const hd = quality === 'hd'
+  const paid =
+    mode === 'aigif'
+      ? gifCost(gifSeconds, quality)
+      : mode === 'video'
+        ? videoCost(duration, audio, hd)
+        : mode === 'tgmotion'
+          ? STICKER_MOTION_COST
+          : 0
   const overCap = await budgetBlock(paid)
   if (overCap) return NextResponse.json({ error: overCap }, { status: 409 })
 
@@ -43,52 +64,51 @@ export async function POST(request: NextRequest) {
     const image = await readFile(source.pathname)
     // With the text-free original at hand, the model animates that and the logo and copy are printed
     // on the finished clip. Older jobs without it are animated as they are.
-    const clip = async (seconds: number, sound: boolean, hd: boolean) => {
+    const clip = async (seconds: number, sound: boolean) => {
       if (!source.cleanPathname) return makeVideo({ image, format: source.format, motion, duration: seconds, audio: sound, hd, brush: null })
       const [clean, brand] = await Promise.all([readFile(source.cleanPathname), source.brandId ? getBrand(source.brandId) : null])
       return makeVideo({ image: clean, format: source.format, motion, duration: seconds, audio: sound, hd, brush: brushOf(brand, source.texts) })
     }
-    const result =
-      mode === 'gif'
-        ? { data: await makeGif(image), contentType: 'image/gif', ext: 'gif', cost: 0, folder: 'gifs' }
-        : mode === 'aigif'
-          ? {
-              data: await videoToGif(await clip(AI_GIF_SECONDS, false, false)),
-              contentType: 'image/gif',
-              ext: 'gif',
-              cost: paid,
-              folder: 'gifs',
-            }
-        : mode === 'tgsticker'
-          ? { data: await makeVideoSticker(image), contentType: 'video/webm', ext: 'webm', cost: 0, folder: 'stickers' }
-          : mode === 'tgicon'
-            ? { data: await makeStickerIcon(image), contentType: 'image/webp', ext: 'webp', cost: 0, folder: 'stickers' }
-            : {
-                data: await clip(duration, audio, true),
-                contentType: 'video/mp4',
-                ext: 'mp4',
-                cost: paid,
-                folder: 'videos',
-              }
+    const asked = motionLabel(motion)
+    const made = async (): Promise<{ data: Buffer; contentType: string; ext: string; folder: string; label: string }> => {
+      if (mode === 'gif') {
+        return { data: await makeGif(image), contentType: 'image/gif', ext: 'gif', folder: 'gifs', label: 'Işık efektli GIF (görsel hareket etmez)' }
+      }
+      if (mode === 'aigif') {
+        const data = await videoToGif(await clip(gifSeconds, false), quality)
+        const about = `${gifSeconds} sn hareketli GIF · ${hd ? 'yüksek' : 'standart'} · ${mb(data)}`
+        return { data, contentType: 'image/gif', ext: 'gif', folder: 'gifs', label: asked ? `${asked} · ${about}` : about }
+      }
+      if (mode === 'tgsticker') {
+        const data = await makeVideoSticker(image)
+        return { data, contentType: 'video/webm', ext: 'webm', folder: 'stickers', label: `Telegram hareketli sticker (sallanma) · ${kb(data)}` }
+      }
+      if (mode === 'tgmotion') {
+        const data = await makeMotionSticker(image, motion)
+        const about = `Telegram hareketli sticker · ${kb(data)}`
+        return { data, contentType: 'video/webm', ext: 'webm', folder: 'stickers', label: asked ? `${asked} · ${about}` : about }
+      }
+      if (mode === 'tgicon') {
+        const data = await makeStickerIcon(image)
+        return { data, contentType: 'image/webp', ext: 'webp', folder: 'stickers', label: `Telegram paket ikonu · ${kb(data)}` }
+      }
+      const data = await clip(duration, audio)
+      const about = `${duration} sn video · ${hd ? '1080p' : '720p'}${audio ? ' · sesli' : ''}`
+      return { data, contentType: 'video/mp4', ext: 'mp4', folder: 'videos', label: asked ? `${asked} · ${about}` : about }
+    }
+    const result = await made()
     const pathname = await storeFile(result.folder, result.data, result.contentType, result.ext)
-    const prompt =
-      mode === 'tgsticker'
-        ? `Telegram hareketli sticker · ${Math.round(result.data.length / 1024)} KB`
-        : mode === 'tgicon'
-          ? `Telegram paket ikonu · ${Math.round(result.data.length / 1024)} KB`
-          : motion ||
-            (mode === 'gif' ? 'Işık ve parıltı efektli GIF' : mode === 'aigif' ? 'Yapay zeka hareketli GIF' : `${duration} sn video`)
     const job = await addJob({
       brandId: source.brandId,
-      kind: mode === 'aigif' ? 'gif' : mode,
+      kind: mode === 'aigif' ? 'gif' : mode === 'tgmotion' ? 'tgsticker' : mode,
       format: telegram ? '1:1' : source.format,
-      prompt,
+      prompt: result.label,
       pathname,
       clean: '',
       parentId: source.id,
-      cost: result.cost,
+      cost: paid,
     })
-    await logPanel('studio', 'Hareketli içerik üretildi', source.brandName || null, `Üretim #${job.id} · ${prompt.slice(0, 200)}`)
+    await logPanel('studio', 'Hareketli içerik üretildi', source.brandName || null, `Üretim #${job.id} · ${result.label.slice(0, 200)}`)
     return NextResponse.json({ job: { ...job, brandName: source.brandName } })
   } catch (error) {
     console.error('Studio animation failed:', error)
@@ -98,7 +118,7 @@ export async function POST(request: NextRequest) {
       {
         error: blocked
           ? 'Model bu görseli hareketlendirmeyi reddetti. Farklı bir görselle dene.'
-          : telegram && message
+          : telegram && /sticker|dönüştürücü/i.test(message)
             ? message
             : 'Hareketlendirme başarısız oldu, tekrar dene.',
       },

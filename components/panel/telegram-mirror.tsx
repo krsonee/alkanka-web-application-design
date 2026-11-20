@@ -14,9 +14,13 @@ import {
   testTargetAction,
   toggleSourceAction,
   toggleTargetAction,
+  saveSharedRulesAction,
+  updateSourceButtonsAction,
   updateSourceTextAction,
 } from '@/app/panel/telegram-actions'
-import { SourceTextEditor, SourceTextFields } from './source-text-fields'
+import { SharedRulesCard, SourceButtonFields, SourceButtonsEditor, SourceTextEditor, SourceTextFields } from './source-text-fields'
+import type { LinkChoice } from './tg-button-rows'
+import type { ReplaceRule } from '@/lib/text-replace'
 import type { ActionState } from '@/app/panel/actions'
 import type { MirrorBot, MirrorLog, MirrorSource, MirrorTarget } from '@/lib/telegram-mirror'
 import { FILTER_PRESETS, describeFilter } from '@/lib/telegram-filters'
@@ -25,7 +29,15 @@ import { KnownChatField } from './tg-chat-field'
 import { useTgAccess } from './tg-hub-ui'
 import { SecretUrl } from './secret-url'
 
-type Props = { bots: MirrorBot[]; targets: MirrorTarget[]; sources: MirrorSource[]; log: MirrorLog[]; cronUrl: string }
+type Props = {
+  bots: MirrorBot[]
+  targets: MirrorTarget[]
+  sources: MirrorSource[]
+  log: MirrorLog[]
+  cronUrl: string
+  sharedRules?: ReplaceRule[]
+  links?: LinkChoice[]
+}
 
 const input =
   'rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none'
@@ -147,7 +159,7 @@ function BotCard({ bot, targets }: { bot: MirrorBot; targets: MirrorTarget[] }) 
   )
 }
 
-export function TelegramMirror({ bots, targets, sources, log, cronUrl }: Props) {
+export function TelegramMirror({ bots, targets, sources, log, cronUrl, sharedRules = [], links = [] }: Props) {
   const [botState, botAction, addingBot] = useActionState<ActionState, FormData>(addBotAction, {})
   const [addState, addAction, adding] = useActionState<ActionState, FormData>(addSourceAction, {})
   const [runState, runAction, running] = useActionState<ActionState>(runMirrorAction, {})
@@ -269,7 +281,8 @@ export function TelegramMirror({ bots, targets, sources, log, cronUrl }: Props) 
               Seçtiğin türlerden ya da yazdığın kelimelerden en az biri geçen postlar paylaşılır. Hiçbirini seçmezsen kanaldaki tüm yeni postlar paylaşılır.
             </p>
           </fieldset>
-          <SourceTextFields footerPlaceholder="Marka giriş ve bonus için tıkla" />
+          <SourceTextFields footerPlaceholder="Marka giriş ve bonus için tıkla" mode="mirror" shared={sharedRules} />
+          <SourceButtonFields links={links} />
           <button
             disabled={adding}
             className="mt-1 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
@@ -326,11 +339,15 @@ export function TelegramMirror({ bots, targets, sources, log, cronUrl }: Props) 
                     footer={s.footer}
                     footerPlaceholder={`${s.brand} giriş ve bonus için tıkla`}
                     action={updateSourceTextAction}
+                    mode="mirror"
+                    shared={sharedRules}
                   />
+                  <SourceButtonsEditor id={s.id} buttons={s.buttons} carryButtons={s.carryButtons} links={links} action={updateSourceButtonsAction} />
                 </li>
               ))}
             </ul>
           )}
+          <SharedRulesCard rules={sharedRules} action={saveSharedRulesAction} />
 
           <h3 className="mt-3 font-display text-lg font-bold uppercase text-foreground">Son hareketler</h3>
           {log.length === 0 ? (
