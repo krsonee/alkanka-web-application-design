@@ -775,13 +775,14 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     }),
     section(ctx, 'faqs', 'Sorular', async () => <FaqsManager faqs={await listFaqs()} />),
     section(ctx, 'tour', 'Site turu', async () => {
-      const { getTourSettings, tourStats } = await import('@/lib/tour')
+      const { getTourSettings, tourStats, tourFunnel, EMPTY_FUNNEL } = await import('@/lib/tour')
       const { TourSettingsEditor } = await import('@/components/panel/tour-settings-editor')
-      const [settings, stats] = await Promise.all([
-        getTourSettings(),
+      const settings = await getTourSettings()
+      const [stats, funnel] = await Promise.all([
         tourStats().catch(miss({ done: 0, rewarded: 0, blocked: 0, paidTotal: 0, recentBlocked: [] })),
+        tourFunnel(settings).catch(miss(EMPTY_FUNNEL)),
       ])
-      return <TourSettingsEditor settings={settings} stats={stats} />
+      return <TourSettingsEditor settings={settings} stats={stats} funnel={funnel} />
     }),
     section(ctx, 'sponsors', 'Sponsorlar', async () => (
       <SitesManager sites={await listSites()} today={istanbulToday()} siteUrl={SITE_URL} legacyLogos={(content['logos:sponsors'] as Record<string, string> | undefined) ?? {}} />

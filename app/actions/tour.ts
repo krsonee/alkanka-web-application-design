@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { cookies, headers } from 'next/headers'
 import { getMember } from '@/lib/member'
 import { hashNetwork } from '@/lib/growth'
-import { claimTourReward, getTourState, markTourSeen, type TourClaim, type TourState } from '@/lib/tour'
+import { claimTourReward, getTourSettings, getTourState, markTourSeen, type TourClaim, type TourState } from '@/lib/tour'
 
 const DEVICE_COOKIE = 'alk_tdev'
 
@@ -23,14 +23,15 @@ async function requestContext() {
 export async function getMyTourState(): Promise<TourState | null> {
   const member = await getMember()
   if (!member) return null
-  return getTourState(member.id).catch(() => ({ done: false, rewarded: false }))
+  const { version } = await getTourSettings()
+  return getTourState(member.id, version).catch(() => ({ done: false, rewarded: false }))
 }
 
 export async function markTourSeenAction(): Promise<void> {
   const member = await getMember()
   if (!member) return
-  const { ipHash, deviceId } = await requestContext()
-  await markTourSeen(member.id, ipHash, deviceId).catch((error) => console.error('[tour] kaydedilemedi', error))
+  const [{ ipHash, deviceId }, { version }] = await Promise.all([requestContext(), getTourSettings()])
+  await markTourSeen(member.id, ipHash, deviceId, version).catch((error) => console.error('[tour] kaydedilemedi', error))
 }
 
 export async function completeTourAction(): Promise<TourClaim | { status: 'guest' | 'error'; message?: string }> {
