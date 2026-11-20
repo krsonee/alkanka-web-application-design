@@ -76,7 +76,9 @@ const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row
   { title: 'Coin dökümü', words: 'coin hareket bakiye geçmiş döküm ekstre nereden geldi nereye gitti', row: 'users' },
   { title: 'Süreli kısıtlama', words: 'geçici kısıt bitiş tarihi süre kendiliğinden kalkar', row: 'limits' },
   { title: 'Görev kopyala / arşivle', words: 'görev kopya çoğalt arşiv eski görev kaldır', row: 'tasks' },
-  { title: 'Market stok uyarıları', words: 'stok azaldı bitti tükendi uyarı', row: 'market', query: 's=products&v=urunler' },
+  { title: 'Market stok uyarıları', words: 'stok azaldı bitti tükendi uyarı', row: 'market', query: 's=products' },
+  { title: 'Ürün teslim şekli', words: 'otomatik teslim elle teslim ödül hesaba eklenir kc kp çark zar sandık seri kalkanı rozet', row: 'market', query: 's=products' },
+  { title: 'Öne çıkan ürünler', words: 'öne çıkar vitrin market üstü yıldız sıralama sürükle', row: 'market', query: 's=products' },
   { title: 'Hazır cevaplar', words: 'hazır cevap red sebebi kalıp yorum şikayet', row: 'community', query: 's=reviews' },
   { title: 'Mini oyun beklenen günlük çıkış', words: 'beklenen coin çıkış tahmin günlük maliyet çark zar sandık', row: 'rewards' },
   { title: 'Personelin 2FA kaydını yenilet', words: '2fa yenile yeni barkod yeni yedek kod personel', row: 'staff' },
@@ -100,8 +102,8 @@ const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row
   { title: 'KP sıralaması', words: 'liderlik tablosu', row: 'badges', query: 's=board' },
   { title: 'Online ödülleri', words: 'çevrim içi süre ödülü', row: 'badges', query: 's=online' },
   { title: 'Kazananlar şeridi', words: 'kayan yazı ticker', row: 'badges', query: 's=ticker' },
-  { title: 'Market ürünleri', words: 'ürün ekle stok fiyat', row: 'market', query: 's=products&v=urunler' },
-  { title: 'Market talepleri', words: 'sipariş teslim', row: 'market', query: 's=products&v=talepler' },
+  { title: 'Market ürünleri', words: 'ürün ekle stok fiyat kart tablo görünüm süzgeç', row: 'market', query: 's=products' },
+  { title: 'Market talepleri', words: 'sipariş teslim onay red iade bekleyen', row: 'market', query: 's=requests' },
   { title: 'Avatarlar & kapaklar', words: 'profil resmi kapak', row: 'market', query: 's=avatars' },
   { title: 'Masa temaları', words: 'tema fiyatı masa görünümü', query: 's=themes', moved: 'themes' },
   { title: 'Kasa oranı', words: 'kazanma oranı bot zorluğu', row: 'games' },
@@ -189,7 +191,7 @@ export async function panelSearchAction(raw: string): Promise<SearchHit[]> {
   }
   for (const p of products.filter((p) => has(p.name)).slice(0, LIMIT)) {
     const detail = `${Number(p.price).toLocaleString('tr-TR')} coin${p.active ? '' : ' · Gizli'}`
-    hits.push({ kind: 'product', id: String(p.id), title: p.name, detail, tab: 'market', href: `/panel?b=market&s=products&v=urunler&f=product-${p.id}` })
+    hits.push({ kind: 'product', id: String(p.id), title: p.name, detail, tab: 'market', href: `/panel?b=market&s=products&f=product-${p.id}` })
   }
   for (const t of tournaments.filter((t) => has(t.title)).slice(0, LIMIT)) {
     hits.push({ kind: 'tournament', id: String(t.id), title: t.title, detail: STATUS_LABEL[t.status] ?? '', tab: 'tournaments', href: `/panel?b=tournaments&f=tournament-${t.id}` })

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { getBalance, getMember } from '@/lib/member'
-import { avatarOf, buyAvatar, chooseAvatar, getLookState, setCover, setTeam, type LookState } from '@/lib/avatars'
+import { COVERS, avatarOf, buyAvatar, chooseAvatar, getLookState, listCatalog, setCover, setTeam, type AvatarCard, type CoverDef, type LookState } from '@/lib/avatars'
 import { getKpStatus } from '@/lib/kanka-puan'
 import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
 
@@ -48,6 +48,24 @@ export async function setTeamAction(teamId: string | null) {
     await setTeam(uid, teamId ? String(teamId) : null)
     return { message: teamId ? 'Favori takımın kaydedildi.' : 'Favori takım kaldırıldı.' }
   })
+}
+
+export type LookShelf = { signedIn: boolean; level: number; avatars: AvatarCard[]; covers: (CoverDef & { unlocked: boolean })[] }
+
+/** Avatars sold for coins and the covers a level opens, for the market. Read only when that shelf is opened. */
+export async function getLookShelf(): Promise<LookShelf> {
+  const member = await getMember()
+  if (member) {
+    const state = await getLookState(member.id)
+    return { signedIn: true, level: state.level, avatars: state.avatars.filter((a) => a.unlock === 'coin'), covers: state.covers }
+  }
+  const catalog = await listCatalog()
+  return {
+    signedIn: false,
+    level: 0,
+    avatars: catalog.filter((a) => a.unlock === 'coin').map((a) => ({ ...a, status: 'buy' as const })),
+    covers: COVERS.map((c) => ({ ...c, unlocked: false })),
+  }
 }
 
 export type LookSummary = { avatar: string | null; level: number; levelName: string; progress: number; nextName: string | null; kp: number }

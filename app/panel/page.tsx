@@ -86,7 +86,8 @@ import { ADS_KEY, type AdMap } from '@/lib/ads'
 import { ShareEditor } from '@/components/panel/share-editor'
 import { HomeV2Editor } from '@/components/panel/home-v2-editor'
 import { HOME_V2_KEY, mergeHomeV2 } from '@/lib/home-v2-shared'
-import { MarketManager } from '@/components/panel/market-manager'
+import { MarketProducts } from '@/components/panel/market-products'
+import { MarketRequests } from '@/components/panel/market-requests'
 import { ThemeManager } from '@/components/panel/theme-manager'
 import { getThemeCatalog } from '@/lib/table-themes-server'
 import { DEFAULT_OFFERS } from '@/lib/table-themes'
@@ -485,8 +486,15 @@ async function telegramSection({ session, active }: SectionCtx): Promise<ReactNo
 }
 
 async function marketPanel(themesHere: boolean) {
-  const [products, requests, sites] = await Promise.all([listProducts({ includeInactive: true }), listRequests(), listSites()])
+  const [products, requests, sites, badgeList] = await Promise.all([
+    listProducts({ includeInactive: true }),
+    listRequests(),
+    listSites(),
+    listSpecialBadges({ includeInactive: true }).catch(miss([])),
+  ])
   const sponsors = sites.filter((site) => site.slug).map((site) => ({ id: String(site.id), name: site.name }))
+  const badges = badgeList.map((b) => ({ id: String(b.id), name: String(b.name) }))
+  const waiting = requests.filter((r) => r.status === 'beklemede').length
   const themeCatalog = themesHere ? await getThemeCatalog().catch(miss(DEFAULT_OFFERS)) : null
   const [avatars, stats, coverRows] = await Promise.all([
     listCatalog({ includeInactive: true }),
@@ -498,7 +506,8 @@ async function marketPanel(themesHere: boolean) {
     <TelegramTabs
       label="Market bölümleri"
       tabs={[
-        { id: 'products', label: `Ürünler & talepler${requests.length ? ` (${requests.length})` : ''}`, content: <MarketManager products={products} requests={requests} sponsors={sponsors} /> },
+        { id: 'requests', label: `Talepler${waiting ? ` (${waiting} bekliyor)` : ''}`, content: <MarketRequests requests={requests} /> },
+        { id: 'products', label: `Ürünler (${products.length})`, content: <MarketProducts products={products} sponsors={sponsors} badges={badges} /> },
         { id: 'avatars', label: 'Avatarlar & kapaklar', content: <AvatarManager avatars={avatars} stats={stats} covers={COVERS} coverUsage={coverUsage} /> },
         ...(themeCatalog ? [{ id: 'themes', label: 'Masa temaları', content: <ThemeManager catalog={themeCatalog} /> }] : []),
       ]}

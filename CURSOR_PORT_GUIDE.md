@@ -168,7 +168,7 @@ Copy each listed path from `../alkanka-source` into the same path in the target.
 - Behavior: KP levels with per-level emblem symbols, valuable/special badges managed in the panel, member rank shown next to names across the whole site, daily/weekly/monthly KP and prediction leaderboards with champions.
 
 ### Phase 5: Points market
-- `lib/market.ts`, `app/actions/market.ts`, `components/alkanka/points-market.tsx`, `app/(site)/market/page.tsx`
+- `lib/market.ts`, `app/actions/market.ts`, `components/alkanka/market/market-shop.tsx`, `app/(site)/market/page.tsx`
 - Panel: `app/panel/market-actions.ts`, `components/panel/market-manager.tsx`
 - Behavior: DB-backed market items (including sponsor bonuses). Members spend KC to send a request, and the admin approves or rejects it in the panel. Market tabs must not overflow on mobile.
 

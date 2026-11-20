@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
-import { PointsMarket } from '@/components/alkanka/points-market'
+import { MarketShop } from '@/components/alkanka/market/market-shop'
 import { listProducts } from '@/lib/market'
 import { productImage } from '@/lib/market-image'
 import { recordPath } from '@/lib/record-links'
@@ -46,7 +46,7 @@ export default async function MarketItemPage({ params }: { params: Promise<{ id:
         Puan marketi
       </Link>
       <h1 className="sr-only">{item.name}</h1>
-      <PointsMarket items={items} focus={item.id} />
+      <MarketShop items={items} focus={item.id} />
     </div>
   )
 }

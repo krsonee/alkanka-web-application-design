@@ -3,7 +3,7 @@
 import { logPanel } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
-import { deleteProduct, resolveRequest, saveProduct, type ProductInput } from '@/lib/market'
+import { deleteProduct, featureProduct, reorderProducts, resolveRequest, saveProduct, type ProductInput } from '@/lib/market'
 
 type Result = { ok: true; message?: string } | { ok: false; error: string }
 
@@ -32,6 +32,23 @@ export async function deleteMarketProductAction(id: string) {
     await deleteProduct(id)
     await logPanel('market', 'Ürün silindi', id)
     return 'Ürün silindi.'
+  })
+}
+
+export async function reorderMarketProductsAction(ids: string[]) {
+  return guard(async () => {
+    if (!Array.isArray(ids)) throw new Error('Sıra okunamadı.')
+    await reorderProducts(ids.map(String))
+    await logPanel('market', 'Ürün sırası değişti', `${ids.length} ürün`)
+    return 'Sıra kaydedildi.'
+  })
+}
+
+export async function featureMarketProductAction(id: string, featured: boolean) {
+  return guard(async () => {
+    await featureProduct(String(id), Boolean(featured))
+    await logPanel('market', featured ? 'Ürün öne çıkarıldı' : 'Ürün öne çıkanlardan alındı', String(id))
+    return featured ? 'Ürün market sayfasının üstünde gösterilecek.' : 'Ürün öne çıkanlardan alındı.'
   })
 }
 

@@ -1,9 +1,8 @@
 import { pageMeta } from '@/lib/seo'
 import { EditableHero } from '@/components/alkanka/editable-hero'
-import { PointsMarket } from '@/components/alkanka/points-market'
+import { MarketShop } from '@/components/alkanka/market/market-shop'
 import { listProducts } from '@/lib/market'
 import { MARKET_KIND_PARAM } from '@/lib/record-links'
-import { ThemeShop } from '@/components/alkanka/theme-shop'
 
 export const metadata = pageMeta('market')
 export const dynamic = 'force-dynamic'
@@ -19,15 +18,14 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
       <EditableHero slug="market"
         compact
         image="/images/heroes/market.png"
-        highlights={['Sponsor bonusları', 'Rozet ve ekstra hak', 'Ekip onaylı teslim']}
+        highlights={['Sponsor ödülleri', 'Anında teslim edilen haklar', 'Avatar ve masa temaları']}
         eyebrow="Market"
         title="Puan marketi"
-        description="Sponsor site bonusları, rozetler, ekstra haklar ve hediyeler. Topladığın Kanka Coin ile talep et, ekip onaylasın."
+        description="Sponsor ödülleri, ekstra haklar, avatarlar ve masa temaları. Topladığın Kanka Coin ile al; site içi ödüller anında hesabına eklenir."
         pose="market"
         speech="Coinlerini burada harca kanka, stoklar sınırlı!"
       />
-      <ThemeShop />
-      <PointsMarket items={items} kind={typeof kind === 'string' ? kind : undefined} />
+      <MarketShop items={items} kind={typeof kind === 'string' ? kind : undefined} />
     </>
   )
 }
