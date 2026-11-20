@@ -183,7 +183,16 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
               )}
             >
               {c.label}
-              {counts[c.id] != null && <span className="ml-1.5 tabular-nums opacity-80">{counts[c.id]}</span>}
+              {counts[c.id] != null && (
+                <>
+                  {' '}
+                  <span className="tabular-nums opacity-80">
+                    <span className="sr-only">(</span>
+                    {counts[c.id]}
+                    <span className="sr-only"> ürün)</span>
+                  </span>
+                </>
+              )}
             </button>
           ))}
         </div>
