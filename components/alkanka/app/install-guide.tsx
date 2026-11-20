@@ -77,7 +77,7 @@ export function InstallGuide({ installClaimed, pushClaimed }: { installClaimed: 
         </p>
       </section>
 
-      <div className="grid items-start gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         <InstallStep done={installDone} />
         <PushStep done={pushDone} />
       </div>
@@ -103,7 +103,7 @@ function StepCard({
       aria-label={`${n}. adım: ${title}`}
       style={{ animationDelay: `${150 + n * 150}ms`, ['--flow-delay' as string]: `${n * -2}s` }}
       className={cn(
-        'app-rise flex flex-col gap-4 rounded-2xl border bg-card p-4 sm:p-6',
+        'app-rise flex min-w-0 flex-col gap-4 rounded-2xl border bg-card p-4 sm:p-6',
         done ? 'border-live/40' : 'border-border',
         !done && 'border-flow',
       )}
