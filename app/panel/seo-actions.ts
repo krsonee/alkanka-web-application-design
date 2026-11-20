@@ -90,6 +90,28 @@ export async function savePostAction(_: ActionState, form: FormData): Promise<Ac
   }
 }
 
+export async function applyPreparedAction(slug: string): Promise<Result> {
+  if (!(await canPanel('seo'))) return { ok: false, message: EXPIRED.message }
+  try {
+    const { applyPrepared } = await import('@/lib/blog')
+    const result = await applyPrepared(String(slug).slice(0, 120))
+    if (result === 'yok') return { ok: false, message: 'Bu yazı bulunamadı. Silinmiş ya da adresi değişmiş olabilir.' }
+    if (result === 'zaten') return { ok: true, message: 'Bu yazı zaten eklenmiş.' }
+    revalidatePath('/rehber', 'layout')
+    revalidatePath('/sitemap.xml')
+    revalidatePath('/panel')
+    if (result === 'taslak') {
+      await logPanel('seo', 'Hazır rehber yazısı taslak olarak eklendi', slug, `/rehber/${slug}`)
+      return { ok: true, message: 'Taslak olarak eklendi. Aşağıdaki yazı listesinden açıp oku, uygunsa "Yayında" işaretleyip kaydet.' }
+    }
+    await logPanel('seo', 'Rehber yazısına hazır bölümler eklendi', slug, `/rehber/${slug}`)
+    return { ok: true, message: 'Bölümler yazıya eklendi. Yazı yayındaysa sitede görünmesi birkaç dakika sürebilir.' }
+  } catch (error) {
+    console.error('[blog] hazır yazı eklenemedi', error)
+    return { ok: false, message: 'Yazı eklenemedi, tekrar dene.' }
+  }
+}
+
 export async function deletePostAction(id: number) {
   if (!(await canPanel('seo'))) return
   await deletePost(id)

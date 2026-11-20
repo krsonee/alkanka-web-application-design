@@ -54,6 +54,7 @@ const SETTINGS: ({ title: string; words?: string; query?: string; anyOf?: PanelM
   { title: 'Günlük kutular', words: 'ana sayfa kısayol', row: 'home', query: 's=layout' },
   { title: 'Yönlendirmeler', words: 'redirect 301 eski adres', row: 'seo' },
   { title: '404 kayıtları', words: 'bulunamayan sayfa kırık link', row: 'seo' },
+  { title: 'Hazır rehber yazıları', words: 'hazır yazı taslak ekle rehber blog bölüm', row: 'seo' },
   { title: 'Arama motoru doğrulaması', words: 'google bing yandex search console', row: 'seo' },
   { title: 'Stüdyo aylık tavanı', words: 'harcama bütçe limit', row: 'studio' },
   { title: 'Stüdyo görselini slider\'a ekle', words: 'banner slayt gönder aktar', row: 'studio' },
