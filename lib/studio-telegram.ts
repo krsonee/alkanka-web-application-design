@@ -39,14 +39,11 @@ export async function outlineSticker(image: Buffer) {
     .composite([{ input: art, gravity: 'centre' }])
     .png()
     .toBuffer()
-  // A blurred mask cut off at a low level is the shape grown by about 1.5 sigma.
-  const grown = await sharp(placed)
-    .extractChannel('alpha')
-    .blur(STROKE / 1.5)
-    .threshold(18)
-    .blur(0.8)
-    .png()
-    .toBuffer()
+  // A blurred mask cut off at a low level is the shape grown by about 1.5 sigma. Each step is its
+  // own pipeline: sharp keeps only the last blur of a chain and runs threshold in a fixed place.
+  const blurred = await sharp(placed).extractChannel('alpha').blur(STROKE / 1.5).png().toBuffer()
+  const hard = await sharp(blurred).threshold(18).png().toBuffer()
+  const grown = await sharp(hard).blur(0.8).extractChannel(0).png().toBuffer()
   const edge = await sharp({ create: { width: SIZE, height: SIZE, channels: 3, background: { r: 255, g: 255, b: 255 } } })
     .joinChannel(grown)
     .png()
