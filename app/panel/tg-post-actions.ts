@@ -11,7 +11,8 @@ import { checkTargets, copyPost, deleteSend, editPost, forgetSend, morePosts, pi
 import { deleteRule, saveRule } from '@/lib/tg-post-manual'
 import { deletePlan, draftFromPost, planToDraft, reschedulePlan, savePlan, sendPlanNow } from '@/lib/tg-post-plans'
 import { announceRaffle, drawRaffle, setRaffleClosed } from '@/lib/tg-post-press'
-import type { PlanKind, PostRow, TargetCheck } from '@/lib/tg-posts-shared'
+import { addEmojiPack, listEmojiPacks, removeEmojiPack } from '@/lib/tg-emoji'
+import type { EmojiPack, PlanKind, PostRow, TargetCheck } from '@/lib/tg-posts-shared'
 
 const EXPIRED: SendOutcome = { ok: false, message: 'Oturum süresi doldu, tekrar giriş yap.' }
 const fail = (error: unknown): SendOutcome => ({ ok: false, message: String((error as Error)?.message ?? error) })
@@ -76,6 +77,22 @@ export async function sendPostAction(input: { content: unknown; botId: number; c
 
 export async function testPostAction(input: { content: unknown; botId: number; chat: string }) {
   return guarded(() => sendTest({ content: input.content, botId: botIdOf(input.botId), chat: String(input.chat ?? '') }))
+}
+
+export async function emojiPacksAction(): Promise<EmojiPack[]> {
+  if (await blocked('posts')) return []
+  return listEmojiPacks().catch((error) => {
+    console.error('[tg-post-action]', error)
+    return []
+  })
+}
+
+export async function addEmojiPackAction(botId: number, link: string) {
+  return guarded(() => addEmojiPack(botIdOf(botId), String(link ?? '')))
+}
+
+export async function removeEmojiPackAction(name: string) {
+  return guarded(() => removeEmojiPack(String(name ?? '')))
 }
 
 export async function editPostAction(postId: number, content: unknown) {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Bot, Copy, ExternalLink, FileText, Film, Gift, MessageSquareText, ThumbsUp, UserCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -11,6 +11,7 @@ import {
   hasButtons,
   mediaUrl,
   needsSplit,
+  showPremiumEmoji,
   visibleLength,
   type PostButton,
   type PostButtonKind,
@@ -20,7 +21,27 @@ import {
 
 /** How Telegram's formatting looks, shared by the writing area and the preview so both show the same thing. */
 export const RICH =
-  'whitespace-pre-wrap [overflow-wrap:anywhere] [&_a]:text-primary [&_a]:underline [&_b]:font-semibold [&_code]:rounded [&_code]:bg-foreground/10 [&_code]:px-1 [&_code]:font-mono [&_pre]:my-1 [&_pre]:rounded-md [&_pre]:bg-foreground/10 [&_pre]:p-2 [&_pre]:font-mono [&_blockquote]:my-1 [&_blockquote]:rounded-r-md [&_blockquote]:border-l-4 [&_blockquote]:border-primary [&_blockquote]:bg-primary/10 [&_blockquote]:px-2 [&_blockquote]:py-1 [&_.tg-spoiler]:rounded [&_.tg-spoiler]:bg-foreground/25 [&_tg-spoiler]:rounded [&_tg-spoiler]:bg-foreground/25'
+  'whitespace-pre-wrap [overflow-wrap:anywhere] [&_a]:text-primary [&_a]:underline [&_b]:font-semibold [&_code]:rounded [&_code]:bg-foreground/10 [&_code]:px-1 [&_code]:font-mono [&_pre]:my-1 [&_pre]:rounded-md [&_pre]:bg-foreground/10 [&_pre]:p-2 [&_pre]:font-mono [&_blockquote]:my-1 [&_blockquote]:rounded-r-md [&_blockquote]:border-l-4 [&_blockquote]:border-primary [&_blockquote]:bg-primary/10 [&_blockquote]:px-2 [&_blockquote]:py-1 [&_.tg-spoiler]:rounded [&_.tg-spoiler]:bg-foreground/25 [&_tg-spoiler]:rounded [&_tg-spoiler]:bg-foreground/25 [&_img.tg-emoji:not(.tg-emoji-off)]:inline-block [&_img.tg-emoji:not(.tg-emoji-off)]:size-[1.3em] [&_img.tg-emoji:not(.tg-emoji-off)]:align-[-0.25em]'
+
+/**
+ * A premium emoji is drawn as an image. When the image cannot be loaded (the pack was removed, or the emoji has no
+ * still picture) the image gives way to its alt text, which is the plain emoji it stands for.
+ */
+export function useEmojiFallback(ref: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const onError = (e: Event) => {
+      const img = e.target
+      if (!(img instanceof HTMLImageElement) || !img.dataset.emojiId) return
+      img.removeAttribute('src')
+      img.classList.add('tg-emoji-off')
+    }
+    // Image errors do not bubble, so they are caught on the way down.
+    el.addEventListener('error', onError, true)
+    return () => el.removeEventListener('error', onError, true)
+  }, [ref])
+}
 
 export const BUTTON_ICON: Record<PostButtonKind, typeof Copy> = {
   link: ExternalLink,
@@ -73,15 +94,17 @@ function MediaGrid({ media }: { media: PostMedia[] }) {
 }
 
 function Bubble({ media, text, children }: { media: PostMedia[]; text: string; children?: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEmojiFallback(ref)
   return (
-    <div className="flex flex-col gap-1">
+    <div ref={ref} className="flex flex-col gap-1">
       <div className="overflow-hidden rounded-2xl rounded-bl-md border border-border bg-card">
         <MediaGrid media={media} />
         {text && (
           <div
             className={cn(RICH, 'px-3 py-2 text-sm leading-relaxed text-foreground')}
             // The text has already been reduced to Telegram's safe tag list by cleanTgHtml.
-            dangerouslySetInnerHTML={{ __html: text }}
+            dangerouslySetInnerHTML={{ __html: showPremiumEmoji(text) }}
           />
         )}
       </div>
