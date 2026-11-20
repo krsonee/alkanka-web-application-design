@@ -18,9 +18,11 @@ import {
   updateOddsSourceTextAction,
 } from '@/app/panel/odds-bot-actions'
 import { SourceTextEditor, SourceTextFields } from './source-text-fields'
+import { OddsQueueCard, RuleEditor, RuleFields } from './odds-source-rule'
+import type { LinkChoice } from './tg-button-rows'
 import type { ActionState } from '@/app/panel/actions'
 import type { MirrorBot } from '@/lib/telegram-mirror'
-import { ODDS_MAX, ODDS_PAGE, ODDS_TAG_OPTIONS, ODD_RESULT_LABELS, fillMinutes, oddsTagText, type OddsTag, type OddsBotConfig, type OddsBotStatus, type OddsPage, type OddsPreview, type OddsSource } from '@/lib/special-odds-shared'
+import { ODDS_MAX, ODDS_PAGE, ODDS_TAG_OPTIONS, ODD_RESULT_LABELS, fillMinutes, oddsTagText, type OddsTag, type OddsBotConfig, type OddsBotStatus, type OddsPage, type OddsPreview, type OddsQueueItem, type OddsSource } from '@/lib/special-odds-shared'
 import { cn } from '@/lib/utils'
 
 const input = 'w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none'
@@ -56,7 +58,13 @@ function Card({ icon, id, title, desc, children }: { icon: React.ReactNode; id: 
 }
 
 function Flow() {
-  const steps = ['Kaynak kanallar (site kanalları)', 'Bot okur, linkleri bizim linkle değiştirir', 'Bizim özel oran kanalımıza paylaşır', 'Sitede canlı listelenir', '“Limit doldu” / sonuç postu gelince günceller']
+  const steps = [
+    'Kaynak kanallar (site kanalları)',
+    'Bot okur; kaynağın kuralına uymayan postu atlar',
+    'Linkleri bizim linkle değiştirir, görseli, videoyu ve albümü taşır',
+    'Bizim özel oran kanalımıza paylaşır, sitede listeler',
+    '“Limit doldu” / sonuç postu gelince günceller',
+  ]
   return (
     <ol className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground md:flex-row md:flex-wrap md:items-center md:gap-x-3">
       {steps.map((s, i) => (
@@ -105,6 +113,17 @@ function SetupCard({ config, bots, status }: { config: OddsBotConfig; bots: Mirr
           Post altına eklenecek metin
           <input name="footer" defaultValue={config.footer} maxLength={300} className={input} />
         </label>
+        <label className={label}>
+          Görseli, videosu ya da albümü alınamayan post
+          <select name="mediaFallback" defaultValue={config.mediaFallback} className={input}>
+            <option value="text">Yazıyla paylaşılsın</option>
+            <option value="hold">Beklesin, ben karar vereyim</option>
+          </select>
+          <span className={hint}>
+            Bot kaynak postun fotoğrafını, videosunu, GIF'ini ve albümünü taşır. Dosya alınamazsa (çok büyük video, silinmiş post) burada seçtiğin olur.
+            Bekleyen postlar aşağıdaki “Bekleyen ve atlanan postlar” kutusuna düşer.
+          </span>
+        </label>
         <details className="rounded-xl border border-border p-4">
           <summary className="cursor-pointer text-sm font-semibold text-foreground">Tanıma kelimeleri ve otomatik mesajlar</summary>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -145,7 +164,8 @@ function SetupCard({ config, bots, status }: { config: OddsBotConfig; bots: Mirr
           <span className="text-muted-foreground">
             · Bugün {status.todayTotal} oran
             {status.lastUpdateAt ? ` · Son sinyal ${new Date(status.lastUpdateAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })}` : ''}
-            {status.pending ? ` · ${status.pending} bekleyen` : ''}
+            {status.pending ? ` · ${status.pending} bekleyen sinyal` : ''}
+            {status.held ? ` · ${status.held} post medya bekliyor` : ''}
           </span>
         </div>
         {status.lastError && <p className="text-xs text-destructive">{status.lastError}</p>}
@@ -237,16 +257,17 @@ function TagEditor({ source }: { source: OddsSource }) {
   )
 }
 
-function SourcesCard({ sources }: { sources: OddsSource[] }) {
+function SourcesCard({ sources, links }: { sources: OddsSource[]; links: LinkChoice[] }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(addOddsSourceAction, {})
   return (
-    <Card icon={<Link2 className="size-4" aria-hidden="true" />} id="ob-sources" title="2. Kaynak site kanalları" desc="Her kanal bir siteye bağlanır. Bot o kanaldaki postlardaki tüm linkleri buradaki site linkiyle değiştirir.">
+    <Card icon={<Link2 className="size-4" aria-hidden="true" />} id="ob-sources" title="2. Kaynak site kanalları" desc="Her kanal bir siteye bağlanır. Bot o kanaldaki postlardaki tüm linkleri buradaki site linkiyle değiştirir. Hangi postların paylaşılacağını ve altına hangi butonların ekleneceğini kaynak kaynak sen seçersin.">
       <form action={action} className="grid gap-3 md:grid-cols-2">
         <label className={label}>Kaynak kanal<input name="chat" required placeholder="@siteozeloran" className={input} /></label>
         <label className={label}>Site adı<input name="siteName" required maxLength={40} placeholder="Örn. NovaBet" className={input} /></label>
         <label className={label}>Bizim site linkimiz<input name="siteLink" required type="url" placeholder="https://..." className={input} /></label>
         <label className={label}>Logo adresi (isteğe bağlı)<input name="siteLogo" placeholder="https://.../logo.png" className={input} /></label>
         <TagFields />
+        <RuleFields links={links} />
         <div className="flex flex-col gap-3 md:col-span-2">
           <SourceTextFields footerPlaceholder="Boş bırakılırsa genel alt yazı kullanılır" />
         </div>
@@ -284,6 +305,7 @@ function SourcesCard({ sources }: { sources: OddsSource[] }) {
                 </button>
               </form>
               <TagEditor source={s} />
+              <RuleEditor source={s} links={links} />
               <SourceTextEditor
                 id={s.id}
                 linkName="siteLink"
@@ -309,7 +331,7 @@ const KIND_LABEL: Record<OddsPreview['kind'], string> = {
   won: 'Kazandı postu',
   lost: 'Kaybetti postu',
   void: 'İade postu',
-  ignore: 'Tanınmadı (yok sayılır)',
+  ignore: 'Oran postu değil',
 }
 
 function TestCard({ sources }: { sources: OddsSource[] }) {
@@ -351,6 +373,12 @@ function TestCard({ sources }: { sources: OddsSource[] }) {
       ) : (
         <div className="flex flex-col gap-3 rounded-xl border border-border bg-background p-4 text-sm">
           <p className="font-semibold text-foreground">Algılanan: <span className="text-primary">{KIND_LABEL[preview.kind]}</span></p>
+          {preview.verdict && (
+            <p className={cn('font-semibold', preview.verdict === 'send' ? 'text-live' : 'text-destructive')}>
+              {preview.verdict === 'send' ? 'Bu kaynağın kuralına göre paylaşılır' : 'Bu kaynağın kuralına göre paylaşılmaz'}
+              {preview.reason ? <span className="font-normal text-muted-foreground"> · {preview.reason}</span> : null}
+            </p>
+          )}
           {preview.odds.length > 0 && (
             <ul className="flex flex-col gap-1 text-muted-foreground">
               {preview.odds.map((o, i) => (
@@ -504,7 +532,15 @@ function OddsListCard({ initial }: { initial: OddsPage }) {
   )
 }
 
-export function OddsBotManager(props: { config: OddsBotConfig; status: OddsBotStatus; bots: MirrorBot[]; sources: OddsSource[]; odds: OddsPage }) {
+export function OddsBotManager(props: {
+  config: OddsBotConfig
+  status: OddsBotStatus
+  bots: MirrorBot[]
+  sources: OddsSource[]
+  odds: OddsPage
+  queue?: OddsQueueItem[]
+  links?: LinkChoice[]
+}) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -514,7 +550,8 @@ export function OddsBotManager(props: { config: OddsBotConfig; status: OddsBotSt
       </div>
       <Flow />
       <SetupCard config={props.config} bots={props.bots} status={props.status} />
-      <SourcesCard sources={props.sources} />
+      <SourcesCard sources={props.sources} links={props.links ?? []} />
+      <OddsQueueCard items={props.queue ?? []} />
       <TestCard sources={props.sources} />
       <OddsListCard initial={props.odds} />
     </div>

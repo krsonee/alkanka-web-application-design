@@ -1,7 +1,7 @@
 import 'server-only'
 import { listAffLinks } from '@/lib/aff-links'
 import { rows, sql } from '@/lib/db'
-import { cleanShortDomain, type LinkReport, type LinkRow } from '@/lib/links-shared'
+import { cleanShortDomain, shortUrl, type LinkReport, type LinkRow } from '@/lib/links-shared'
 import { ensureMarketing } from '@/lib/marketing'
 import { listSites } from '@/lib/sites'
 
@@ -54,6 +54,19 @@ const NONE: Stat = { clicks: 0, uniques: 0, last: null }
 
 function statMap(list: Record<string, unknown>[], key: string) {
   return new Map<string, Stat>(list.map((x) => [String(x[key]), { clicks: Number(x.clicks), uniques: Number(x.uniques), last: iso(x.last_click) }]))
+}
+
+/** Active short links as "name, address" pairs, for forms where a link is picked instead of typed. No click counts are read. */
+export async function linkChoices(siteUrl: string): Promise<{ label: string; url: string }[]> {
+  const [links, sites, shortDomain] = await Promise.all([listAffLinks(), listSites(), getShortDomain()])
+  const siteName = new Map(sites.map((s) => [s.id, s.name]))
+  return links
+    .filter((link) => link.active)
+    .slice(0, 200)
+    .map((link) => ({
+      label: [link.siteId === null ? null : siteName.get(link.siteId), link.label || link.code].filter(Boolean).join(' · '),
+      url: shortUrl({ kind: link.siteId === null ? 'dis' : 'sponsor', code: link.code, path: `/r/${link.code}`, clash: false }, siteUrl, shortDomain),
+    }))
 }
 
 /**

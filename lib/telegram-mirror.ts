@@ -6,6 +6,7 @@ import { filterWords } from '@/lib/telegram-filters'
 import { decodeEntities } from '@/lib/html-entities'
 import { recordDeal } from '@/lib/deals'
 import { applyReplacements, parseReplacements, pickLink, type ReplaceRule } from '@/lib/text-replace'
+import { buttonMarkup, type PostButton } from '@/lib/tg-buttons'
 
 export type MirrorSource = {
   id: number
@@ -38,8 +39,8 @@ export type MirrorLog = {
 
 export type MirrorResult = { checked: number; sent: number; skipped: number; failed: number; primed: number; errors: string[] }
 
-type MediaItem = { type: 'photo' | 'video' | 'gif'; url: string | null }
-type ScrapedPost = {
+export type MediaItem = { type: 'photo' | 'video' | 'gif'; url: string | null }
+export type ScrapedPost = {
   id: number
   html: string
   photos: string[]
@@ -49,7 +50,7 @@ type ScrapedPost = {
   ref?: string
   items?: MediaItem[]
 }
-type Destination = { token: string; chatId: string; title: string; botId?: number }
+export type Destination = { token: string; chatId: string; title: string; botId?: number }
 
 const MAX_PER_RUN = 5
 const CAPTION_LIMIT = 1000
@@ -463,44 +464,65 @@ type Sent = { message_id: number }
 /** Which messages a post became, so the panel can later edit, pin or delete it. `mainId` carries the text. */
 type Delivered = { ids: number[]; mainId: number; mainMedia: boolean }
 
-async function deliver(dest: Destination, post: ScrapedPost, text: string, parseMode: 'HTML' | undefined): Promise<Delivered> {
+/** The post's own media could not be carried over; the caller decides whether to wait or send text only. */
+export class MediaError extends Error {}
+
+export type DeliverOptions = {
+  buttons?: PostButton[]
+  /** `original` (default) falls back to Telegram's preview of the source post; `throw` raises MediaError instead. */
+  mediaFail?: 'original' | 'throw'
+}
+
+export async function deliver(
+  dest: Destination,
+  post: ScrapedPost,
+  text: string,
+  parseMode: 'HTML' | undefined,
+  options: DeliverOptions = {},
+): Promise<Delivered> {
   const send = <T = Sent>(method: string, body: Record<string, unknown>) => callBot<T>(dest.token, method, { chat_id: dest.chatId, ...body })
   const visible = parseMode ? stripTags(text).length : text.length
   const fmt = parseMode ? { parse_mode: parseMode } : {}
   const fitsCaption = visible <= CAPTION_LIMIT
   const captioned = fitsCaption ? { caption: text, ...fmt } : {}
+  const markup = buttonMarkup(options.buttons)
+  const hasButtons = Boolean(options.buttons?.length)
   const isParseError = (error: unknown) => /parse entities|can't parse/i.test(String((error as Error).message))
   const scraped = post.items ?? [
     ...post.photos.map((url) => ({ type: 'photo' as const, url })),
     ...(post.video ? [{ type: 'video' as const, url: post.video }] : []),
   ]
   const textOnly = async (extra: Record<string, unknown> = {}): Promise<Delivered> => {
-    const m = await send('sendMessage', { text, ...fmt, ...extra })
+    const m = await send('sendMessage', { text, ...fmt, ...markup, ...extra })
     return { ids: [m.message_id], mainId: m.message_id, mainMedia: false }
   }
   if (!scraped.length) return textOnly()
   const items = await resolveMissingVideos(post, scraped.slice(0, 10))
-  const finish = async (media: Sent[]): Promise<Delivered> => {
+  const finish = async (media: Sent[], textInCaption: boolean): Promise<Delivered> => {
     const ids = media.map((m) => m.message_id)
-    if (fitsCaption) return { ids, mainId: ids[0], mainMedia: true }
-    const m = await send('sendMessage', { text, ...fmt, link_preview_options: { is_disabled: true } })
+    if (textInCaption) return { ids, mainId: ids[0], mainMedia: true }
+    const m = await send('sendMessage', { text, ...fmt, ...markup, link_preview_options: { is_disabled: true } })
     return { ids: [...ids, m.message_id], mainId: m.message_id, mainMedia: false }
   }
   // Never substitute a video/GIF cover frame: if the real file can't be sent, Telegram's own preview of the original post is used.
-  const viaOriginal = () =>
-    textOnly({
+  const viaOriginal = async (reason: string) => {
+    if (options.mediaFail === 'throw') throw new MediaError(reason)
+    return textOnly({
       link_preview_options: post.ref ? { url: `https://t.me/${post.ref}`, prefer_large_media: true, show_above_text: true } : { is_disabled: true },
     })
-  if (items.some((item) => !item.url)) return viaOriginal()
+  }
+  if (items.some((item) => !item.url)) return viaOriginal('Videonun dosyası kaynak kanalın sayfasında yok (büyük video)')
 
   try {
     if (items.length > 1) {
+      // Telegram albums can't carry buttons, so with buttons the text follows the album as its own message.
+      const albumCaption = fitsCaption && !hasButtons
       // Albums can't hold animations; Telegram plays GIF files inside albums as videos.
       const media = items.map((item, i) => ({
         type: item.type === 'photo' ? 'photo' : 'video',
         media: `attach://m${i}`,
         ...(item.type === 'photo' ? {} : { supports_streaming: true }),
-        ...(i === 0 ? captioned : {}),
+        ...(i === 0 && albumCaption ? captioned : {}),
       }))
       let album: Sent[]
       try {
@@ -512,16 +534,17 @@ async function deliver(dest: Destination, post: ScrapedPost, text: string, parse
         if (isParseError(error)) throw error
         album = await send<Sent[]>('sendMediaGroup', { media: media.map((m, i) => ({ ...m, media: items[i].url })) })
       }
-      return await finish(album)
+      return await finish(album, albumCaption)
     }
 
     const [item] = items
+    const onMedia = fitsCaption ? { ...captioned, ...markup } : {}
     if (item.type === 'photo') {
-      return await finish([await sendPhotoFile<Sent>(dest.token, { chat_id: dest.chatId, ...captioned }, item.url!)])
+      return await finish([await sendPhotoFile<Sent>(dest.token, { chat_id: dest.chatId, ...onMedia }, item.url!)], fitsCaption)
     }
     const method = item.type === 'gif' ? 'sendAnimation' : 'sendVideo'
     const field = item.type === 'gif' ? 'animation' : 'video'
-    const body = { chat_id: dest.chatId, ...(item.type === 'video' ? { supports_streaming: true } : {}), ...captioned }
+    const body = { chat_id: dest.chatId, ...(item.type === 'video' ? { supports_streaming: true } : {}), ...onMedia }
     let single: Sent
     try {
       single = await callBotFiles<Sent>(dest.token, method, body, { [field]: { url: item.url!, kind: 'video', name: item.type === 'gif' ? 'animation.mp4' : 'video.mp4' } })
@@ -529,11 +552,11 @@ async function deliver(dest: Destination, post: ScrapedPost, text: string, parse
       if (isParseError(error)) throw error
       single = await callBot<Sent>(dest.token, method, { ...body, [field]: item.url })
     }
-    return await finish([single])
+    return await finish([single], fitsCaption)
   } catch (error) {
     if (isParseError(error)) throw error
-    console.error('[mirror] media send failed, sharing original post instead', error)
-    return viaOriginal()
+    console.error('[mirror] media send failed', error)
+    return viaOriginal(String((error as Error).message))
   }
 }
 

@@ -12,12 +12,15 @@ import {
   disconnectOddsWebhook,
   ingestManual,
   previewOddsPost,
+  resolveOddsQueue,
   saveOddsBotConfig,
   searchAdminOdds,
   setOddsSourceActive,
   setOddsStatus,
+  updateOddsSourceRule,
   updateOddsSourceTag,
   updateOddsSourceText,
+  type QueueAction,
 } from '@/lib/special-odds'
 import type { OddsFilter, OddsPage, OddsPreview } from '@/lib/special-odds-shared'
 import type { ActionState } from './actions'
@@ -55,6 +58,7 @@ export async function saveOddsBotAction(_: ActionState, form: FormData): Promise
       wonText: text(form, 'wonText'),
       lostText: text(form, 'lostText'),
       postResults: form.get('postResults') === 'on',
+      mediaFallback: form.get('mediaFallback') === 'hold' ? 'hold' : 'text',
     })
     refresh()
     return logged('telegram', { ok: true, message: config.enabled ? `Kaydedildi. Bot "${config.channelTitle}" kanalına paylaşacak.` : 'Kaydedildi. Bot şu an kapalı.' })
@@ -97,9 +101,38 @@ export async function addOddsSourceAction(_: ActionState, form: FormData): Promi
       footer: text(form, 'footer'),
       tag: text(form, 'tag'),
       tagText: text(form, 'tagText'),
+      passMode: text(form, 'passMode'),
+      passWords: text(form, 'passWords'),
+      buttons: text(form, 'buttons'),
     })
     refresh()
     return logged('telegram', { ok: true, message: `"${title}" kaynak olarak eklendi.` })
+  } catch (error) {
+    return { message: errorText(error) }
+  }
+}
+
+export async function updateOddsSourceRuleAction(_: ActionState, form: FormData): Promise<ActionState> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    await updateOddsSourceRule(Number(form.get('id')), { passMode: text(form, 'passMode'), passWords: text(form, 'passWords'), buttons: text(form, 'buttons') })
+    refresh()
+    return logged('telegram', { ok: true, message: 'Kaydedildi. Bundan sonraki postlarda geçerli.' })
+  } catch (error) {
+    return { message: errorText(error) }
+  }
+}
+
+const QUEUE_ACTIONS: QueueAction[] = ['media', 'text', 'send', 'dismiss']
+
+export async function resolveOddsQueueAction(_: ActionState, form: FormData): Promise<ActionState> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  const action = String(form.get('action')) as QueueAction
+  if (!QUEUE_ACTIONS.includes(action)) return { message: 'Geçersiz işlem' }
+  try {
+    const message = await resolveOddsQueue(Number(form.get('id')), action)
+    refresh()
+    return logged('telegram', { ok: true, message })
   } catch (error) {
     return { message: errorText(error) }
   }
@@ -156,6 +189,9 @@ export async function ingestManualAction(_: ActionState, form: FormData): Promis
     const res = await ingestManual(Number(form.get('sourceId')), text(form, 'text').slice(0, 4000))
     refresh()
     const labels = { odds: 'yeni özel oran', filled: 'oran “doldu” yapıldı', won: 'oran kazandı', lost: 'oran kaybetti', void: 'oran iade', ignore: 'işlem yok' } as const
+    if ('skipped' in res && res.skipped) return { message: `Paylaşılmadı: ${res.skipped}. Post “Bekleyen ve atlanan postlar” listesine düştü.` }
+    if ('held' in res && res.held) return logged('telegram', { ok: true, message: 'Oran siteye eklendi; kanal paylaşımı medyası alınamadığı için bekliyor.' })
+    if (!res.count && res.kind === 'odds') return logged('telegram', { ok: true, message: 'Post kaynağın kuralı gereği oransız paylaşıldı.' })
     if (!res.count) return { message: res.kind === 'ignore' ? 'Bu post özel oran, doldu ya da sonuç postu olarak tanınmadı.' : 'Eşleşen açık oran bulunamadı.' }
     return logged('telegram', { ok: true, message: `${res.count} ${labels[res.kind]}.` })
   } catch (error) {

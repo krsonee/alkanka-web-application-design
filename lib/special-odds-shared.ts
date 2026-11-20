@@ -1,4 +1,34 @@
+import type { PostButton } from '@/lib/tg-buttons'
+
 export type OddStatus = 'open' | 'filled' | 'expired'
+
+/** Which posts of a source channel are shared to our channel. */
+export type OddsPassMode = 'odds' | 'keyword' | 'all'
+
+export const ODDS_PASS_OPTIONS: { value: OddsPassMode; label: string; hint: string }[] = [
+  { value: 'odds', label: 'Sadece oran içerenler', hint: 'Maçı ve oranı okunamayan post paylaşılmaz, "atlandı" diye kayda düşer.' },
+  { value: 'keyword', label: 'Anahtar kelime geçenler', hint: 'Yazdığın kelimelerden biri geçen her post paylaşılır, oran olmasa da.' },
+  { value: 'all', label: 'Hepsi', hint: 'Kanaldaki her post paylaşılır. Duyuru ve reklam postları da gider.' },
+]
+
+export const toOddsPassMode = (v: unknown): OddsPassMode => (v === 'keyword' || v === 'all' ? v : 'odds')
+
+/** What happens to a post whose photo, video or album could not be carried over. */
+export type OddsMediaFallback = 'text' | 'hold'
+export const toMediaFallback = (v: unknown): OddsMediaFallback => (v === 'hold' ? 'hold' : 'text')
+
+export type OddsQueueState = 'skipped' | 'held' | 'sent'
+
+export type OddsQueueItem = {
+  id: number
+  sourceId: number | null
+  siteName: string
+  state: OddsQueueState
+  reason: string
+  text: string
+  hasMedia: boolean
+  at: string
+}
 export type OddResult = 'won' | 'lost' | 'void'
 
 export type SpecialOdd = {
@@ -43,6 +73,9 @@ export type OddsSource = {
   footer: string
   tag: OddsTag
   tagText: string
+  passMode: OddsPassMode
+  passWords: string
+  buttons: PostButton[]
   active: boolean
   lastAt: string | null
   total: number
@@ -81,9 +114,12 @@ export type OddsBotConfig = {
   wonText: string
   lostText: string
   postResults: boolean
+  mediaFallback: OddsMediaFallback
 }
 
 export type OddsBotStatus = {
+  /** Posts waiting in the panel because their media could not be carried over. */
+  held: number
   webhookUrl: string | null
   pending: number
   lastError: string | null
@@ -97,6 +133,7 @@ export type OddsBotStatus = {
 }
 
 export const EMPTY_ODDS_STATUS: OddsBotStatus = {
+  held: 0,
   webhookUrl: null,
   pending: 0,
   lastError: null,
@@ -111,7 +148,19 @@ export type OddsPreview = {
   kind: 'odds' | 'filled' | 'won' | 'lost' | 'void' | 'ignore'
   odds: { match: string; market: string; oldOdd: number | null; newOdd: number }[]
   rewritten: string
+  /** Whether the source's rule lets this post through. Null for "limit doldu" and result posts. */
+  verdict: 'send' | 'skip' | null
+  reason: string
 }
+
+// "1.85" or "2,10" standing alone: not part of "1.500", not money ("500,00 TL", "₺99,90") and not a percentage.
+const ODD_NUMBER = /(?<![\d.,₺$€%])\d{1,3}[.,]\d{2}(?![\d.,])(?!\s*(?:tl\b|try\b|usd\b|eur\b|bin\b|lira|₺|\$|€|%))/iu
+const MATCH_LINE = /[\p{L}\d][\p{L}\d.' ]+\s(?:-|–|—|vs\.?)\s[\p{L}\d][\p{L}\d.' ]+/iu
+
+export const hasOddNumber = (text: string) => ODD_NUMBER.test(text)
+
+/** Stand-in for the AI reader when it is unreachable: an odd-like number plus a "Team - Team" line. */
+export const looksLikeOdds = (text: string) => hasOddNumber(text) && MATCH_LINE.test(text)
 
 export const DEFAULT_ODDS_BOT: OddsBotConfig = {
   enabled: false,
@@ -129,6 +178,7 @@ export const DEFAULT_ODDS_BOT: OddsBotConfig = {
   wonText: 'KAZANDI',
   lostText: 'Kaybetti',
   postResults: true,
+  mediaFallback: 'text',
 }
 
 export const ODD_RESULT_LABELS: Record<OddResult, string> = { won: 'Kazandı', lost: 'Kaybetti', void: 'İade' }

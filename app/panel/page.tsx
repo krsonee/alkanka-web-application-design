@@ -51,7 +51,7 @@ import { TelegramMirror } from '@/components/panel/telegram-mirror'
 import { TelegramChatSetup } from '@/components/panel/telegram-chat-setup'
 import { ApprovalSection, ShareSection } from '@/components/panel/telegram-bot-suite'
 import { OddsBotManager } from '@/components/panel/odds-bot-manager'
-import { getOddsBotConfig, listOddsSources, oddsBotStatus, searchAdminOdds } from '@/lib/special-odds'
+import { getOddsBotConfig, listOddsQueue, listOddsSources, oddsBotStatus, searchAdminOdds } from '@/lib/special-odds'
 import { DEFAULT_ODDS_BOT, EMPTY_ODDS_STATUS } from '@/lib/special-odds-shared'
 import { KankaTvManager } from '@/components/panel/kankatv-manager'
 import { getTvConfig, tvBotStatus, tvStats } from '@/lib/kankatv-engage'
@@ -98,7 +98,7 @@ import { getTracking, listCampaigns, listEarnings } from '@/lib/marketing'
 import { SocialManager } from '@/components/panel/social-manager'
 import { adminEntries, adminSocialAccounts, getSocialLinks, listSocialEvents, type SocialLinks } from '@/lib/social'
 import { affLinkViews } from '@/lib/aff-links'
-import { linkReport } from '@/lib/links'
+import { linkChoices, linkReport } from '@/lib/links'
 import { earningsBySite, type LinkReport, type SiteEarning } from '@/lib/links-shared'
 import { LinksTable } from '@/components/panel/links-table'
 import { adminSponsorAccounts, currentPeriod, flaggedMembers, followerCounts, getSiteLinks, trafficReport } from '@/lib/growth'
@@ -290,11 +290,13 @@ type TgShared = {
 
 /** Bots, automations and channel settings: the tabs that need the setup permission, and the data only they use. */
 async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Promise<{ tabs: TgTab[]; chats: Array<{ chatId?: string | null; title?: string | null }> }> {
-  const [oddsConfig, oddsStatus, oddsSources, oddsPage] = await Promise.all([
+  const [oddsConfig, oddsStatus, oddsSources, oddsPage, oddsQueue, linkOptions] = await Promise.all([
     getOddsBotConfig().catch(miss(DEFAULT_ODDS_BOT)),
     oddsBotStatus().catch(miss(EMPTY_ODDS_STATUS)),
     listOddsSources().catch(miss([])),
     searchAdminOdds({}).catch(miss({ rows: [], hasMore: false })),
+    listOddsQueue().catch(miss([])),
+    linkChoices(SITE_URL).catch(miss([])),
   ])
   const [sources, log, cronKey, invite, addresses, shareInfo] = await Promise.all([
     listSources().catch(miss([])),
@@ -340,7 +342,7 @@ async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Prom
           [oddsStatus.activeSources === 0, 'Kaynak kanal eklenmemiş', 'off'],
           [!oddsStatus.webhookUrl, 'Webhook kurulmamış', 'off'],
         ),
-        content: <OddsBotManager config={oddsConfig} status={oddsStatus} bots={bots} sources={oddsSources} odds={oddsPage} />,
+        content: <OddsBotManager config={oddsConfig} status={oddsStatus} bots={bots} sources={oddsSources} odds={oddsPage} queue={oddsQueue} links={linkOptions} />,
       },
       {
         id: 'kankatv',
