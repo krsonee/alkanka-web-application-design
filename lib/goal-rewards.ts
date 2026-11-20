@@ -199,9 +199,11 @@ export async function importGoalFixtures(eventId: number, list: GoalFixture[]) {
   let added = 0
   for (const f of (Array.isArray(list) ? list : []).slice(0, 60)) {
     const when = new Date(f.kickoff)
-    if (!Number.isSafeInteger(f.extId) || Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) continue
+    const home = String(f?.home ?? '').trim().slice(0, 80)
+    const away = String(f?.away ?? '').trim().slice(0, 80)
+    if (!home || !away || !Number.isSafeInteger(f.extId) || f.extId <= 0 || Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) continue
     const r = await rows(sql`INSERT INTO goal_matches (event_id, league, home, away, home_logo, away_logo, ext_id, kickoff, per_goal)
-      VALUES (${e.id}, ${String(f.league ?? '').slice(0, 80)}, ${String(f.home ?? '').slice(0, 80)}, ${String(f.away ?? '').slice(0, 80)},
+      VALUES (${e.id}, ${String(f.league ?? '').trim().slice(0, 80)}, ${home}, ${away},
         ${safeLogo(f.homeLogo)}, ${safeLogo(f.awayLogo)}, ${f.extId}, ${when.toISOString()}, ${e.perGoal})
       ON CONFLICT (event_id, ext_id) WHERE ext_id IS NOT NULL DO NOTHING RETURNING id`)
     added += r.length

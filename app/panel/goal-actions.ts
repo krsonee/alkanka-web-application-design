@@ -10,13 +10,16 @@ import {
   goalBoard,
   goalPicks,
   goalSummaryText,
+  importGoalFixtures,
   retryGoalPayment,
   saveGoalEvent,
   setGoalApproval,
   setGoalDelivered,
   settleGoalMatch,
   voidGoalMatch,
+  type GoalFixture,
 } from '@/lib/goal-rewards'
+import type { LeaguePin } from '@/lib/prediction-book-shared'
 import { goalAmount, isGoalApproval, type GoalApproval, type GoalEvent, type GoalEventView, type GoalMatch, type GoalPickRow } from '@/lib/goal-rewards-shared'
 
 type Result = { ok: true; message?: string } | { ok: false; error: string }
@@ -38,14 +41,22 @@ async function guard(fn: () => Promise<string | void>): Promise<Result> {
   }
 }
 
-export type GoalAdminData = { events: GoalEventView[]; sites: { id: string; name: string }[] }
+/** `pins` are the football leagues pinned on the prediction league screen; the calendar picker offers them first. */
+export type GoalAdminData = { events: GoalEventView[]; sites: { id: string; name: string }[]; pins: LeaguePin[] }
 
 export async function loadGoalAdmin(): Promise<{ ok: true; data: GoalAdminData } | { ok: false; error: string }> {
   if (!(await allowed())) return { ok: false, error: EXPIRED }
   try {
-    const { siteOptions } = await import('@/lib/sites')
-    const [events, sites] = await Promise.all([goalBoard(null, { admin: true }), siteOptions().catch(() => [])])
-    return { ok: true, data: { events, sites: sites.map((s) => ({ id: String(s.id), name: s.name })) } }
+    const [{ siteOptions }, { getLeagueBook }] = await Promise.all([import('@/lib/sites'), import('@/lib/prediction-book')])
+    const [events, sites, pins] = await Promise.all([
+      goalBoard(null, { admin: true }),
+      siteOptions().catch(() => []),
+      getLeagueBook().then(
+        (book) => book.pins.filter((p) => p.sport === 'football'),
+        () => [],
+      ),
+    ])
+    return { ok: true, data: { events, sites: sites.map((s) => ({ id: String(s.id), name: s.name })), pins } }
   } catch (error) {
     console.error('[goal] panel listesi okunamadı', (error as Error).message)
     return { ok: false, error: 'Gol başı ödül etkinlikleri okunamadı.' }
@@ -74,6 +85,16 @@ export async function createGoalMatch(eventId: number, input: { league: string; 
     await addGoalMatch(Number(eventId), input)
     await logPanel('community', 'Gol başı ödül maçı eklendi', `${input.home} - ${input.away}`, `Etkinlik #${eventId}`)
     return 'Maç eklendi.'
+  })
+}
+
+export async function importGoalMatches(eventId: number, list: GoalFixture[]) {
+  return guard(async () => {
+    const picked = Array.isArray(list) ? list : []
+    const added = await importGoalFixtures(Number(eventId), picked)
+    if (!added) return 'Seçilen maçlar bu etkinlikte zaten var ya da başlamış.'
+    await logPanel('community', 'Gol başı ödül maçları takvimden eklendi', `Etkinlik #${eventId}`, `${added} maç`)
+    return added === picked.length ? `${added} maç eklendi.` : `${added} maç eklendi; ${picked.length - added} maç zaten vardı ya da başlamıştı.`
   })
 }
 
