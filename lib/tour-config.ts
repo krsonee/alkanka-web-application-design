@@ -2,8 +2,11 @@ export const TOUR_SETTINGS_KEY = 'tour:settings'
 
 /** `/?tur-onizle=misafir|uye` opens the tour without reward, counting or "seen" marks. */
 export const TOUR_PREVIEW_PARAM = 'tur-onizle'
-/** The panel leaves its unsaved draft here so the preview shows what is on screen, not what was last saved. */
-export const TOUR_PREVIEW_STORE = 'alk_tour_preview'
+/**
+ * Names the unsaved draft the panel parked on the server for a preview. The panel and the site live
+ * on different domains, so the draft cannot travel in the browser's own storage.
+ */
+export const TOUR_PREVIEW_TOKEN_PARAM = 't'
 export const TOUR_PREVIEW_VALUES = { guest: 'misafir', member: 'uye' } as const
 
 export const MAX_TOUR_STEPS = 12

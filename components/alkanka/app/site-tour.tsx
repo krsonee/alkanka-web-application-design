@@ -7,14 +7,13 @@ import { ArrowLeft, ArrowRight, Coins, Compass, Eye, Loader2, Menu, X } from 'lu
 import { cn } from '@/lib/utils'
 import { JakoAvatar } from '../jako'
 import { usePoints } from '../points-context'
-import { completeTourAction, getMyTourState, markTourSeenAction } from '@/app/actions/tour'
+import { completeTourAction, getMyTourState, getTourPreviewAction, markTourSeenAction } from '@/app/actions/tour'
 import {
-  normalizeTourSettings,
   tourScreen,
   tourSteps,
   TOUR_MENU_BUTTON,
   TOUR_PREVIEW_PARAM,
-  TOUR_PREVIEW_STORE,
+  TOUR_PREVIEW_TOKEN_PARAM,
   TOUR_PREVIEW_VALUES,
   type TourAudience,
   type TourScreen,
@@ -198,18 +197,25 @@ export function SiteTour({ settings }: { settings: TourSettings }) {
     return () => window.removeEventListener(TOUR_START_EVENT, start)
   }, [start, settings.enabled])
 
-  // Preview from the panel: the draft it left behind, no reward, nothing counted or remembered.
+  // Preview from the panel: the draft it parked on the server, no reward, nothing counted or remembered.
   useEffect(() => {
-    const value = new URLSearchParams(window.location.search).get(TOUR_PREVIEW_PARAM)
+    const params = new URLSearchParams(window.location.search)
+    const value = params.get(TOUR_PREVIEW_PARAM)
     const audience = value === TOUR_PREVIEW_VALUES.guest ? 'guest' : value === TOUR_PREVIEW_VALUES.member ? 'member' : null
     if (!audience) return
-    let source = settings
-    try {
-      const draft = localStorage.getItem(TOUR_PREVIEW_STORE)
-      if (draft) source = normalizeTourSettings(JSON.parse(draft))
-    } catch {}
-    const timer = setTimeout(() => begin(audience, source, true), 400)
-    return () => clearTimeout(timer)
+    const token = params.get(TOUR_PREVIEW_TOKEN_PARAM)
+    let cancelled = false
+    const timer = setTimeout(() => {
+      const open = (source: TourSettings) => {
+        if (!cancelled) begin(audience, source, true)
+      }
+      if (token) void getTourPreviewAction(token).then((draft) => open(draft ?? settings), () => open(settings))
+      else open(settings)
+    }, 400)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
     // Only on arrival: the preview must not restart when the settings object is re-created.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

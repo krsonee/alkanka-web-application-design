@@ -3,24 +3,26 @@
 import { logPanel, memberTag } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
 import { canPanel } from '@/lib/admin-auth'
-import { clearTourBlock, getTourSettings, reshowTour, resetTourFunnel, saveTourSettings } from '@/lib/tour'
+import { clearTourBlock, getTourSettings, reshowTour, resetTourFunnel, saveTourPreview, saveTourSettings } from '@/lib/tour'
 import { tourSteps } from '@/lib/tour-config'
 import type { ActionState } from './actions'
 
 const MAX_PAYLOAD = 40_000
 
-export async function saveTourSettingsAction(_: ActionState, form: FormData): Promise<ActionState> {
-  if (!(await canPanel('tour'))) return { message: 'Oturum süresi doldu, tekrar giriş yap.' }
-  const text = String(form.get('payload') ?? '')
-  if (!text || text.length > MAX_PAYLOAD) return { message: 'Tur ayarları okunamadı, sayfayı yenileyip tekrar dene.' }
-  let draft: Record<string, unknown>
+function readDraft(text: string): Record<string, unknown> | null {
+  if (!text || text.length > MAX_PAYLOAD) return null
   try {
     const parsed: unknown = JSON.parse(text)
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('shape')
-    draft = parsed as Record<string, unknown>
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null
   } catch {
-    return { message: 'Tur ayarları okunamadı, sayfayı yenileyip tekrar dene.' }
+    return null
   }
+}
+
+export async function saveTourSettingsAction(_: ActionState, form: FormData): Promise<ActionState> {
+  if (!(await canPanel('tour'))) return { message: 'Oturum süresi doldu, tekrar giriş yap.' }
+  const draft = readDraft(String(form.get('payload') ?? ''))
+  if (!draft) return { message: 'Tur ayarları okunamadı, sayfayı yenileyip tekrar dene.' }
   try {
     // The version only moves with "yeniden göster"; a form opened before a re-show must not wind it back.
     const { version, versionNote } = await getTourSettings()
@@ -33,6 +35,18 @@ export async function saveTourSettingsAction(_: ActionState, form: FormData): Pr
     return { ok: true, message: `Kaydedildi: ${counts}, bitirme ödülü ${saved.reward.toLocaleString('tr-TR')} KC.` }
   } catch {
     return { message: 'Kaydedilemedi, tekrar dene.' }
+  }
+}
+
+/** Parks what is on screen (saved or not) so the site can show it in a preview tab. Nothing goes live. */
+export async function previewTourAction(payload: string): Promise<{ token?: string; message?: string }> {
+  if (!(await canPanel('tour'))) return { message: 'Oturum süresi doldu, tekrar giriş yap.' }
+  const draft = readDraft(String(payload ?? ''))
+  if (!draft) return { message: 'Tur ayarları okunamadı, sayfayı yenileyip tekrar dene.' }
+  try {
+    return { token: await saveTourPreview(draft) }
+  } catch {
+    return { message: 'Önizleme hazırlanamadı, tekrar dene.' }
   }
 }
 

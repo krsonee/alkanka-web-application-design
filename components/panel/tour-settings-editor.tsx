@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState, useTransition } from 'react'
 import { Compass, Copy, Eye, Gift, ListOrdered, Loader2, RefreshCw, Save, ShieldAlert } from 'lucide-react'
-import { clearTourBlockAction, reshowTourAction, saveTourSettingsAction } from '@/app/panel/tour-actions'
+import { clearTourBlockAction, previewTourAction, reshowTourAction, saveTourSettingsAction } from '@/app/panel/tour-actions'
 import type { ActionState } from '@/app/panel/actions'
 import { askConfirm } from '@/components/panel/confirm-dialog'
 import { TourFunnelCard } from '@/components/panel/tour-funnel'
@@ -12,7 +12,7 @@ import {
   TOUR_AUDIENCES,
   TOUR_AUDIENCE_LABELS,
   TOUR_PREVIEW_PARAM,
-  TOUR_PREVIEW_STORE,
+  TOUR_PREVIEW_TOKEN_PARAM,
   TOUR_PREVIEW_VALUES,
   type TourAudience,
   type TourSettings,
@@ -58,8 +58,21 @@ function NumberField({ label, hint, value, max, onChange }: { label: string; hin
   )
 }
 
-export function TourSettingsEditor({ settings, stats, funnel }: { settings: TourSettings; stats: TourStats; funnel: TourFunnel }) {
+export function TourSettingsEditor({
+  settings,
+  stats,
+  funnel,
+  siteBase,
+}: {
+  settings: TourSettings
+  stats: TourStats
+  funnel: TourFunnel
+  /** Address of the public site when the panel runs on its own domain; empty when both share one address. */
+  siteBase: string
+}) {
   const [state, action, pending] = useActionState<ActionState, FormData>(saveTourSettingsAction, {})
+  const [previewing, startPreview] = useTransition()
+  const [previewNote, setPreviewNote] = useState<{ text: string; href?: string } | null>(null)
   const [draft, setDraft] = useState(settings)
   const [tab, setTab] = useState<TourAudience>('member')
   const [note, setNote] = useState('')
@@ -88,9 +101,23 @@ export function TourSettingsEditor({ settings, stats, funnel }: { settings: Tour
     setDraft((prev) => ({ ...prev, tours: { ...prev.tours, guest: prev.tours.member.map((s) => ({ ...s })) } }))
   }
 
+  // The tab is opened inside the click (a tab opened after the server answers gets blocked as a pop-up),
+  // then pointed at the site once the draft is parked.
   const preview = (audience: TourAudience) => {
-    localStorage.setItem(TOUR_PREVIEW_STORE, payload)
-    window.open(`/?${TOUR_PREVIEW_PARAM}=${TOUR_PREVIEW_VALUES[audience]}`, '_blank', 'noopener')
+    const tab = window.open('about:blank', '_blank')
+    setPreviewNote(null)
+    startPreview(async () => {
+      const res = await previewTourAction(payload).catch(() => ({ token: undefined, message: 'Önizleme hazırlanamadı, tekrar dene.' }))
+      if (!res.token) {
+        tab?.close()
+        return setPreviewNote({ text: res.message ?? 'Önizleme hazırlanamadı, tekrar dene.' })
+      }
+      const href = `${siteBase}/?${TOUR_PREVIEW_PARAM}=${TOUR_PREVIEW_VALUES[audience]}&${TOUR_PREVIEW_TOKEN_PARAM}=${res.token}`
+      if (tab) {
+        tab.opener = null
+        tab.location.href = href
+      } else setPreviewNote({ text: 'Tarayıcı yeni sekmeyi engelledi.', href })
+    })
   }
 
   const showAgain = async () => {
@@ -216,18 +243,28 @@ export function TourSettingsEditor({ settings, stats, funnel }: { settings: Tour
               {pending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
               Kaydet
             </button>
-            <button type="button" onClick={() => preview('guest')} className={ghost}>
+            <button type="button" disabled={previewing} onClick={() => preview('guest')} className={ghost}>
               <Eye className="size-4" aria-hidden="true" />
               Misafir olarak önizle
             </button>
-            <button type="button" onClick={() => preview('member')} className={ghost}>
+            <button type="button" disabled={previewing} onClick={() => preview('member')} className={ghost}>
               <Eye className="size-4" aria-hidden="true" />
               Üye olarak önizle
             </button>
           </div>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Önizleme siteyi yeni sekmede açar ve ekrandaki hali gösterir (kaydetmeden de). Önizlemede ödül verilmez, sayıma girmez.
+            Önizleme siteyi yeni sekmede açar ve ekrandaki hali gösterir (kaydetmeden de). Önizlemede ödül verilmez, sayıma girmez. Önizleme linki 30 dakika geçerlidir.
           </p>
+          {previewNote ? (
+            <p role="status" className="text-sm text-destructive">
+              {previewNote.text}{' '}
+              {previewNote.href ? (
+                <a href={previewNote.href} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary underline">
+                  Önizlemeyi buradan aç
+                </a>
+              ) : null}
+            </p>
+          ) : null}
           {state.message ? (
             <p role="status" className={state.ok ? 'text-sm text-primary' : 'text-sm text-destructive'}>
               {state.message}

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
 import { getContent, setContent } from '@/lib/content'
 import { credit, getBalance, recordHistory } from '@/lib/member'
@@ -12,6 +13,23 @@ export async function saveTourSettings(input: unknown) {
   const clean = normalizeTourSettings(input)
   await setContent(TOUR_SETTINGS_KEY, clean)
   return clean
+}
+
+const TOUR_PREVIEW_KEY = 'tour:preview'
+const PREVIEW_TTL_MS = 30 * 60_000
+
+/** Parks the panel's unsaved draft for half an hour; one slot, the latest preview wins. */
+export async function saveTourPreview(input: unknown): Promise<string> {
+  const token = randomUUID()
+  await setContent(TOUR_PREVIEW_KEY, { token, at: Date.now(), settings: normalizeTourSettings(input) })
+  return token
+}
+
+export async function getTourPreview(token: unknown): Promise<TourSettings | null> {
+  if (typeof token !== 'string' || !/^[a-f0-9-]{36}$/.test(token)) return null
+  const saved = await getContent<{ token?: string; at?: number; settings?: unknown }>(TOUR_PREVIEW_KEY).catch(() => null)
+  if (!saved || saved.token !== token || Date.now() - Number(saved.at) > PREVIEW_TTL_MS) return null
+  return normalizeTourSettings(saved.settings)
 }
 
 let ready: Promise<unknown> | null = null

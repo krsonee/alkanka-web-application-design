@@ -782,7 +782,9 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         tourStats().catch(miss({ done: 0, rewarded: 0, blocked: 0, paidTotal: 0, recentBlocked: [] })),
         tourFunnel(settings).catch(miss(EMPTY_FUNNEL)),
       ])
-      return <TourSettingsEditor settings={settings} stats={stats} funnel={funnel} />
+      const { headers } = await import('next/headers')
+      const onPanelDomain = /(^|\.)alkanka\.shop(:\d+)?$/i.test((await headers()).get('host') ?? '')
+      return <TourSettingsEditor settings={settings} stats={stats} funnel={funnel} siteBase={onPanelDomain ? SITE_URL : ''} />
     }),
     section(ctx, 'sponsors', 'Sponsorlar', async () => (
       <SitesManager sites={await listSites()} today={istanbulToday()} siteUrl={SITE_URL} legacyLogos={(content['logos:sponsors'] as Record<string, string> | undefined) ?? {}} />

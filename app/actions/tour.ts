@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto'
 import { cookies, headers } from 'next/headers'
 import { getMember } from '@/lib/member'
 import { hashNetwork } from '@/lib/growth'
-import { claimTourReward, getTourSettings, getTourState, markTourSeen, type TourClaim, type TourState } from '@/lib/tour'
+import { claimTourReward, getTourPreview, getTourSettings, getTourState, markTourSeen, type TourClaim, type TourState } from '@/lib/tour'
+import type { TourSettings } from '@/lib/tour-config'
 
 const DEVICE_COOKIE = 'alk_tdev'
 
@@ -46,4 +47,9 @@ export async function completeTourAction(): Promise<TourClaim | { status: 'guest
     console.error('[tour] ödül verilemedi', error)
     return { status: 'error', message: 'Ödül şu an verilemedi, tekrar dene.' }
   }
+}
+
+/** The draft a panel preview link points at; null once it has expired or another preview replaced it. */
+export async function getTourPreviewAction(token: string): Promise<TourSettings | null> {
+  return getTourPreview(token)
 }
