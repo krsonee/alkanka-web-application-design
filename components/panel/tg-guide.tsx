@@ -11,7 +11,9 @@ const LAYOUT: GuideStep = {
   body: (
     <ul className={ul}>
       <li>
-        Üstteki düğmeler gruplardır: <b>Postlar</b>, <b>Durum</b>, <b>Botlar</b>, <b>Otomasyonlar</b>, <b>Kanallar</b>. Birine basınca altında o grubun sekmeleri açılır. Sadece iznin olan
+        Üstteki düğmeler gruplardır: <b>Postlar</b> (yaz ve gönder), <b>Botlar</b> (bütün botlar; her botun ayarı, kaynağı, kuralı ve kaydı kendi sayfasında),{' '}
+        <b>Kanallar &amp; kaynaklar</b> (kanal adresleri, davet linkleri, botların okuduğu bütün kaynakların listesi), <b>Koruma</b> (Telegram Merkezi) ve{' '}
+        <b>Durum</b>. Birine basınca altında o grubun sekmeleri açılır. Sadece iznin olan
         grupları görürsün.
       </li>
       <li>
@@ -34,6 +36,11 @@ const POST_STEPS: GuideStep[] = [
       <ol className={ol}>
         <li>
           <b>Postlar → Yeni post</b>. Yazıyı yaz; biçim vermek için yazıyı seçip üstteki düğmelere bas. Yanda Telegram’da nasıl görüneceğini görürsün.
+        </li>
+        <li>
+          Emoji için gülen yüz düğmesine bas. <b>Premium paket ekle</b>’ye paketin linkini (<span className={code}>t.me/addemoji/…</span>) bir kez yapıştır; paket
+          sonra her postta seçilir. Premium emojiyi her bot gönderemez (kuralı Telegram koyar): hak yoksa post bozulmaz, emojinin normal hali gider ve gönderim
+          sonucunda yazar. Emin olmak için önce <b>Deneme gönder</b>.
         </li>
         <li>İstersen medya ekle (en çok 10; fotoğraf 10 MB, video, GIF ve dosya 49 MB). Birden çok fotoğraf ya da video albüm olarak gider; albüme buton konmaz.</li>
         <li>
@@ -279,10 +286,10 @@ const SETUP_STEPS: GuideStep[] = [
         </li>
         <li>Botu çalışacağı grup ve kanallarda yönetici yap (mesaj silme, kullanıcı yasaklama, davet, sabitleme; kanalda mesaj gönderme ve düzenleme).</li>
         <li>
-          <b>Otomasyonlar → Bağlantı &amp; Cron</b>: token’ı yapıştırıp botu bağla, hedef kanalları ekle, <b>Test</b>’e bas.
+          <b>Botlar → Bağlantı &amp; Cron</b>: token’ı yapıştırıp botu bağla, hedef kanalları ekle, <b>Test</b>’e bas.
         </li>
         <li>
-          <b>Botlar → Telegram Merkezi → Kurulum</b>: Bekçi, Destek ve Postçu rollerine bot ata, korunacak grupları ve gizli kayıt grubunu ekle.
+          <b>Koruma → Telegram Merkezi → Kurulum</b>: Bekçi, Destek ve Postçu rollerine bot ata, korunacak grupları ve gizli kayıt grubunu ekle.
         </li>
         <li>
           Oran, KankaTV ve Canlı Sohbet için ayrı bot kullan: bir bot tek bir dinleme adresine bağlanır, aynı botu iki ana işe veremezsin.

@@ -118,7 +118,7 @@ function Bots({ bots }: { bots: BotHealth[] }) {
           ))}
         </ul>
       ) : (
-        <p className="text-sm text-muted-foreground">Henüz bot eklenmemiş. Otomasyonlar &gt; Bağlantı &amp; Cron bölümünden ekle.</p>
+        <p className="text-sm text-muted-foreground">Henüz bot eklenmemiş. Botlar &gt; Bağlantı &amp; Cron bölümünden ekle.</p>
       )}
     </Card>
   )

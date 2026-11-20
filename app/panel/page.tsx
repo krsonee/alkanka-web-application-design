@@ -202,6 +202,7 @@ import { PanelDashboard } from '@/components/panel/dashboard'
 import { loadSystemStatus } from '@/lib/system-status'
 import { dashStats, parseQuery } from '@/lib/panel-stats'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
+import { SourcesOverview } from '@/components/panel/tg-sources-overview'
 import { TgGuide } from '@/components/panel/tg-guide'
 import { TgHubManager } from '@/components/panel/tg-hub-manager'
 import { DmPanel } from '@/components/panel/tg-dm-panel'
@@ -273,6 +274,23 @@ async function section({ session, active }: SectionCtx, id: PanelModule | PanelV
 
 type TgTab = { id: string; group?: string; label: string; status?: 'on' | 'off' | 'idle' | null; issue?: string | null; content: ReactNode }
 
+const CHANNELS_GROUP = 'Kanallar & kaynaklar'
+/** Telegram's groups in the order of the work: write, run the bots, look after the channels, protect, check. */
+const TG_GROUPS = ['Postlar', 'Botlar', CHANNELS_GROUP, 'Koruma', 'Durum']
+/** Bots in the order they are set up: the page that connects them first. */
+const BOT_TABS = ['mirror', 'odds', 'share', 'chat', 'approvals', 'kankatv', 'tvbets']
+
+function orderTgTabs(tabs: TgTab[]) {
+  const rank = (list: string[], value: string | undefined) => {
+    const at = list.indexOf(value ?? '')
+    return at < 0 ? list.length : at
+  }
+  return tabs
+    .map((tab, at) => ({ tab, at }))
+    .sort((a, b) => rank(TG_GROUPS, a.tab.group) - rank(TG_GROUPS, b.tab.group) || rank(BOT_TABS, a.tab.id) - rank(BOT_TABS, b.tab.id) || a.at - b.at)
+    .map((x) => x.tab)
+}
+
 // The first failing check decides the light: 'idle' for switched off or never set up, 'off' for switched on but failing.
 function tabState(...checks: Array<[bad: boolean, issue: string, as: 'off' | 'idle']>) {
   const hit = checks.find(([bad]) => bad)
@@ -329,7 +347,7 @@ async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Prom
       { chatId: oddsConfig.channelId, title: oddsConfig.channelTitle },
     ],
     tabs: [
-      { id: 'mirror', group: 'Otomasyonlar', label: 'Bağlantı & Cron', ...tabState([bots.length === 0, 'Hiç bot eklenmemiş', 'idle'], [sources.length === 0, 'Kaynak kanal eklenmemiş, aktarılacak bir şey yok', 'idle']), content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} sharedRules={tgRules} links={linkOptions} /> },
+      { id: 'mirror', group: 'Botlar', label: 'Bağlantı & Cron', ...tabState([bots.length === 0, 'Hiç bot eklenmemiş', 'idle'], [sources.length === 0, 'Kaynak kanal eklenmemiş, aktarılacak bir şey yok', 'idle']), content: <TelegramMirror bots={bots} targets={targets} sources={sources} log={log} cronUrl={cronUrl} sharedRules={tgRules} links={linkOptions} /> },
       { id: 'chat', group: 'Botlar', label: 'Canlı Sohbet', ...tabState([!chat?.webhook?.url, 'Webhook kurulmamış', 'idle'], [Boolean(chat?.webhook?.lastError), lastErr(chat?.webhook?.lastError), 'off']), content: <TelegramChatSetup bots={bots} status={chat} /> },
       {
         id: 'odds',
@@ -347,7 +365,7 @@ async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Prom
       },
       {
         id: 'kankatv',
-        group: 'Otomasyonlar',
+        group: 'Botlar',
         label: 'KankaTV Gol Botu',
         ...tabState(
           [!(tvConfig.goalBot.enabled || tvConfig.goalBot.push), 'Kapalı (Telegram ve bildirim gönderimi ikisi de kapalı)', 'idle'],
@@ -357,18 +375,32 @@ async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Prom
       },
       {
         id: 'tvbets',
-        group: 'Otomasyonlar',
+        group: 'Botlar',
         label: 'KankaTV Canlı Etkinlik',
         ...tabState([!betsConfig.enabled, 'Kapalı', 'idle'], [Boolean(betsStatus.lastError), lastErr(betsStatus.lastError), 'off']),
         content: <TvBetsManager config={betsConfig} status={betsStatus} stats={betsToday} markets={betsMarkets} log={betsHistory} targets={targets} />,
       },
       { id: 'approvals', group: 'Botlar', label: 'Bildirim Botu', ...tabState([!suite.approvals.enabled, 'Kapalı', 'idle'], [suite.approvals.botId == null, 'Bot seçilmemiş', 'off'], [!suite.approvals.chatId, 'Bildirimin gideceği sohbet seçilmemiş', 'off']), content: <ApprovalSection suite={suite} bots={bots} /> },
-      { id: 'share', group: 'Otomasyonlar', label: 'Post Paylaşım', ...tabState([!suite.share.enabled, 'Kapalı', 'idle'], [Boolean(shareInfo.lastError), lastErr(shareInfo.lastError), 'off'], [suite.share.botId == null, 'Paylaşım botu seçilmemiş', 'off']), content: <ShareSection suite={suite} bots={bots} targets={targets} status={shareInfo} links={linkOptions} /> },
-      { id: 'invite', group: 'Kanallar', label: 'Davet linkleri', ...tabState([invite == null, 'Davet linki ayarı yapılmamış', 'idle']), content: <TelegramInviteSetup bots={bots} status={invite} /> },
-      { id: 'channels', group: 'Kanallar', label: 'Kanallar', content: <TelegramChannelsSetup usernames={addresses?.usernames ?? null} /> },
+      { id: 'share', group: 'Botlar', label: 'Post Paylaşım', ...tabState([!suite.share.enabled, 'Kapalı', 'idle'], [Boolean(shareInfo.lastError), lastErr(shareInfo.lastError), 'off'], [suite.share.botId == null, 'Paylaşım botu seçilmemiş', 'off']), content: <ShareSection suite={suite} bots={bots} targets={targets} status={shareInfo} links={linkOptions} /> },
+      { id: 'invite', group: CHANNELS_GROUP, label: 'Davet linkleri', ...tabState([invite == null, 'Davet linki ayarı yapılmamış', 'idle']), content: <TelegramInviteSetup bots={bots} status={invite} /> },
+      { id: 'channels', group: CHANNELS_GROUP, label: 'Kanallar', content: <TelegramChannelsSetup usernames={addresses?.usernames ?? null} /> },
+      {
+        id: 'sources',
+        group: CHANNELS_GROUP,
+        label: 'Kaynaklar',
+        content: (
+          <SourcesOverview
+            rows={[
+              ...sources.map((s) => ({ key: `mirror-${s.id}`, tab: 'mirror', bot: 'Kanal aktarımı', name: s.brand, chat: s.channel, active: s.active, buttons: s.buttons.length, problem: s.lastError, detail: s.keywords ? 'anahtar kelimeyle süzülür' : '' })),
+              ...oddsSources.map((s) => ({ key: `odds-${s.id}`, tab: 'odds', bot: 'Özel Oran Botu', name: s.siteName || s.title, chat: s.title || s.chatId, active: s.active, buttons: s.buttons.length, problem: s.webError, detail: `${s.total} oran` })),
+              ...suite.share.rules.map((r) => ({ key: `share-${r.id}`, tab: 'share', bot: 'Post Paylaşım', name: r.name, chat: r.sourceTitle || r.sourceChat, active: r.enabled && suite.share.enabled, buttons: r.buttons.length, problem: null, detail: r.trigger ? `tetikleyici ${r.trigger}` : '' })),
+            ]}
+          />
+        ),
+      },
       {
         id: 'strip',
-        group: 'Kanallar',
+        group: CHANNELS_GROUP,
         label: 'Site şeridi',
         ...tabState([!tgPromo.enabled, 'Kapalı', 'idle']),
         content: (
@@ -434,7 +466,7 @@ async function telegramPanel(access: TelegramAccess) {
     const h = hubData.hub
     tabs.push({
       id: 'hub',
-      group: 'Botlar',
+      group: 'Koruma',
       label: 'Telegram Merkezi',
       ...tabState(
         [!(h.guard.enabled || h.support.enabled), 'Koruma ve destek botu ikisi de kapalı', 'idle'],
@@ -469,7 +501,8 @@ async function telegramPanel(access: TelegramAccess) {
     <TgPanelProvider access={access} chats={chats}>
       <div className="flex flex-col gap-4">
         <TgGuide access={access} />
-        <TelegramTabs issues={access.mod ? 'none' : 'box'} tabs={tabs} />
+        {/* Without the post screens the status screen is the one to land on, wherever its group stands. */}
+        <TelegramTabs issues={access.mod ? 'none' : 'box'} tabs={orderTgTabs(tabs)} initial={access.posts ? undefined : STATUS_TAB} />
       </div>
     </TgPanelProvider>
   )

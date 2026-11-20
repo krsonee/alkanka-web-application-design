@@ -31,7 +31,7 @@ export function ChannelRules({ data }: { data: PostCenterData }) {
   if (!data.bots.length) {
     return (
       <Card title="Elle atılan postlar">
-        <p className="text-sm leading-relaxed text-muted-foreground">Önce “Otomasyonlar → Bağlantı & Cron” sekmesinden bir bot ekle.</p>
+        <p className="text-sm leading-relaxed text-muted-foreground">Önce “Botlar → Bağlantı & Cron” sekmesinden bir bot ekle.</p>
       </Card>
     )
   }

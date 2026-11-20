@@ -103,7 +103,7 @@ export function PostComposer({ data }: { data: PostCenterData }) {
     return (
       <Card title="Yeni post">
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Post göndermek için önce bir bot gerekli. “Otomasyonlar → Bağlantı & Cron” sekmesinden botunu ekle, sonra buraya dön.
+          Post göndermek için önce bir bot gerekli. “Botlar → Bağlantı & Cron” sekmesinden botunu ekle, sonra buraya dön.
         </p>
       </Card>
     )
