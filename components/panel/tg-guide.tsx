@@ -40,7 +40,7 @@ const POST_STEPS: GuideStep[] = [
         <li>
           Emoji için gülen yüz düğmesine bas. <b>Premium paket ekle</b>’ye paketin linkini (<span className={code}>t.me/addemoji/…</span>) bir kez yapıştır; paket
           sonra her postta seçilir. Premium emojiyi her bot gönderemez (kuralı Telegram koyar): hak yoksa post bozulmaz, emojinin normal hali gider ve gönderim
-          sonucunda yazar. Emin olmak için önce <b>Deneme gönder</b>.
+          sonucunda yazar. Emin olmak için <b>Önce bana gönder</b>’i kullan.
         </li>
         <li>İstersen medya ekle (en çok 10; fotoğraf 10 MB, video, GIF ve dosya 49 MB). Birden çok fotoğraf ya da video albüm olarak gider; albüme buton konmaz.</li>
         <li>
@@ -298,6 +298,33 @@ const SETUP_STEPS: GuideStep[] = [
           Bitince <b>Durum → Durum</b>’da her şeyin yeşil olduğunu kontrol et.
         </li>
       </ol>
+    ),
+  },
+  {
+    title: 'Botların kaynakları, kuralları ve butonları',
+    body: (
+      <ul className={ul}>
+        <li>
+          Her botun ayarı, kaynakları, kuralları ve kaydı kendi sayfasındadır (<b>Botlar</b> grubu). Bütün botların okuduğu kanal ve grupları yan yana görmek için{' '}
+          <b>Kanallar &amp; kaynaklar → Kaynaklar</b>; satırdaki <b>Botun sayfasını aç</b> seni doğru bota götürür.
+        </li>
+        <li>
+          <b>Özel Oran Botu</b>: her kaynağın <b>Paylaşım kuralı ve butonlar</b> kutusunda neyin paylaşılacağını seç: sadece oran içerenler, anahtar kelime geçenler
+          ya da hepsi. Kurala takılan post paylaşılmaz, <b>Bekleyen ve atlanan postlar</b> kutusuna düşer; istersen oradan <b>Yine de paylaş</b>.
+        </li>
+        <li>
+          Oran botu fotoğrafı, videoyu, GIF’i ve albümü taşır. Dosya alınamazsa ne olacağını <b>Görseli, videosu ya da albümü alınamayan post</b> alanında seç: yazıyla
+          paylaşılsın ya da beklesin.
+        </li>
+        <li>
+          <b>Değiştirme kuralları</b>: kaynağın <b>Metin ve linkleri düzenle</b> kutusunda satır satır kural eklenir (kelime, kullanıcı adı, link, alan adı, buton
+          linki). Bütün kaynaklarda geçerli olacak kuralı <b>Ortak değiştirme kuralları</b>’na yaz; aynı şey için kaynağın kendi kuralı varsa o geçerlidir.
+        </li>
+        <li>
+          <b>Butonlar</b>: kanal aktarımında ve oran botunda kaynak başına, Post Paylaşım’da sponsor başına post altı butonu eklenir. Kaynak postun kendi butonları da
+          taşınabilir; linkleri kurallara göre değişir. Albüme buton konmadığı için albümde yazı ve butonlar ayrı mesaj olarak gider.
+        </li>
+      </ul>
     ),
   },
   {

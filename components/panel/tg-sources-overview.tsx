@@ -73,7 +73,7 @@ export function SourcesOverview({ rows }: { rows: SourceRow[] }) {
                         {r.problem ? 'Hata var' : r.active ? 'Açık' : 'Kapalı'}
                       </span>
                     </div>
-                    <p className="break-all text-xs text-muted-foreground">
+                    <p className="break-words text-xs leading-relaxed text-muted-foreground">
                       {r.bot} · {r.chat}
                       {r.detail ? ` · ${r.detail}` : ''}
                       {r.buttons ? ` · ${r.buttons} buton` : ''}

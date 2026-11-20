@@ -29,7 +29,12 @@ type Row = PanelModule | PanelView | 'account' | 'audit' | 'staff'
  * Screens and settings that sit inside a section, so the menu filter alone cannot find them.
  * `words` are what people type when they look for one; a `moved` tab opens wherever this account sees it.
  */
-const SETTINGS: ({ title: string; words?: string; query?: string } & ({ row: Row } | { moved: MovedTab }))[] = [
+const SETTINGS: ({ title: string; words?: string; query?: string; anyOf?: PanelModule[] } & ({ row: Row } | { moved: MovedTab }))[] = [
+  { title: 'Telegram premium emoji', words: 'emoji paketi addemoji özel emoji hareketli emoji post', row: 'telegram', query: 's=post-new', anyOf: ['telegram', 'tg_posts'] },
+  { title: 'Telegram kaynakları', words: 'kaynak kanal kaynak grup botların okuduğu liste', row: 'telegram', query: 's=sources' },
+  { title: 'Özel oran botu paylaşım kuralı', words: 'alakasız post oran içermeyen atlandı anahtar kelime video albüm görselsiz bekleyen', row: 'telegram', query: 's=odds' },
+  { title: 'Değiştirme kuralları', words: 'kelime kullanıcı adı link alan adı buton linki değiştir ortak kural aktarma kaynak butonu', row: 'telegram', query: 's=mirror' },
+  { title: 'Post paylaşım butonları', words: 'sponsor butonu tetikleyici post paylaşım botu albüm', row: 'telegram', query: 's=share' },
   { title: 'Yasal metinler', words: 'kvkk gizlilik kullanım şartları çerez sözleşme', row: 'texts', query: 's=legal' },
   { title: 'Paylaşım görseli', words: 'whatsapp önizleme og sosyal kart', row: 'logo', query: 's=share' },
   { title: 'Sponsor logosu', words: 'sponsor logoları logo yükle', row: 'sponsors' },
@@ -161,7 +166,7 @@ export async function panelSearchAction(raw: string): Promise<SearchHit[]> {
   for (const s of SETTINGS) {
     if (hits.length >= SETTING_LIMIT) break
     if (!has(`${s.title} ${s.words ?? ''}`)) continue
-    const row = 'moved' in s ? tabHome(s.moved, can) : opens(s.row) ? s.row : null
+    const row = 'moved' in s ? tabHome(s.moved, can) : (s.anyOf ? s.anyOf.some(can) : opens(s.row)) ? s.row : null
     if (!row) continue
     hits.push({ kind: 'setting', id: s.title, title: s.title, detail: '', ...address(row, s.query) })
   }
