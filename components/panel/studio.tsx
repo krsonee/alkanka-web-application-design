@@ -803,7 +803,7 @@ function TextFields({ value, onChange }: { value: StudioTexts; onChange: (texts:
         </label>
       ))}
       <p className="text-xs leading-relaxed text-muted-foreground">
-        Buraya yazdıkların yapay zekaya çizdirilmez, gerçek fontla birebir basılır; Türkçe harf hatası ya da tekrar olmaz. Rakam ve % içeren kelimeler marka rengiyle vurgulanır. Doldurduysan talimata yazı yazma.
+        Buraya yazdıkların yapay zekaya çizdirilmez, gerçek fontla birebir basılır; Türkçe harf hatası ya da tekrar olmaz. Rakam ve % içeren kelimeler marka rengiyle vurgulanır. Doldurduysan konu ve sahne alanlarına yazı yazma.
       </p>
     </fieldset>
   )
