@@ -186,6 +186,8 @@ export type GoalPickRow = {
   userName: string
   side: GoalPickSide
   siteUsername: string | null
+  /** Sponsor events: the account the member has linked at this sponsor right now; null when there is none. */
+  accountNow?: { username: string; status: GoalApproval } | null
   coupon: string | null
   approval: GoalApproval
   rejectReason: string | null
@@ -381,6 +383,17 @@ export function goalStatusLabel(m: Pick<GoalMatch, 'status' | 'kickoff'>, now: n
 }
 
 export const GOAL_APPROVAL_LABEL: Record<GoalApproval, string> = { pending: 'Kontrol bekliyor', approved: 'Geçerli', rejected: 'Geçersiz' }
+
+/** What staff should know about the sponsor account behind a coupon request, in a few words. */
+export function goalAccountNote(p: Pick<GoalPickRow, 'siteUsername' | 'accountNow'>): { text: string; tone: 'good' | 'plain' | 'bad' } {
+  const now = p.accountNow
+  if (!now) return { text: 'Hesap artık bağlı değil', tone: 'bad' }
+  const same = (p.siteUsername ?? '').toLocaleLowerCase('tr') === now.username.toLocaleLowerCase('tr')
+  if (!same) return { text: `Bağlı hesabı şimdi: ${now.username}`, tone: 'bad' }
+  if (now.status === 'approved') return { text: 'Hesap onaylı', tone: 'good' }
+  if (now.status === 'rejected') return { text: 'Hesap reddedildi', tone: 'bad' }
+  return { text: 'Hesap onay bekliyor', tone: 'plain' }
+}
 
 type PickState = Pick<GoalPickRow, 'reward' | 'paid' | 'payError' | 'approval' | 'fee' | 'feeRefunded'>
 

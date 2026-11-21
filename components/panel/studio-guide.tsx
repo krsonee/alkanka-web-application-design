@@ -163,6 +163,7 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
               <>{b('Domain')} kutusuna sitenin o anki güncel adresini yaz (örn. siteadi123.com). Site domain değiştirdiyse yenisini yaz.</>,
               <>{b('Siteden çek')} butonuna bas. Sistem siteye girip logoyu, ana renkleri ve fontu getirir.</>,
               <>Logo önizlemesini kontrol et. Yanlış veya bulanıksa {b('Logo yükle')} ile kendi PNG/SVG dosyanı yükle. Şeffaf arka planlı logo en temiz sonucu verir.</>,
+              <>Logo görsele yapıştırılmaz, yerleştirilir: boş kenarı atılır, şekline göre boyutlanır (kare amblem ile uzun yazı logosu aynı ağırlıkta durur), altındaki görsel parlak ya da karışıksa üstten hafif bir karartma eklenir. Koyu renkli logo açık bir plakaya oturur; düz zeminli yüklenen logonun zemini kendiliğinden kesilir.</>,
               <>Renkleri kontrol et. Gerekirse renk kutucuğuna tıklayıp değiştir, {b('+ Renk')} ile ekle, {b('×')} ile sil. İlk renk ana renk sayılır.</>,
               <>{b('Marka notları')} alanına sabit tarzı yaz (örn. "koyu lacivert zemin, altın vurgular, aslan maskotu"). Her üretimde otomatik kullanılır.</>,
               <>{b('Kaydet')}. Her site için bunu bir kez yapman yeterli. Domain değişirse kiti {b('Düzenle')} ile açıp güncelle.</>,

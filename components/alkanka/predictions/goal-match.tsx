@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Check, CircleDashed, Ticket } from 'lucide-react'
+import { Check, CircleDashed, Lock, Ticket } from 'lucide-react'
 import { joinGoalMatchAction, submitGoalCouponAction } from '@/app/actions/community'
 import { usePoints } from '@/components/alkanka/points-context'
 import {
@@ -239,19 +239,88 @@ function TeamLine({ name, logo, goals }: { name: string; logo: string | null; go
   )
 }
 
+/** Why the coupon field is closed: no session, no account at this sponsor, or an account staff turned down. */
+export type CouponLock = 'guest' | 'none' | 'rejected'
+
+const LOCK_NOTE: Record<CouponLock, (site: string) => string> = {
+  guest: (site) => `Kupon numarası girmek için önce Alkanka'ya giriş yap, sonra ${site} hesabını bağla.`,
+  none: (site) => `${site} hesabını bir kez bağlarsın; sonraki maçlarda doğrudan kupon numaranı girersin.`,
+  rejected: (site) => `Bağladığın ${site} hesabı onaylanmadı. Doğru kullanıcı adını bağlamadan kupon numarası girilemez.`,
+}
+
+/** The coupon field stays closed until the member's account at this sponsor is linked; this says so and leads there. */
+function AccountLock({ site, lock, linkFieldId, canLink }: { site: string; lock: CouponLock; linkFieldId: string; canLink: boolean }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-primary/40 bg-primary/5 p-3">
+      <ol className="flex flex-col gap-2 text-sm">
+        <li className="flex items-center gap-2 font-semibold text-foreground">
+          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground" aria-hidden="true">
+            1
+          </span>
+          {lock === 'guest' ? 'Giriş yap ve hesabını bağla' : `${site} hesabını bağla`}
+        </li>
+        <li className="flex items-center gap-2 text-muted-foreground">
+          <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-background" aria-hidden="true">
+            <Lock className="size-3" />
+          </span>
+          Kupon numaranı gir
+        </li>
+      </ol>
+      <p className="text-xs leading-relaxed text-muted-foreground">{LOCK_NOTE[lock](site)}</p>
+      {lock === 'guest' ? (
+        <a href="#kayit" className="flex h-11 items-center justify-center rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90">
+          Giriş yap ya da kayıt ol
+        </a>
+      ) : (
+        canLink && (
+          <button
+            type="button"
+            onClick={() => {
+              const field = document.getElementById(linkFieldId)
+              field?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+              field?.focus({ preventScroll: true })
+            }}
+            className="h-11 rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            {site} hesabını bağla
+          </button>
+        )
+      )}
+    </div>
+  )
+}
+
 /**
  * `account` is the sponsor username the member linked; `blocked` says staff closed their participation.
- * Without an account the card explains what is missing instead of offering a form that cannot work.
+ * Without a usable account (`lock`) the coupon field is not offered at all: the card shows the step that is
+ * missing and leads to the form named by `linkFieldId`.
  */
-export function CouponMatchCard({ event, m, now, account, blocked }: { event: GoalEventView; m: GoalMatch; now: number; account: string | null; blocked: boolean }) {
+export function CouponMatchCard({
+  event,
+  m,
+  now,
+  account,
+  blocked,
+  lock,
+  linkFieldId,
+}: {
+  event: GoalEventView
+  m: GoalMatch
+  now: number
+  account: string | null
+  blocked: boolean
+  lock: CouponLock | null
+  linkFieldId: string
+}) {
   const { pending, status, run } = useAction()
   const [coupon, setCoupon] = useState('')
   const [editing, setEditing] = useState(false)
   const fieldId = useId()
   const pick = m.myPick
   const running = m.status === 'open' && Date.parse(m.kickoff) > now
-  const canEnter = running && !blocked && account !== null && (!pick || (pick.approval === 'pending' && editing))
-  const canFix = running && !blocked && account !== null && pick?.approval === 'pending' && !editing
+  const linked = account !== null && lock === null
+  const canEnter = running && !blocked && linked && (!pick || (pick.approval === 'pending' && editing))
+  const canFix = running && !blocked && linked && pick?.approval === 'pending' && !editing
   const result = couponOutcome(event, m)
   const checked = checkCoupon(coupon)
 
@@ -314,7 +383,7 @@ export function CouponMatchCard({ event, m, now, account, blocked }: { event: Go
           Kupon numarasını yanlış yazdım, düzelt
         </button>
       )}
-      {!pick && running && account === null && !blocked && <p className="text-xs leading-relaxed text-muted-foreground">Kupon numarası girebilmek için önce yukarıdan {event.siteName ?? 'sponsor'} hesabını bağla.</p>}
+      {!pick && running && lock && !blocked && <AccountLock site={event.siteName ?? 'Sponsor'} lock={lock} linkFieldId={linkFieldId} canLink={Boolean(event.siteSlug)} />}
       {!pick && !running && m.status === 'open' && <p className="text-xs text-muted-foreground">Kupon girişi maç başlarken kapandı.</p>}
       <StatusLine status={status} />
     </article>

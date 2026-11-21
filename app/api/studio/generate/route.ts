@@ -7,7 +7,7 @@ import { briefLabel, briefProblem, briefText, cleanBrief } from '@/lib/studio-br
 import { closeHold, holdBudget } from '@/lib/studio-budget'
 import { runGeneration } from '@/lib/studio-generate'
 import { applyOverlay, brushOf } from '@/lib/studio-overlay'
-import { cleanTexts, imageCost, STUDIO_CATEGORIES, STUDIO_FORMATS, toImageSize, type StudioTexts } from '@/lib/studio-types'
+import { cleanTexts, imageCost, STUDIO_CATEGORIES, STUDIO_TEXT_CEILING, STUDIO_FORMATS, toImageSize, type StudioTexts } from '@/lib/studio-types'
 
 export const maxDuration = 300
 
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
   const category = STUDIO_CATEGORIES.find((c) => c === body.category) ?? STUDIO_CATEGORIES[0]
   // New pictures come from the form's fields; a revision is a free instruction about one picture.
   const brief = body.brief && typeof body.brief === 'object' ? cleanBrief(body.brief) : null
-  const prompt = brief ? briefText(brief) : String(body.prompt ?? '').trim().slice(0, 1500)
+  const prompt = brief ? briefText(brief) : String(body.prompt ?? '').trim().slice(0, STUDIO_TEXT_CEILING)
 
   const brandId = Number.parseInt(String(body.brandId ?? ''), 10)
   const brand = Number.isFinite(brandId) ? await getBrand(brandId) : null
