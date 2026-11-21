@@ -10,6 +10,8 @@ import { JakoAvatar } from '../jako'
 import { usePoints } from '../points-context'
 import { usePwa } from './pwa-provider'
 import { TOUR_DONE_EVENT, TOUR_KEY, useTourOpen } from './site-tour'
+import { useGuestPromptOpen } from '../guest-gate'
+import { cn } from '@/lib/utils'
 
 const BANNER_KEY = 'alk_app_banner_hidden_until'
 const HIDE_FOR_MS = 3 * 24 * 60 * 60 * 1000
@@ -21,6 +23,7 @@ function InstallBanner() {
   const { ready, standalone, platform, canPrompt, promptInstall, installBonus, pushBonus } = usePwa()
   const pathname = usePathname()
   const touring = useTourOpen()
+  const joinPromptOpen = useGuestPromptOpen()
   const [visible, setVisible] = useState(false)
   const barRef = useRef<HTMLDivElement>(null)
 
@@ -47,7 +50,10 @@ function InstallBanner() {
     const bar = barRef.current
     if (!shown || !bar) return
     const root = document.documentElement
-    const publish = () => root.style.setProperty(BANNER_SPACE_VAR, `${bar.offsetHeight + BANNER_GAP}px`)
+    const publish = () => {
+      if (bar.offsetHeight) root.style.setProperty(BANNER_SPACE_VAR, `${bar.offsetHeight + BANNER_GAP}px`)
+      else root.style.removeProperty(BANNER_SPACE_VAR)
+    }
     publish()
     const observer = new ResizeObserver(publish)
     observer.observe(bar)
@@ -69,7 +75,11 @@ function InstallBanner() {
       ref={barRef}
       role="region"
       aria-label="Mobil uygulama"
-      className="fixed inset-x-3 bottom-20 z-40 animate-in fade-in slide-in-from-bottom-4 duration-500 sm:left-auto sm:right-6 sm:w-96 lg:right-0 lg:bottom-0 lg:left-[var(--sidebar-w)] lg:w-auto xl:right-80"
+      className={cn(
+        'fixed inset-x-3 bottom-20 z-40 animate-in fade-in slide-in-from-bottom-4 duration-500 sm:left-auto sm:right-6 sm:w-96 lg:right-0 lg:bottom-0 lg:left-[var(--sidebar-w)] lg:w-auto xl:right-80',
+        // Two prompts stacked would cover half a phone screen; the "join us" one goes first.
+        joinPromptOpen && 'max-lg:hidden',
+      )}
     >
       <div className="flex items-start gap-3 rounded-2xl border border-primary/40 bg-card p-3 shadow-2xl sm:p-4 lg:items-center lg:rounded-none lg:border-x-0 lg:border-b-0 lg:px-6 lg:py-2">
         <span className="hidden sm:block">

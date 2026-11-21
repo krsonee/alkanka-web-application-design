@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -14,6 +14,31 @@ const PREVIEW_SECONDS = 5
 const SOFT_PROMPT_SECONDS = 25
 const DISMISS_KEY = 'alkanka:guest-prompt-dismissed'
 const GATE_SPACE_VAR = '--guest-gate-h'
+
+let promptOpen = false
+const promptWatchers = new Set<() => void>()
+
+function watchPrompt(notify: () => void) {
+  promptWatchers.add(notify)
+  return () => {
+    promptWatchers.delete(notify)
+  }
+}
+
+function setPromptOpen(next: boolean) {
+  if (next === promptOpen) return
+  promptOpen = next
+  promptWatchers.forEach((notify) => notify())
+}
+
+/** True while the dismissable "join us" prompt is on screen, so other bottom prompts can step aside on a phone. */
+export function useGuestPromptOpen() {
+  return useSyncExternalStore(
+    watchPrompt,
+    () => promptOpen,
+    () => false,
+  )
+}
 
 const MEMBER_ONLY = ['/gorevler', '/tahminler', '/biletler', '/turnuvalar', '/market', '/rozetler', '/oyunlar', '/siralama', '/kankatv', '/profil']
 
@@ -72,11 +97,13 @@ export function GuestGate() {
     const root = document.documentElement
     const publish = () => root.style.setProperty(GATE_SPACE_VAR, `${card.offsetHeight + 8}px`)
     publish()
+    setPromptOpen(true)
     const watch = new ResizeObserver(publish)
     watch.observe(card)
     return () => {
       watch.disconnect()
       root.style.removeProperty(GATE_SPACE_VAR)
+      setPromptOpen(false)
     }
   }, [soft])
 

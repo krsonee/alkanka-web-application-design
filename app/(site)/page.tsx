@@ -191,7 +191,7 @@ export default async function HomePage() {
           <EndingCampaigns />
         </>
       ) : (
-        <MembersOnly state={access.state} />
+        <MembersOnly state={access.state} embedded />
       )}
       {!hub && <TopThree rows={podium} me={me} signedIn={Boolean(member)} />}
     </>

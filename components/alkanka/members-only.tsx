@@ -3,9 +3,11 @@ import { Gift, Lock } from 'lucide-react'
 import type { SponsorState } from '@/lib/sponsor-access'
 import { AgeConfirm } from './age-confirm'
 
-type Props = { state: Exclude<SponsorState, 'open'>; title?: string }
+type Props = { state: Exclude<SponsorState, 'open'>; title?: string; embedded?: boolean }
 
-export function MembersOnly({ state, title = 'Üyelere özel fırsatlar' }: Props) {
+export function MembersOnly({ state, title = 'Üyelere özel fırsatlar', embedded = false }: Props) {
+  // Standing in for a whole page, this is the page's only heading.
+  const Heading = embedded ? 'h2' : 'h1'
   const guest = state === 'guest'
   return (
     <section
@@ -26,9 +28,9 @@ export function MembersOnly({ state, title = 'Üyelere özel fırsatlar' }: Prop
             <Lock className="size-3.5" aria-hidden="true" />
             {guest ? 'Sadece üyeler' : 'Son adım'}
           </span>
-          <h2 id="members-only-title" className="font-display text-2xl font-bold leading-tight text-foreground text-balance md:text-3xl">
+          <Heading id="members-only-title" className="font-display text-2xl font-bold leading-tight text-foreground text-balance md:text-3xl">
             {guest ? title : '18+ onayı gerekiyor'}
-          </h2>
+          </Heading>
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground text-pretty md:text-base">
             {guest
               ? 'Bu bölüm sadece AL KANKA üyelerine açık. Ücretsiz üye ol ya da giriş yap, ardından 18 yaşından büyük olduğunu onayla.'
