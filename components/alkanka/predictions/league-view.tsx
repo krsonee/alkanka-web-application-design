@@ -7,6 +7,7 @@ import { periodBounds, type Award, type PeriodKind } from '@/lib/predictions-sha
 import { LEAGUE_SPORT_ADDRESS, LEAGUE_TABLE_ADDRESS, fromAddress } from '@/lib/record-links'
 import { GoalBoard } from './goal-board'
 import { League, type LeagueStart } from './league'
+import { PredictionSections } from './sections'
 import type { BoardView, PeriodView } from './standings'
 
 export const leagueMember = cache(() => getMember())
@@ -25,7 +26,7 @@ export type LeagueAddress = { tab?: string; table?: string; sport?: string }
  * The prediction league as /tahminler shows it. `focus` opens one match; `league` is the league of a
  * /tahminler/lig/... address, 0 for the general one.
  */
-export async function LeagueView({ focus, league, tab, table, sport }: { focus?: number; league?: number } & LeagueAddress) {
+export async function LeagueView({ focus, league: league_, tab, table, sport }: { focus?: number; league?: number } & LeagueAddress) {
   const member = await leagueMember()
   const [matches, week, month, all, settings, paid, awards, boards] = await Promise.all([
     leagueMatches(member?.id ?? null),
@@ -35,24 +36,14 @@ export async function LeagueView({ focus, league, tab, table, sport }: { focus?:
     getLeagueSettings(),
     lastPaidPeriods().catch(() => ({})),
     member ? import('@/lib/prediction-awards').then((m) => m.myAwards(member.id)).catch(() => [] as Award[]) : ([] as Award[]),
-    specialLeagues(league),
+    specialLeagues(league_),
   ])
   const now = Date.now()
   // A match's own page shows that match; the goal events stay on the list page.
   const goals = focus == null ? await goalSection(member, now) : null
-  if (matches.length === 0 && awards.length === 0) {
-    return (
-      <>
-        {goals}
-        <Events view="tahminler" />
-      </>
-    )
-  }
-
   const period = (kind: PeriodKind): PeriodView => ({ on: settings[kind].on, places: settings[kind].places, label: periodBounds(kind, now).label })
-  return (
-    <>
-      {goals}
+  const league =
+    matches.length === 0 && awards.length === 0 ? null : (
       <League
         matches={matches}
         tables={{ week, month, all }}
@@ -64,12 +55,21 @@ export async function LeagueView({ focus, league, tab, table, sport }: { focus?:
         serverNow={now}
         focus={focus}
         start={tab ? STARTS[tab] : undefined}
-        league={league}
+        league={league_}
         table={fromAddress(LEAGUE_TABLE_ADDRESS, table)}
         sport={fromAddress(LEAGUE_SPORT_ADDRESS, sport)}
       />
-    </>
-  )
+    )
+  if (!league) {
+    return (
+      <>
+        {goals?.node ?? null}
+        <Events view="tahminler" />
+      </>
+    )
+  }
+  const leagueOpen = matches.filter((m) => !m.settled && new Date(m.closesAt ?? m.kickoff).getTime() > now).length
+  return <PredictionSections league={league} goals={goals?.node ?? null} leagueOpen={leagueOpen} goalOpen={goals?.open ?? 0} />
 }
 
 /** How many special leagues the page shows at once, newest first. */
@@ -96,17 +96,21 @@ async function specialLeagues(keep?: number): Promise<BoardView[]> {
 }
 
 /**
- * "Gol başı ödül" events. Sponsor events follow the rule of every other sponsor page: members only,
- * and only after the age question is answered. A failure here never takes the league down with it.
+ * The goal events ("Gol Yağmuru") and how many of their matches can still be joined. Sponsor events follow
+ * the rule of every other sponsor page: members only, and only after the age question is answered.
+ * A failure here never takes the league down with it.
  */
 async function goalSection(member: Member | null, now: number) {
   try {
-    const [{ goalBoard }, { getSponsorAccess }] = await Promise.all([import('@/lib/goal-rewards'), import('@/lib/sponsor-access')])
-    const [events, access] = await Promise.all([goalBoard(member?.id ?? null), getSponsorAccess(member)])
+    const [{ goalBoard, goalMe }, { getSponsorAccess }] = await Promise.all([import('@/lib/goal-rewards'), import('@/lib/sponsor-access')])
+    const [events, access, me] = await Promise.all([goalBoard(member?.id ?? null), getSponsorAccess(member), member ? goalMe(member.id).catch(() => ({ accounts: {}, flag: null })) : null])
     const open = access.state === 'open'
     const held = events.some((e) => e.category === 'sponsor') && !open
     const note = !held ? null : access.state === 'guest' ? 'Sponsor etkinlikleri sadece üyelere açık. Giriş yaptığında burada görünür.' : 'Sponsor etkinliklerini görmek için önce sponsorlar sayfasında 18 yaş onayını ver.'
-    return <GoalBoard events={open ? events : events.filter((e) => e.category !== 'sponsor')} serverNow={now} sponsorNote={note} />
+    const shown = open ? events : events.filter((e) => e.category !== 'sponsor')
+    if (shown.length === 0 && !note) return null
+    const joinable = shown.reduce((n, e) => n + e.matches.filter((m) => m.status === 'open' && Date.parse(m.kickoff) > now).length, 0)
+    return { node: <GoalBoard events={shown} serverNow={now} sponsorNote={note} me={me} />, open: joinable }
   } catch (error) {
     console.error('[goal] etkinlikler okunamadı', (error as Error).message)
     return null

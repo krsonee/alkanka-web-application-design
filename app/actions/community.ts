@@ -119,16 +119,41 @@ export async function savePickAction(matchId: number, answers: Answers) {
   }, '/tahminler')
 }
 
-export async function pickGoalSideAction(matchId: number, side: string, siteUsername: string) {
+/** Sponsor events follow the rule of every sponsor page: the age question has to be answered first. */
+async function sponsorGate() {
+  const { getSponsorAccess } = await import('@/lib/sponsor-access')
+  if ((await getSponsorAccess()).state !== 'open') throw new Error('Sponsor etkinliğine katılmak için önce sponsorlar sayfasında 18 yaş onayını ver.')
+}
+
+/** Alkanka events: the member backs a team; a joining fee, when there is one, leaves the wallet with the pick. */
+export async function pickGoalSideAction(matchId: number, side: string): Promise<ActionResult> {
+  const result = await run(async (m) => {
+    const { pickGoalSide } = await import('@/lib/goal-rewards')
+    const { fee } = await pickGoalSide(m, Number(matchId), side)
+    return fee > 0 ? `Seçimin kaydedildi, ${fee.toLocaleString('tr-TR')} KC katılım ücreti bakiyenden düştü.` : 'Seçimin kaydedildi.'
+  }, '/tahminler')
+  if (!result.ok) return result
+  const member = await getMember()
+  return member ? { ...result, balance: await getBalance(member.id).catch(() => undefined) } : result
+}
+
+/** Sponsor events: the member hands in the coupon number of the bet placed at the sponsor. */
+export async function submitGoalCouponAction(matchId: number, coupon: string) {
   return run(async (m) => {
-    const { goalMatchCategory, pickGoalSide } = await import('@/lib/goal-rewards')
-    // Sponsor events follow the rule of every sponsor page: the age question has to be answered first.
-    if ((await goalMatchCategory(Number(matchId))) === 'sponsor') {
-      const { getSponsorAccess } = await import('@/lib/sponsor-access')
-      if ((await getSponsorAccess()).state !== 'open') throw new Error('Sponsor etkinliğine katılmak için önce sponsorlar sayfasında 18 yaş onayını ver.')
-    }
-    await pickGoalSide(m, Number(matchId), side, siteUsername)
-    return 'Seçimin kaydedildi.'
+    await sponsorGate()
+    const { submitGoalCoupon } = await import('@/lib/goal-rewards')
+    const outcome = await submitGoalCoupon(m, Number(matchId), coupon)
+    return outcome === 'updated' ? 'Kupon numaran güncellendi.' : 'Talebin alındı. Kuponun kontrol edilince sonucu burada görürsün.'
+  }, '/tahminler')
+}
+
+/** Links the member's account at a sponsor, from the event that asks for it. */
+export async function linkGoalAccountAction(siteSlug: string, username: string) {
+  return run(async (m) => {
+    await sponsorGate()
+    const { linkSponsorAccount } = await import('@/lib/growth')
+    await linkSponsorAccount(m.id, String(siteSlug), String(username))
+    return 'Hesabın bağlandı. Artık kupon numaranı girebilirsin.'
   }, '/tahminler')
 }
 

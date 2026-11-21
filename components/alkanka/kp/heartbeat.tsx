@@ -31,7 +31,9 @@ export function KpHeartbeat() {
     async function ping() {
       if (document.visibilityState !== 'visible') return
       try {
-        const r = await fetch('/api/kp/ping', { method: 'POST', cache: 'no-store' })
+        // The game whose page is open rides along, so events that ask for time spent in a game can count it.
+        const game = /^\/oyunlar\/([a-z0-9-]+)/.exec(window.location.pathname)?.[1] ?? null
+        const r = await fetch('/api/kp/ping', { method: 'POST', cache: 'no-store', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ game }) })
         if (!r.ok || cancelled) return
         const data = (await r.json()) as Ping
         if (lastLevel.current !== null && data.level > lastLevel.current) setLevelUp(data)

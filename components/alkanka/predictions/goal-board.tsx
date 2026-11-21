@@ -1,204 +1,165 @@
 'use client'
 
 import { useEffect, useId, useState } from 'react'
-import { Check } from 'lucide-react'
-import { pickGoalSideAction } from '@/app/actions/community'
+import Link from 'next/link'
+import { ChevronDown, Link2, ShieldAlert } from 'lucide-react'
+import { linkGoalAccountAction } from '@/app/actions/community'
 import { useAddressChoice } from '@/components/alkanka/use-address-choice'
 import {
-  GOAL_APPROVAL_LABEL,
   GOAL_CATEGORIES,
+  GOAL_KC_UNIT,
+  GOAL_NAME,
   goalAmount,
-  goalConditions,
-  goalReward,
-  goalStatusLabel,
+  goalRuleLines,
+  oddsText,
   type GoalCategory,
   type GoalEventView,
   type GoalMatch,
-  type GoalSide,
+  type GoalMe,
 } from '@/lib/goal-rewards-shared'
+import { TR_ZONE_NOTE } from '@/lib/tr-time'
 import { cn } from '@/lib/utils'
-import { TeamLogo } from '../logo-context'
 import { StatusLine, useAction } from '../community/use-action'
-
-const when = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })
-const fmt = (n: number) => n.toLocaleString('tr-TR')
+import { CouponMatchCard, TeamMatchCard } from './goal-match'
+import { segmentCount, segmentItem, segmentTray } from './ui'
 
 /** What the two event kinds are called in the page's address. */
 const CATEGORY_WORD: Record<GoalCategory, string> = { alkanka: 'alkanka', sponsor: 'sponsor' }
 
-function Crest({ name, src }: { name: string; src: string | null }) {
-  if (!src) return <TeamLogo name={name} className="size-7 border-0" />
+const STEPS: Record<GoalCategory, { title: string; line: string }[]> = {
+  alkanka: [
+    { title: 'Takımını seç', line: 'Maç başlamadan iki takımdan birini seç.' },
+    { title: 'Maçı bekle', line: 'Takımın ne kadar çok gol atarsa ödülün o kadar büyür.' },
+    { title: 'Ödülünü al', line: 'Maç sonuçlanınca KC kendiliğinden hesabına yatar.' },
+  ],
+  sponsor: [
+    { title: 'Hesabını bağla', line: 'Sponsordaki kullanıcı adını bir kez yaz.' },
+    { title: 'Bahsini al', line: 'Listedeki maça, sponsorda ve maç başlamadan.' },
+    { title: 'Kuponu gir', line: 'Kupon numaranı maçın kartına yaz, kaydet.' },
+    { title: 'Ödülünü al', line: 'Kuponun geçerliyse maçtaki her gol ödül kazandırır.' },
+  ],
+}
+
+const ACCOUNT_STATE = { pending: 'onay bekliyor', approved: 'onaylı', rejected: 'onaylanmadı' } as const
+
+/** Open matches first, the nearest on top; finished ones follow, the latest first. */
+function ordered(matches: GoalMatch[], now: number) {
+  const rank = (m: GoalMatch) => (m.status !== 'open' ? 2 : Date.parse(m.kickoff) > now ? 0 : 1)
+  return [...matches].sort((a, b) => rank(a) - rank(b) || (rank(a) === 2 ? b.kickoff.localeCompare(a.kickoff) : a.kickoff.localeCompare(b.kickoff)))
+}
+
+function Fact({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
-    <span className="flex size-7 shrink-0 items-center justify-center">
-      {/* eslint-disable-next-line @next/next/no-img-element -- crests come from the fixture feed's image host */}
-      <img src={src} alt="" width={28} height={28} loading="lazy" className="size-7 object-contain" />
-    </span>
+    <div className="flex min-w-0 flex-col gap-0.5 rounded-lg bg-background px-3 py-2">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className={cn('font-display text-sm font-bold tabular-nums', strong ? 'text-primary' : 'text-foreground')}>{value}</dd>
+    </div>
   )
 }
 
-/** How the member's pick turned out, in one sentence. */
-function outcome(event: GoalEventView, m: GoalMatch): { text: string; tone: 'good' | 'plain' | 'bad' } | null {
-  const pick = m.myPick
-  if (!pick) return null
-  const team = pick.side === 'home' ? m.home : m.away
-  if (m.status === 'void') return { text: `Seçimin ${team} idi. Maç iptal edildi, ödül verilmez.`, tone: 'plain' }
-  if (m.status !== 'settled' || pick.reward === null) {
-    return { text: `Seçimin: ${team}. Attığı her gol ${goalAmount(m.perGoal, event.unit)} kazandırır.`, tone: 'plain' }
-  }
-  if (pick.reward === 0) return { text: `${team} gol atamadı, bu maçtan ödül çıkmadı.`, tone: 'plain' }
-  const earned = `${team} ${pick.goals} gol attı: ${goalAmount(pick.reward, event.unit)}`
-  if (event.category !== 'sponsor') return { text: pick.paid ? `${earned} hesabına yatırıldı.` : `${earned} kazandın, birazdan hesabına yatar.`, tone: 'good' }
-  if (pick.paid) return { text: `${earned} sponsor hesabına tanımlandı.`, tone: 'good' }
-  if (pick.approval === 'rejected') return { text: `${earned} hak edilecekti, ancak katılım şartı sağlanmadığı için verilmedi.`, tone: 'bad' }
-  return { text: `${earned} hak ettin. ${pick.approval === 'approved' ? 'Şart onaylandı, ödül tanımlanmayı bekliyor.' : 'Katılım şartın kontrol ediliyor.'}`, tone: 'good' }
-}
-
-function SideButton({
-  side,
-  m,
-  chosen,
-  locked,
-  onChoose,
-}: {
-  side: GoalSide
-  m: GoalMatch
-  chosen: boolean
-  locked: boolean
-  onChoose: () => void
-}) {
-  const home = side === 'home'
-  const name = home ? m.home : m.away
-  const goals = home ? m.homeGoals : m.awayGoals
-  const picks = home ? m.homePicks : m.awayPicks
+/** The event's rules, always on the page: closed by the visitor, never hidden by default. */
+function RuleBox({ event }: { event: GoalEventView }) {
+  const lines = goalRuleLines(event)
   return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={chosen}
-      disabled={locked}
-      onClick={onChoose}
-      className={cn(
-        'flex min-h-14 min-w-0 items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors',
-        chosen ? 'border-primary bg-primary/10' : 'border-border bg-background',
-        !locked && !chosen && 'hover:border-primary/60',
-        locked && !chosen && 'opacity-70',
-      )}
-    >
-      <Crest name={name} src={home ? m.homeLogo : m.awayLogo} />
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm font-semibold text-foreground">{name}</span>
-        <span className="text-xs text-muted-foreground">{fmt(picks)} seçim</span>
-      </span>
-      {goals !== null && <span className="font-display text-xl font-bold tabular-nums text-foreground">{goals}</span>}
-      {chosen && goals === null && <Check className="size-4 shrink-0 text-primary" aria-hidden="true" />}
-    </button>
+    <details open className="group rounded-lg border border-border bg-background">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-xs font-bold text-foreground [&::-webkit-details-marker]:hidden">
+        Kurallar
+        <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+      </summary>
+      <ul className="flex list-disc flex-col gap-1.5 px-3 pb-3 pl-7 text-xs leading-relaxed text-muted-foreground marker:text-primary">
+        {lines.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+    </details>
   )
 }
 
-function MatchCard({ event, m, now }: { event: GoalEventView; m: GoalMatch; now: number }) {
+/** Sponsor events ask for the member's account at the sponsor; it is linked once and written onto every request. */
+function AccountBox({ event, account }: { event: GoalEventView; account: GoalMe['accounts'][string] | null }) {
   const { pending, status, run } = useAction()
-  const [side, setSide] = useState<GoalSide | null>(null)
   const [username, setUsername] = useState('')
   const fieldId = useId()
-  const sponsor = event.category === 'sponsor'
-  const open = m.status === 'open' && Date.parse(m.kickoff) > now && !m.myPick
-  const result = outcome(event, m)
-  const team = side === 'home' ? m.home : side === 'away' ? m.away : null
-  const ready = side !== null && (!sponsor || username.trim().length >= 2)
+  const site = event.siteName ?? 'Sponsor'
+  const slug = event.siteSlug
+
+  if (account && account.status !== 'rejected') {
+    return (
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border bg-background px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+        <Link2 className="size-3.5 shrink-0 text-success" aria-hidden="true" />
+        <span>
+          Bağlı {site} hesabın: <b className="text-foreground">{account.username}</b> ({ACCOUNT_STATE[account.status]}). Taleplerine bu kullanıcı adı eklenir.
+        </span>
+        <Link href="/profil" className="font-semibold text-primary underline-offset-2 hover:underline">
+          Değiştir
+        </Link>
+      </p>
+    )
+  }
+  if (!slug) return <p className="rounded-lg border border-border bg-background px-3 py-2.5 text-xs text-muted-foreground">Bu sponsor için hesap bağlama şu an kapalı.</p>
 
   return (
-    <article className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 @2xl:p-4">
-      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-        {m.league && <span>{m.league}</span>}
-        <time dateTime={m.kickoff}>{when.format(new Date(m.kickoff))}</time>
-        <span className={cn('font-semibold', m.status === 'void' ? 'text-destructive' : open ? 'text-primary' : 'text-foreground')}>{goalStatusLabel(m, now)}</span>
-      </p>
-
-      <div role="radiogroup" aria-label={`${m.home} - ${m.away}: takımını seç`} className="grid gap-2 @md:grid-cols-2">
-        {(['home', 'away'] as const).map((s) => (
-          <SideButton key={s} side={s} m={m} chosen={(m.myPick?.side ?? side) === s} locked={!open || pending} onChoose={() => setSide(s)} />
-        ))}
+    <form
+      className="flex flex-col gap-2 rounded-lg border border-primary/40 bg-primary/5 p-3"
+      onSubmit={(e) => {
+        e.preventDefault()
+        run(() => linkGoalAccountAction(slug, username), () => setUsername(''))
+      }}
+    >
+      <label htmlFor={fieldId} className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+        <Link2 className="size-3.5 text-primary" aria-hidden="true" />
+        Önce {site} hesabını bağla
+      </label>
+      {account?.status === 'rejected' && <span className="text-xs font-medium text-destructive">Daha önce bağladığın &quot;{account.username}&quot; hesabı onaylanmadı. Doğru kullanıcı adını yaz.</span>}
+      <div className="flex flex-wrap gap-2">
+        <input
+          id={fieldId}
+          value={username}
+          maxLength={40}
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={`${site} kullanıcı adın`}
+          onChange={(e) => setUsername(e.target.value)}
+          className="h-11 min-w-0 flex-1 basis-44 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+        />
+        <button type="submit" disabled={pending || username.trim().length < 3} className="h-11 rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
+          {pending ? 'Bağlanıyor...' : 'Hesabı bağla'}
+        </button>
       </div>
-
-      {open && side && (
-        <div className="flex flex-col gap-3 rounded-lg bg-secondary/60 p-3">
-          <p className="text-xs leading-relaxed text-foreground">
-            <b>{team}</b> seçersen attığı her gol <b className="text-primary">{goalAmount(m.perGoal, event.unit)}</b> kazandırır; örneğin 3 gol atarsa {goalAmount(goalReward(m.perGoal, 3), event.unit)}. Seçim bir kez yapılır,
-            kaydettikten sonra değişmez.
-          </p>
-          {sponsor && (
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor={fieldId} className="text-xs font-semibold text-foreground">
-                {event.siteName ?? 'Sponsor'} sitesindeki kullanıcı adın
-              </label>
-              <input
-                id={fieldId}
-                value={username}
-                maxLength={60}
-                autoComplete="off"
-                onChange={(e) => setUsername(e.target.value)}
-                className="h-11 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
-              />
-              <span className="text-xs text-muted-foreground">Ödül bu hesaba tanımlanır; yanlış yazılan hesaba ödül gönderilemez.</span>
-            </div>
-          )}
-          <button
-            type="button"
-            disabled={pending || !ready}
-            onClick={() => run(() => pickGoalSideAction(m.id, side, username))}
-            className="h-11 self-start rounded-lg bg-primary px-6 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
-          >
-            {pending ? 'Kaydediliyor...' : `${team} seçimini kaydet`}
-          </button>
-        </div>
-      )}
-
-      {result && (
-        <p
-          className={cn(
-            'rounded-lg px-3 py-2 text-xs leading-relaxed',
-            result.tone === 'good' ? 'bg-success/10 text-foreground' : result.tone === 'bad' ? 'bg-destructive/10 text-foreground' : 'bg-secondary/60 text-muted-foreground',
-          )}
-        >
-          {result.text}
-          {sponsor && m.myPick?.siteUsername && m.status !== 'void' ? ` Kullanıcı adın: ${m.myPick.siteUsername}. ${m.status === 'settled' ? '' : GOAL_APPROVAL_LABEL[m.myPick.approval] + '.'}` : ''}
-        </p>
-      )}
-      {!result && !open && m.status === 'open' && <p className="text-xs text-muted-foreground">Seçimler maç başlarken kapandı. Sonuç girilince ödüller dağıtılır.</p>}
+      <span className="text-xs leading-relaxed text-muted-foreground">Bir kez bağlarsın; kupon girdiğinde kullanıcı adın talebine kendiliğinden eklenir. Ödül bu hesaba tanımlanır, yanlış yazılan hesaba ödül gönderilemez.</span>
       <StatusLine status={status} />
-    </article>
+    </form>
   )
 }
 
-function EventBlock({ event, now }: { event: GoalEventView; now: number }) {
-  const conditions = goalConditions(event)
+function EventBlock({ event, now, me }: { event: GoalEventView; now: number; me: GoalMe | null }) {
   const sponsor = event.category === 'sponsor'
+  const account = sponsor && event.siteSlug ? (me?.accounts[event.siteSlug] ?? null) : null
+  const usable = account && account.status !== 'rejected' ? account.username : null
+  const blocked = me?.flag?.state === 'blocked'
   return (
     <section aria-label={event.title} className="flex flex-col gap-3">
-      <div className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h3 className="font-display text-lg font-bold text-foreground text-balance">{event.title}</h3>
-          <p className="text-sm text-muted-foreground">
-            Gol başı <b className="font-display text-base text-primary">{goalAmount(event.perGoal, event.unit)}</b>
-            {sponsor && event.siteName ? ` · ${event.siteName}` : ''}
-          </p>
-        </div>
-        {conditions.length > 0 && (
-          <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-card px-3 py-2.5">
-            <p className="text-xs font-bold text-foreground">{sponsor ? 'Katılım şartı' : 'Kurallar'}</p>
-            <ul className="flex list-disc flex-col gap-1 pl-4 text-xs leading-relaxed text-muted-foreground">
-              {conditions.map((c) => (
-                <li key={c}>{c}</li>
-              ))}
-            </ul>
-            {sponsor && <p className="text-xs leading-relaxed text-muted-foreground">Ödülü sponsor verir. Şartı sağladığın onaylanınca sponsor hesabına tanımlanır; Alkanka hesabına KC olarak yatmaz.</p>}
+      <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-1 basis-56 flex-col gap-0.5">
+            <h3 className="font-display text-lg font-bold text-foreground text-balance">{event.title}</h3>
+            <p className="text-xs text-muted-foreground">{sponsor ? `${event.siteName ?? 'Sponsor'} etkinliği · ödülü sponsor verir` : 'Alkanka etkinliği · ödül KC olarak yatar'}</p>
           </div>
-        )}
+          <dl className="flex flex-wrap gap-2">
+            <Fact label="Gol başı" value={goalAmount(event.perGoal, event.unit)} strong />
+            {!sponsor && <Fact label="Katılım" value={event.entryFee > 0 ? goalAmount(event.entryFee, GOAL_KC_UNIT) : 'Ücretsiz'} />}
+            {!sponsor && event.rules.length > 0 && <Fact label="Ödül şartı" value={`${event.rules.length} şart`} />}
+            {sponsor && event.minOdds > 0 && <Fact label="En düşük oran" value={oddsText(event.minOdds)} />}
+            {sponsor && event.minBet && <Fact label="En az bahis" value={event.minBet} />}
+          </dl>
+        </div>
+        <RuleBox event={event} />
+        {sponsor && me && !blocked && <AccountBox event={event} account={account} />}
       </div>
       <div className="grid items-start gap-3 @4xl:grid-cols-2">
-        {event.matches.map((m) => (
-          <MatchCard key={m.id} event={event} m={m} now={now} />
-        ))}
+        {ordered(event.matches, now).map((m) =>
+          sponsor ? <CouponMatchCard key={m.id} event={event} m={m} now={now} account={usable} blocked={blocked} /> : <TeamMatchCard key={m.id} event={event} m={m} now={now} />,
+        )}
       </div>
     </section>
   )
@@ -208,11 +169,14 @@ export function GoalBoard({
   events,
   serverNow,
   sponsorNote,
+  me,
 }: {
   events: GoalEventView[]
   serverNow: number
   /** Why sponsor events are not shown to this visitor, when they are held back. */
   sponsorNote: string | null
+  /** Null for a guest. */
+  me: GoalMe | null
 }) {
   const [now, setNow] = useState(serverNow)
   useEffect(() => {
@@ -227,40 +191,72 @@ export function GoalBoard({
   if (shown.length === 0) return null
   const category = shown.some((c) => c.id === chosen) ? chosen : shown[0].id
   const list = events.filter((e) => e.category === category)
+  const openIn = (c: GoalCategory) => events.filter((e) => e.category === c).reduce((n, e) => n + e.matches.filter((m) => m.status === 'open' && Date.parse(m.kickoff) > now).length, 0)
+  const flag = category === 'sponsor' ? (me?.flag ?? null) : null
 
   return (
-    <section aria-labelledby="gol-basi-odul" className="@container mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6">
-      <div className="flex flex-col gap-1">
-        <h2 id="gol-basi-odul" className="font-display text-xl font-bold text-foreground text-balance">
-          Gol başı ödül
-        </h2>
-        <p className="text-sm leading-relaxed text-muted-foreground text-pretty">Takımını seç, maçta attığı her gol için ödül kazan. Skoru bilmen gerekmez; takımın ne kadar çok gol atarsa o kadar kazanırsın.</p>
-      </div>
-
-      {shown.length > 1 && (
-        <div role="tablist" aria-label="Etkinlik türü" className="grid grid-cols-2 gap-1 self-start rounded-lg border border-border bg-card p-1">
-          {shown.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              role="tab"
-              aria-selected={category === c.id}
-              onClick={() => setChosen(c.id)}
-              className={cn('h-10 rounded-md px-4 text-sm font-bold transition-colors', category === c.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
-            >
-              {c.label}
-            </button>
-          ))}
+    <section aria-labelledby="gol-yagmuru" className="@container flex flex-col gap-5">
+      <header className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-1 basis-64 flex-col gap-1">
+            <h2 id="gol-yagmuru" className="font-display text-xl font-bold text-foreground text-balance">
+              {GOAL_NAME}
+            </h2>
+            <p className="text-sm leading-relaxed text-muted-foreground text-pretty">{GOAL_CATEGORIES.find((c) => c.id === category)?.hint} Skoru bilmen gerekmez; gol oldukça kazanırsın.</p>
+          </div>
+          {shown.length > 1 && (
+            <div role="tablist" aria-label="Etkinlik türü" className={cn(segmentTray, 'grid w-full grid-cols-2 gap-1 @2xl:w-auto')}>
+              {shown.map((c) => {
+                const on = category === c.id
+                const open = openIn(c.id)
+                return (
+                  <button key={c.id} type="button" role="tab" aria-selected={on} onClick={() => setChosen(c.id)} className={cn(segmentItem(on), 'h-11 px-3 text-sm @2xl:px-5')}>
+                    <span className="truncate">{c.label}</span>
+                    {open > 0 && (
+                      <span className={segmentCount(on)}>
+                        {open}
+                        <span className="sr-only"> maç katılıma açık</span>
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
+
+        <ol className={cn('grid gap-2', category === 'sponsor' ? '@2xl:grid-cols-4' : '@2xl:grid-cols-3')}>
+          {STEPS[category].map((s, i) => (
+            <li key={s.title} className="flex items-start gap-2.5 rounded-lg bg-background px-3 py-2.5">
+              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 font-display text-xs font-bold text-primary" aria-hidden="true">
+                {i + 1}
+              </span>
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-sm font-bold text-foreground">{s.title}</span>
+                <span className="text-xs leading-relaxed text-muted-foreground">{s.line}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+        <p className="text-xs text-muted-foreground">Maç saatleri ve gün hesabı: {TR_ZONE_NOTE}.</p>
+      </header>
+
+      {flag && (
+        <p role="alert" className={cn('flex items-start gap-2 rounded-xl border px-4 py-3 text-sm leading-relaxed text-foreground', flag.state === 'blocked' ? 'border-destructive/50 bg-destructive/10' : 'border-primary/50 bg-primary/10')}>
+          <ShieldAlert className={cn('mt-0.5 size-4 shrink-0', flag.state === 'blocked' ? 'text-destructive' : 'text-primary')} aria-hidden="true" />
+          <span>
+            <b>{flag.state === 'blocked' ? 'Sponsor etkinliklerine katılımın kapatıldı.' : 'Geçersiz talep uyarısı aldın.'}</b> {flag.note}{' '}
+            {flag.state === 'blocked' ? 'Bir hata olduğunu düşünüyorsan destekle iletişime geç.' : 'Kurallara uymayan talep göndermeye devam edersen sponsor etkinliklerine katılımın kapatılır.'}
+          </span>
+        </p>
       )}
-      <p className="text-xs text-muted-foreground">{GOAL_CATEGORIES.find((c) => c.id === category)?.hint}</p>
 
       {category === 'sponsor' && sponsorNote ? (
         <p className="rounded-xl border border-border bg-card p-4 text-sm leading-relaxed text-muted-foreground">{sponsorNote}</p>
       ) : (
         <div className="flex flex-col gap-8">
           {list.map((e) => (
-            <EventBlock key={e.id} event={e} now={now} />
+            <EventBlock key={e.id} event={e} now={now} me={me} />
           ))}
         </div>
       )}

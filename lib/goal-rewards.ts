@@ -1,31 +1,51 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
-import { creditClaimed } from '@/lib/member'
+import { ruleDoneFor } from '@/lib/goal-play'
+import { creditClaimed, debitClaimed } from '@/lib/member'
+import { trDay, trDayBounds } from '@/lib/tr-time'
 import {
+  GOAL_NAME,
+  GOAL_RULE_MISSED,
+  checkCoupon,
   checkGoalEvent,
   checkGoalScore,
+  cleanGoalRules,
   goalAmount,
+  goalRulesMet,
   isGoalApproval,
   isGoalSide,
   type GoalApproval,
   type GoalCategory,
   type GoalEvent,
   type GoalEventView,
+  type GoalFlagAction,
+  type GoalFlagRow,
+  type GoalFlagState,
   type GoalMatch,
+  type GoalMe,
   type GoalPickRow,
+  type GoalPickSide,
+  type GoalRule,
+  type GoalRuleMode,
   type GoalSide,
   type GoalStatus,
 } from '@/lib/goal-rewards-shared'
 
 let ready: Promise<unknown> | null = null
 
-/** Its own three tables: nothing here reads or writes the prediction league's. */
+/** Its own tables: nothing here reads or writes the prediction league's. */
 export function ensureGoal() {
   ready ??= (async () => {
     await rows(sql`CREATE TABLE IF NOT EXISTS goal_events (
       id serial PRIMARY KEY, title text NOT NULL, category text NOT NULL, per_goal int NOT NULL, unit text NOT NULL DEFAULT 'KC',
       site_id int, site_name text, via_link boolean NOT NULL DEFAULT false, min_bet text NOT NULL DEFAULT '', terms text NOT NULL DEFAULT '',
       active boolean NOT NULL DEFAULT true, created_at timestamptz NOT NULL DEFAULT now())`)
+    await rows(sql`ALTER TABLE goal_events ADD COLUMN IF NOT EXISTS site_slug text`)
+    await rows(sql`ALTER TABLE goal_events ADD COLUMN IF NOT EXISTS need_deposit boolean NOT NULL DEFAULT false`)
+    await rows(sql`ALTER TABLE goal_events ADD COLUMN IF NOT EXISTS min_odds numeric NOT NULL DEFAULT 0`)
+    await rows(sql`ALTER TABLE goal_events ADD COLUMN IF NOT EXISTS entry_fee int NOT NULL DEFAULT 0`)
+    await rows(sql`ALTER TABLE goal_events ADD COLUMN IF NOT EXISTS rules jsonb NOT NULL DEFAULT '[]'::jsonb`)
+    await rows(sql`ALTER TABLE goal_events ADD COLUMN IF NOT EXISTS rule_mode text NOT NULL DEFAULT 'all'`)
     await rows(sql`CREATE TABLE IF NOT EXISTS goal_matches (
       id serial PRIMARY KEY, event_id int NOT NULL, league text NOT NULL DEFAULT '', home text NOT NULL, away text NOT NULL,
       home_logo text, away_logo text, ext_id bigint, kickoff timestamptz NOT NULL, status text NOT NULL DEFAULT 'open',
@@ -36,6 +56,17 @@ export function ensureGoal() {
       match_id int NOT NULL, user_id text NOT NULL, user_name text NOT NULL, side text NOT NULL, site_username text,
       approval text NOT NULL DEFAULT 'approved', goals int, reward int, paid boolean NOT NULL DEFAULT false, paid_at timestamptz,
       pay_error text, created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (match_id, user_id))`)
+    await rows(sql`ALTER TABLE goal_picks ADD COLUMN IF NOT EXISTS coupon text`)
+    await rows(sql`ALTER TABLE goal_picks ADD COLUMN IF NOT EXISTS reject_reason text`)
+    await rows(sql`ALTER TABLE goal_picks ADD COLUMN IF NOT EXISTS fee int NOT NULL DEFAULT 0`)
+    await rows(sql`ALTER TABLE goal_picks ADD COLUMN IF NOT EXISTS fee_refunded boolean NOT NULL DEFAULT false`)
+    // One coupon cannot be entered twice for the same match.
+    await rows(sql`CREATE UNIQUE INDEX IF NOT EXISTS goal_picks_coupon ON goal_picks (match_id, lower(coupon)) WHERE coupon IS NOT NULL`)
+    await rows(sql`CREATE INDEX IF NOT EXISTS goal_picks_user ON goal_picks (user_id)`)
+    // 'warned' and 'blocked' are the tags staff puts on a member; 'open' is a member whose block was lifted and whose warnings are kept.
+    await rows(sql`CREATE TABLE IF NOT EXISTS goal_flags (
+      user_id text PRIMARY KEY, user_name text NOT NULL DEFAULT '', state text NOT NULL, warns int NOT NULL DEFAULT 0,
+      note text NOT NULL DEFAULT '', updated_by text, updated_at timestamptz NOT NULL DEFAULT now())`)
   })().catch((error) => {
     ready = null
     throw error
@@ -45,11 +76,26 @@ export function ensureGoal() {
 
 const iso = (v: unknown) => new Date(String(v)).toISOString()
 const int = (v: unknown) => (v === null || v === undefined ? null : Number(v))
+const str = (v: unknown) => (v === null || v === undefined || v === '' ? null : String(v))
 const id = (v: unknown, what: string) => {
   const n = Number(v)
   if (!Number.isSafeInteger(n) || n <= 0) throw new Error(`${what} bulunamadı.`)
   return n
 }
+
+/** A jsonb column arrives parsed from one driver and as text from another. */
+function rulesOf(v: unknown): GoalRule[] {
+  if (typeof v !== 'string') return cleanGoalRules(v)
+  try {
+    return cleanGoalRules(JSON.parse(v))
+  } catch {
+    return []
+  }
+}
+
+const modeOf = (v: unknown): GoalRuleMode => (v === 'any' ? 'any' : 'all')
+const flagOf = (v: unknown): GoalFlagState | null => (v === 'warned' || v === 'blocked' ? v : null)
+const sideOf = (v: unknown): GoalPickSide => (v === 'home' || v === 'away' ? v : 'all')
 
 function eventOf(x: Record<string, unknown>): GoalEvent {
   return {
@@ -59,9 +105,15 @@ function eventOf(x: Record<string, unknown>): GoalEvent {
     perGoal: Number(x.per_goal),
     unit: String(x.unit),
     siteId: int(x.site_id),
-    siteName: x.site_name ? String(x.site_name) : null,
+    siteName: str(x.site_name),
+    siteSlug: str(x.site_slug),
     viaLink: Boolean(x.via_link),
     minBet: String(x.min_bet ?? ''),
+    needDeposit: Boolean(x.need_deposit),
+    minOdds: Number(x.min_odds ?? 0) || 0,
+    entryFee: Number(x.entry_fee ?? 0) || 0,
+    rules: rulesOf(x.rules),
+    ruleMode: modeOf(x.rule_mode),
     terms: String(x.terms ?? ''),
     active: Boolean(x.active),
     createdAt: iso(x.created_at),
@@ -70,30 +122,38 @@ function eventOf(x: Record<string, unknown>): GoalEvent {
 
 function matchOf(x: Record<string, unknown>): GoalMatch {
   const status: GoalStatus = x.status === 'settled' ? 'settled' : x.status === 'void' ? 'void' : 'open'
+  const homePicks = Number(x.home_picks ?? 0)
+  const awayPicks = Number(x.away_picks ?? 0)
   return {
     id: Number(x.id),
     eventId: Number(x.event_id),
     league: String(x.league ?? ''),
     home: String(x.home),
     away: String(x.away),
-    homeLogo: x.home_logo ? String(x.home_logo) : null,
-    awayLogo: x.away_logo ? String(x.away_logo) : null,
+    homeLogo: str(x.home_logo),
+    awayLogo: str(x.away_logo),
     extId: int(x.ext_id),
     kickoff: iso(x.kickoff),
     status,
     homeGoals: int(x.home_goals),
     awayGoals: int(x.away_goals),
     perGoal: Number(x.per_goal),
-    homePicks: Number(x.home_picks ?? 0),
-    awayPicks: Number(x.away_picks ?? 0),
+    homePicks,
+    awayPicks,
+    picks: Number(x.picks ?? homePicks + awayPicks),
     myPick: x.my_side
       ? {
-          side: x.my_side === 'away' ? 'away' : 'home',
-          siteUsername: x.my_site_username ? String(x.my_site_username) : null,
+          side: sideOf(x.my_side),
+          siteUsername: str(x.my_site_username),
+          coupon: str(x.my_coupon),
           approval: isGoalApproval(x.my_approval) ? x.my_approval : 'pending',
+          rejectReason: str(x.my_reject_reason),
           goals: int(x.my_goals),
           reward: int(x.my_reward),
           paid: Boolean(x.my_paid),
+          fee: Number(x.my_fee ?? 0),
+          feeRefunded: Boolean(x.my_fee_refunded),
+          progress: null,
         }
       : null,
   }
@@ -112,7 +172,9 @@ export async function goalBoard(userId: string | null, opts: { admin?: boolean; 
     rows(sql`SELECT m.*,
         (SELECT count(*) FROM goal_picks p WHERE p.match_id = m.id AND p.side = 'home') AS home_picks,
         (SELECT count(*) FROM goal_picks p WHERE p.match_id = m.id AND p.side = 'away') AS away_picks,
-        mp.side AS my_side, mp.site_username AS my_site_username, mp.approval AS my_approval, mp.goals AS my_goals, mp.reward AS my_reward,
+        (SELECT count(*) FROM goal_picks p WHERE p.match_id = m.id) AS picks,
+        mp.side AS my_side, mp.site_username AS my_site_username, mp.coupon AS my_coupon, mp.approval AS my_approval,
+        mp.reject_reason AS my_reject_reason, mp.goals AS my_goals, mp.reward AS my_reward, mp.fee AS my_fee, mp.fee_refunded AS my_fee_refunded,
         (mp.paid AND mp.pay_error IS NULL) AS my_paid
       FROM goal_matches m JOIN goal_events e ON e.id = m.event_id
       LEFT JOIN goal_picks mp ON mp.match_id = m.id AND mp.user_id = ${userId ?? ''}
@@ -122,8 +184,58 @@ export async function goalBoard(userId: string | null, opts: { admin?: boolean; 
   const byEvent = new Map<number, GoalMatch[]>()
   for (const m of matches.map(matchOf)) byEvent.set(m.eventId, [...(byEvent.get(m.eventId) ?? []), m])
   const list = events.map((e) => ({ ...eventOf(e), matches: byEvent.get(Number(e.id)) ?? [] }))
+  await fillSlugs(list).catch((error) => console.error('[goal] sponsor adresi', (error as Error).message))
+  if (admin) return list
   // An event with nothing to show is noise on the site; the panel still needs it to add matches.
-  return admin ? list : list.filter((e) => e.matches.length > 0)
+  const shown = list.filter((e) => e.matches.length > 0)
+  if (userId) await attachProgress(userId, shown).catch((error) => console.error('[goal] şart ilerlemesi', (error as Error).message))
+  return shown
+}
+
+/** Sponsor events opened before members linked their accounts here carry no slug yet; it is looked up once and kept. */
+async function fillSlugs(events: GoalEventView[]) {
+  const missing = events.filter((e) => e.category === 'sponsor' && !e.siteSlug && e.siteId)
+  if (missing.length === 0) return
+  const { listSites } = await import('@/lib/sites')
+  const sites = await listSites()
+  for (const e of missing) {
+    const slug = sites.find((s) => Number(s.id) === e.siteId)?.slug
+    if (!slug) continue
+    e.siteSlug = slug
+    await rows(sql`UPDATE goal_events SET site_slug = ${slug} WHERE id = ${e.id} AND site_slug IS NULL`)
+  }
+}
+
+/** How many match days of one event are looked at for the member's progress; the nearest ones come first. */
+const PROGRESS_DAYS = 4
+
+/** Fills in how far the member is on the conditions of the matches they joined and are not yet paid for. */
+async function attachProgress(userId: string, events: GoalEventView[]) {
+  for (const e of events) {
+    if (e.category !== 'alkanka' || e.rules.length === 0) continue
+    const days = new Map<string, GoalMatch[]>()
+    for (const m of e.matches) {
+      if (!m.myPick || m.status === 'void' || m.myPick.paid || m.myPick.approval === 'rejected') continue
+      const day = trDay(m.kickoff)
+      days.set(day, [...(days.get(day) ?? []), m])
+    }
+    for (const [day, list] of [...days].slice(0, PROGRESS_DAYS)) {
+      const done = (await ruleDoneFor([userId], e.rules, day)).get(userId) ?? e.rules.map(() => 0)
+      for (const m of list) if (m.myPick) m.myPick.progress = done
+    }
+  }
+}
+
+/** The member's linked sponsor accounts and the tag staff put on them, if any. */
+export async function goalMe(userId: string): Promise<GoalMe> {
+  await ensureGoal()
+  const { mySponsorAccounts } = await import('@/lib/growth')
+  const [accounts, [flag]] = await Promise.all([mySponsorAccounts(userId).catch(() => []), rows(sql`SELECT state, note FROM goal_flags WHERE user_id = ${userId}`)])
+  const state = flagOf(flag?.state)
+  return {
+    accounts: Object.fromEntries(accounts.map((a) => [a.siteId, { username: a.username, status: a.status }])),
+    flag: state ? { state, note: String(flag.note ?? '') } : null,
+  }
 }
 
 // --- Managing events -----------------------------------------------------
@@ -134,26 +246,33 @@ export async function saveGoalEvent(input: unknown): Promise<GoalEvent> {
   if (!checked.ok) throw new Error(checked.error)
   const e = checked.value
   let siteName: string | null = null
+  let siteSlug: string | null = null
   if (e.category === 'sponsor') {
     // The event keeps the sponsor's numeric id; `siteOptions` hands out slugs, which never match it.
     const { listSites } = await import('@/lib/sites')
     const site = (await listSites()).find((s) => Number(s.id) === e.siteId)
     if (!site) throw new Error('Seçilen sponsor bulunamadı.')
+    // Members link their sponsor account by the sponsor's public address; without one nobody could join.
+    if (!site.slug) throw new Error('Bu sponsorun sitede bir adresi yok. Önce sponsoru yayına al, sonra etkinliği aç.')
     siteName = site.name
+    siteSlug = site.slug
   }
+  const rules = JSON.stringify(e.rules)
   if (e.id) {
     const [before] = await rows(sql`SELECT category FROM goal_events WHERE id = ${e.id}`)
     if (!before) throw new Error('Etkinlik bulunamadı.')
     if (before.category !== e.category) throw new Error('Etkinliğin türü sonradan değişmez. Yeni bir etkinlik aç.')
     const [saved] = await rows(sql`UPDATE goal_events SET title = ${e.title}, per_goal = ${e.perGoal}, unit = ${e.unit}, site_id = ${e.siteId}, site_name = ${siteName},
-        via_link = ${e.viaLink}, min_bet = ${e.minBet}, terms = ${e.terms}, active = ${e.active} WHERE id = ${e.id} RETURNING *`)
+        site_slug = ${siteSlug}, via_link = ${e.viaLink}, min_bet = ${e.minBet}, need_deposit = ${e.needDeposit}, min_odds = ${e.minOdds},
+        entry_fee = ${e.entryFee}, rules = ${rules}::jsonb, rule_mode = ${e.ruleMode}, terms = ${e.terms}, active = ${e.active} WHERE id = ${e.id} RETURNING *`)
     // A match nobody has picked yet follows the new figure; a match with picks keeps what members were promised.
     await rows(sql`UPDATE goal_matches m SET per_goal = ${e.perGoal}
       WHERE m.event_id = ${e.id} AND m.status = 'open' AND NOT EXISTS (SELECT 1 FROM goal_picks p WHERE p.match_id = m.id)`)
     return eventOf(saved)
   }
-  const [saved] = await rows(sql`INSERT INTO goal_events (title, category, per_goal, unit, site_id, site_name, via_link, min_bet, terms, active)
-    VALUES (${e.title}, ${e.category}, ${e.perGoal}, ${e.unit}, ${e.siteId}, ${siteName}, ${e.viaLink}, ${e.minBet}, ${e.terms}, ${e.active}) RETURNING *`)
+  const [saved] = await rows(sql`INSERT INTO goal_events (title, category, per_goal, unit, site_id, site_name, site_slug, via_link, min_bet, need_deposit, min_odds, entry_fee, rules, rule_mode, terms, active)
+    VALUES (${e.title}, ${e.category}, ${e.perGoal}, ${e.unit}, ${e.siteId}, ${siteName}, ${siteSlug}, ${e.viaLink}, ${e.minBet}, ${e.needDeposit}, ${e.minOdds},
+      ${e.entryFee}, ${rules}::jsonb, ${e.ruleMode}, ${e.terms}, ${e.active}) RETURNING *`)
   return eventOf(saved)
 }
 
@@ -217,14 +336,41 @@ export async function deleteGoalMatch(matchId: number) {
   await ensureGoal()
   const gone = await rows(sql`DELETE FROM goal_matches m WHERE m.id = ${id(matchId, 'Maç')} AND m.status <> 'settled'
     AND NOT EXISTS (SELECT 1 FROM goal_picks p WHERE p.match_id = m.id) RETURNING m.id`)
-  if (!gone.length) throw new Error('Bu maça seçim yapılmış ya da maç sonuçlanmış; silinemez. Oynanmadıysa iptal et.')
+  if (!gone.length) throw new Error('Bu maça katılan var ya da maç sonuçlanmış; silinemez. Oynanmadıysa iptal et.')
 }
 
-/** A cancelled match pays nothing and can no longer be scored. */
+/** A cancelled match pays nothing and can no longer be scored. Whoever paid to join gets the fee back. */
 export async function voidGoalMatch(matchId: number) {
   await ensureGoal()
   const done = await rows(sql`UPDATE goal_matches SET status = 'void', settled_at = now() WHERE id = ${id(matchId, 'Maç')} AND status = 'open' RETURNING id`)
   if (!done.length) throw new Error('Maç zaten sonuçlanmış ya da iptal edilmiş.')
+  const [fees] = await rows<{ n: string; total: string | null }>(sql`SELECT count(*) AS n, sum(fee) AS total FROM goal_picks WHERE match_id = ${Number(done[0].id)} AND fee > 0`)
+  const refunded = await refundVoidFees().catch((error) => {
+    console.error('[goal] katılım iadesi', error)
+    return 0
+  })
+  return { feePicks: Number(fees?.n ?? 0), feeTotal: Number(fees?.total ?? 0), refunded }
+}
+
+/** Gives back the joining fee of every cancelled match, once. A refund that fails is tried again on the next run. */
+export async function refundVoidFees() {
+  await ensureGoal()
+  const due = await rows(sql`SELECT p.match_id, p.user_id, p.fee, m.home, m.away FROM goal_picks p JOIN goal_matches m ON m.id = p.match_id
+    WHERE m.status = 'void' AND p.fee > 0 AND NOT p.fee_refunded ORDER BY p.match_id LIMIT 1000`)
+  let refunded = 0
+  for (const p of due) {
+    const userId = String(p.user_id)
+    try {
+      const won = await creditClaimed(userId, Number(p.fee), `${GOAL_NAME} katılım iadesi (${p.home} - ${p.away})`.slice(0, 120), async (client) => {
+        const claimed = await client.query(`UPDATE goal_picks SET fee_refunded = true WHERE match_id = $1 AND user_id = $2 AND fee > 0 AND NOT fee_refunded RETURNING user_id`, [p.match_id, userId])
+        return Boolean(claimed.rowCount)
+      })
+      if (won) refunded++
+    } catch (error) {
+      console.error('[goal] katılım iadesi yazılamadı', p.match_id, userId, error)
+    }
+  }
+  return refunded
 }
 
 // --- Joining -------------------------------------------------------------
@@ -238,31 +384,98 @@ export async function goalMatchCategory(matchId: number): Promise<GoalCategory |
   return m ? (m.category === 'sponsor' ? 'sponsor' : 'alkanka') : null
 }
 
-export async function pickGoalSide(user: { id: string; name: string }, matchId: number, side: unknown, siteUsername?: unknown) {
+const CLOSED = 'Bu maç için katılım kapandı.'
+
+async function mayJoin(userId: string) {
+  const { roleBlocks } = await import('@/lib/kanka-puan')
+  if (await roleBlocks(userId, 'events').catch(() => false)) throw new Error('Bu hesap etkinliklere katılamaz.')
+}
+
+/**
+ * Alkanka events: the member backs one team. A joining fee, when the event has one, leaves the wallet in the
+ * same transaction that writes the pick, so nobody joins without paying and nobody pays without joining.
+ */
+export async function pickGoalSide(user: { id: string; name: string }, matchId: number, side: unknown) {
   await ensureGoal()
   const key = id(matchId, 'Maç')
-  if (!isGoalSide(side)) throw new Error('Bir takım seç.')
-  const [m] = await rows(sql`SELECT e.category, e.site_name FROM goal_matches m JOIN goal_events e ON e.id = m.event_id
+  const [m] = await rows(sql`SELECT e.category, e.entry_fee, e.rules, m.home, m.away FROM goal_matches m JOIN goal_events e ON e.id = m.event_id
     WHERE m.id = ${key} AND m.status = 'open' AND m.kickoff > now() AND e.active`)
-  if (!m) throw new Error('Bu maç için seçimler kapandı.')
-  const sponsor = m.category === 'sponsor'
-  const username = sponsor ? String(siteUsername ?? '').trim().slice(0, 60) : null
-  if (sponsor && (username as string).length < 2) throw new Error(`${m.site_name ?? 'Sponsor'} sitesindeki kullanıcı adını yaz; ödül o hesaba tanımlanır.`)
-  const { roleBlocks } = await import('@/lib/kanka-puan')
-  if (await roleBlocks(user.id, 'events').catch(() => false)) throw new Error('Bu hesap etkinliklere katılamaz.')
-  // The open-and-not-started check is repeated inside the insert: a pick must never land after kickoff.
-  const saved = await rows(sql`INSERT INTO goal_picks (match_id, user_id, user_name, side, site_username, approval)
-    SELECT m.id, ${user.id}, ${user.name.slice(0, 40)}, ${side}, ${username}, ${sponsor ? 'pending' : 'approved'}
-    FROM goal_matches m JOIN goal_events e ON e.id = m.event_id
-    WHERE m.id = ${key} AND m.status = 'open' AND m.kickoff > now() AND e.active
-    ON CONFLICT (match_id, user_id) DO NOTHING RETURNING match_id`)
-  if (!saved.length) throw new Error('Bu maç için zaten bir takım seçtin.')
+  if (!m) throw new Error(CLOSED)
+  if (m.category === 'sponsor') throw new Error('Sponsor etkinliğinde takım seçilmez; bahsini al ve kupon numaranı gir.')
+  if (!isGoalSide(side)) throw new Error('Bir takım seç.')
+  await mayJoin(user.id)
+  const fee = Number(m.entry_fee) || 0
+  // A pick in an event with conditions waits until the member has met them on the match day.
+  const approval: GoalApproval = rulesOf(m.rules).length ? 'pending' : 'approved'
+  // The open-and-not-started check is repeated inside the insert: a pick must never land after kickoff,
+  // and the fee taken is the one the member was shown.
+  const outcome = await debitClaimed(user.id, fee, `${GOAL_NAME} katılımı (${m.home} - ${m.away})`.slice(0, 120), async (client) => {
+    const saved = await client.query(
+      `INSERT INTO goal_picks (match_id, user_id, user_name, side, approval, fee)
+       SELECT m.id, $2::text, $3::text, $4::text, $5::text, $6::int FROM goal_matches m JOIN goal_events e ON e.id = m.event_id
+       WHERE m.id = $1::int AND m.status = 'open' AND m.kickoff > now() AND e.active AND e.category = 'alkanka' AND e.entry_fee = $6::int
+       ON CONFLICT (match_id, user_id) DO NOTHING RETURNING match_id`,
+      [key, user.id, user.name.slice(0, 40), side, approval, fee],
+    )
+    return Boolean(saved.rowCount)
+  })
+  if (outcome === 'short') throw new Error(`Katılım için ${goalAmount(fee, 'KC')} gerekiyor, bakiyen yetmiyor.`)
+  if (outcome === 'taken') throw new Error('Seçim kaydedilemedi: bu maç için zaten bir takım seçtin ya da katılım az önce kapandı. Sayfayı yenile.')
+  return { fee }
+}
+
+/**
+ * Sponsor events: the member has bet at the sponsor and hands in the coupon number. The sponsor account
+ * linked to Alkanka is written onto the request; nobody types a username here. While the request is still
+ * unchecked the member may correct the number; once staff looked at it, it stays as it is.
+ */
+export async function submitGoalCoupon(user: { id: string; name: string }, matchId: number, rawCoupon: unknown): Promise<'saved' | 'updated'> {
+  await ensureGoal()
+  const key = id(matchId, 'Maç')
+  const [m] = await rows(sql`SELECT e.category, e.site_id, e.site_name, e.site_slug FROM goal_matches m JOIN goal_events e ON e.id = m.event_id
+    WHERE m.id = ${key} AND m.status = 'open' AND m.kickoff > now() AND e.active`)
+  if (!m) throw new Error(`${CLOSED} Kupon numarası maç başlayana kadar girilir.`)
+  if (m.category !== 'sponsor') throw new Error('Bu etkinlikte kupon girilmez; takımını seç.')
+  const coupon = checkCoupon(rawCoupon)
+  if (!coupon.ok) throw new Error(coupon.error)
+  await mayJoin(user.id)
+  const site = String(m.site_name ?? 'Sponsor')
+  const [flag] = await rows(sql`SELECT state FROM goal_flags WHERE user_id = ${user.id}`)
+  if (flag?.state === 'blocked') throw new Error('Geçersiz talepler nedeniyle sponsor etkinliklerine katılımın kapatıldı. Bir hata olduğunu düşünüyorsan destekle iletişime geç.')
+  const { mySponsorAccounts } = await import('@/lib/growth')
+  const account = (await mySponsorAccounts(user.id)).find((a) => a.siteId === m.site_slug)
+  if (!account) throw new Error(`Önce ${site} hesabını Alkanka'ya bağla.`)
+  if (account.status === 'rejected') throw new Error(`${site} hesabın onaylanmadı. Doğru kullanıcı adıyla yeniden bağla.`)
+
+  const [mine] = await rows(sql`SELECT approval FROM goal_picks WHERE match_id = ${key} AND user_id = ${user.id}`)
+  if (mine && mine.approval !== 'pending') throw new Error('Bu maçtaki talebin kontrol edildi; kupon numarası artık değiştirilemez.')
+  const [used] = await rows(sql`SELECT 1 FROM goal_picks p JOIN goal_matches mm ON mm.id = p.match_id JOIN goal_events ee ON ee.id = mm.event_id
+    WHERE ee.site_id = ${Number(m.site_id)} AND lower(p.coupon) = lower(${coupon.value}) AND p.user_id <> ${user.id} LIMIT 1`)
+  if (used) throw new Error('Bu kupon numarası başka bir üye tarafından girilmiş. Numarayı kontrol et.')
+  let saved: Record<string, unknown>[]
+  try {
+    saved = await rows(sql`INSERT INTO goal_picks (match_id, user_id, user_name, side, site_username, coupon, approval)
+      SELECT m.id, ${user.id}, ${user.name.slice(0, 40)}, 'all', ${account.username}, ${coupon.value}, 'pending'
+      FROM goal_matches m JOIN goal_events e ON e.id = m.event_id
+      WHERE m.id = ${key} AND m.status = 'open' AND m.kickoff > now() AND e.active AND e.category = 'sponsor'
+      ON CONFLICT (match_id, user_id) DO UPDATE SET coupon = EXCLUDED.coupon, site_username = EXCLUDED.site_username, created_at = now()
+        WHERE goal_picks.approval = 'pending'
+      RETURNING match_id`)
+  } catch (error) {
+    if ((error as { code?: string })?.code === '23505') throw new Error('Bu kupon numarası bu maç için zaten girilmiş.')
+    throw error
+  }
+  if (!saved.length) throw new Error(`${CLOSED} Kupon numarası maç başlayana kadar girilir.`)
+  return mine ? 'updated' : 'saved'
 }
 
 // --- Scoring and paying --------------------------------------------------
 
-/** `failed`: KC payments of this match that could not be written; they wait in the participant list. */
-export type GoalSettleSummary = { picks: number; winners: number; total: number; unit: string; sponsor: boolean; failed: number }
+/**
+ * `failed`: KC payments of this match that could not be written; they wait in the participant list.
+ * `waiting`: members who earned a reward but have not met the event's condition yet.
+ */
+export type GoalSettleSummary = { picks: number; winners: number; total: number; unit: string; sponsor: boolean; failed: number; waiting: number }
 
 /**
  * Records the score once and works out every pick's reward. The status flips in a single statement,
@@ -281,45 +494,99 @@ export async function settleGoalMatch(matchId: number, homeGoals: unknown, awayG
   const done = await rows(sql`UPDATE goal_matches SET status = 'settled', home_goals = ${score.home}, away_goals = ${score.away}, settled_at = now()
     WHERE id = ${key} AND status = 'open' RETURNING per_goal`)
   if (!done.length) throw new Error('Maç zaten sonuçlandırılmış.')
+  // A team pick counts that team's goals; a sponsor coupon counts every goal of the match.
   const scored = await rows(sql`UPDATE goal_picks p SET
-      goals = CASE WHEN p.side = 'home' THEN ${score.home}::int ELSE ${score.away}::int END,
-      reward = ${Number(done[0].per_goal)}::int * CASE WHEN p.side = 'home' THEN ${score.home}::int ELSE ${score.away}::int END
-    WHERE p.match_id = ${key} RETURNING p.reward`)
+      goals = CASE p.side WHEN 'home' THEN ${score.home}::int WHEN 'away' THEN ${score.away}::int ELSE ${score.home + score.away}::int END,
+      reward = ${Number(done[0].per_goal)}::int * CASE p.side WHEN 'home' THEN ${score.home}::int WHEN 'away' THEN ${score.away}::int ELSE ${score.home + score.away}::int END
+    WHERE p.match_id = ${key} RETURNING p.reward, p.approval`)
   const sponsor = m.category === 'sponsor'
   let failed = 0
+  let waiting = 0
   if (!sponsor) {
     // The score is recorded either way; whatever could not be paid is counted, never reported as paid.
     await payGoalRewards().catch((e) => console.error('[goal] ödeme', e))
-    const [left] = await rows<{ n: string }>(sql`SELECT count(*) AS n FROM goal_picks WHERE match_id = ${key} AND reward > 0 AND (NOT paid OR pay_error IS NOT NULL)`)
-    failed = Number(left.n)
+    const [left] = await rows<{ failed: string; waiting: string }>(sql`SELECT count(*) FILTER (WHERE pay_error IS NOT NULL) AS failed,
+        count(*) FILTER (WHERE pay_error IS NULL AND NOT paid AND approval <> 'rejected') AS waiting
+      FROM goal_picks WHERE match_id = ${key} AND reward > 0`)
+    failed = Number(left.failed)
+    waiting = Number(left.waiting)
   }
+  // A refused sponsor request earns nothing, whatever the score.
+  const counted = sponsor ? scored.filter((p) => p.approval !== 'rejected') : scored
   return {
     picks: scored.length,
-    winners: scored.filter((p) => Number(p.reward) > 0).length,
-    total: scored.reduce((sum, p) => sum + Number(p.reward), 0),
+    winners: counted.filter((p) => Number(p.reward) > 0).length,
+    total: counted.reduce((sum, p) => sum + Number(p.reward), 0),
     unit: String(m.unit),
     sponsor,
     failed,
+    waiting,
   }
 }
+
+/** The last games of a day are written a moment after midnight; a condition is only called missed once they are in. */
+const RULE_GRACE_MS = 3 * 60_000
 
 /**
  * Pays every KC reward still owed. The "paid" mark and the coins are written in one transaction, so a pick
  * is never marked without being paid and two runs at once cannot pay it twice. A payment that fails stays
  * unpaid with its reason, where the panel shows it, and the next run tries it again.
+ *
+ * In an event with conditions a reward is paid once the member has met them on the match day (Turkey time).
+ * Until that day is over the pick waits; after it, an unmet condition forfeits the reward. If the count
+ * cannot be read, nothing is decided: the pick waits for the next run.
  */
 export async function payGoalRewards() {
   await ensureGoal()
-  const owed = await rows(sql`SELECT p.match_id, p.user_id, p.reward, m.home, m.away
+  await refundVoidFees().catch((e) => console.error('[goal] katılım iadesi', e))
+  const owed = await rows(sql`SELECT p.match_id, p.user_id, p.reward, p.approval, m.home, m.away, m.kickoff, e.id AS event_id, e.rules, e.rule_mode
     FROM goal_picks p JOIN goal_matches m ON m.id = p.match_id JOIN goal_events e ON e.id = m.event_id
-    WHERE NOT p.paid AND p.reward > 0 AND m.status = 'settled' AND e.category = 'alkanka' ORDER BY p.match_id LIMIT 2000`)
+    WHERE NOT p.paid AND p.reward > 0 AND m.status = 'settled' AND e.category = 'alkanka' AND p.approval <> 'rejected' ORDER BY p.match_id LIMIT 2000`)
+
+  type Group = { rules: GoalRule[]; mode: GoalRuleMode; day: string; users: Set<string> }
+  const groups = new Map<string, Group>()
+  const groupOf = (p: Record<string, unknown>) => {
+    const rules = rulesOf(p.rules)
+    if (rules.length === 0) return null
+    const day = trDay(String(p.kickoff))
+    const key = `${p.event_id}|${day}`
+    const group = groups.get(key) ?? { rules, mode: modeOf(p.rule_mode), day, users: new Set<string>() }
+    groups.set(key, group)
+    return { key, group }
+  }
+  for (const p of owed) groupOf(p)?.group.users.add(String(p.user_id))
+  const doneBy = new Map<string, Map<string, number[]>>()
+  for (const [key, g] of groups) {
+    try {
+      doneBy.set(key, await ruleDoneFor([...g.users], g.rules, g.day))
+    } catch (error) {
+      console.error('[goal] şart sayımı okunamadı', key, error)
+    }
+  }
+
   let paid = 0
   for (const p of owed) {
     const userId = String(p.user_id)
+    const found = groupOf(p)
+    if (found) {
+      const done = doneBy.get(found.key)
+      if (!done) continue
+      const { rules, mode, day } = found.group
+      if (!goalRulesMet(rules, mode, done.get(userId) ?? [])) {
+        const over = Date.now() >= Date.parse(trDayBounds(day).end) + RULE_GRACE_MS
+        if (over) {
+          await rows(sql`UPDATE goal_picks SET approval = 'rejected', reject_reason = ${GOAL_RULE_MISSED} WHERE match_id = ${p.match_id} AND user_id = ${userId} AND NOT paid`).catch(() => {})
+        } else if (p.approval !== 'pending') {
+          await rows(sql`UPDATE goal_picks SET approval = 'pending' WHERE match_id = ${p.match_id} AND user_id = ${userId} AND NOT paid AND approval = 'approved'`).catch(() => {})
+        }
+        continue
+      }
+    }
     try {
-      const won = await creditClaimed(userId, Number(p.reward), `Gol başı ödül (${p.home} - ${p.away})`.slice(0, 120), async (client) => {
+      const won = await creditClaimed(userId, Number(p.reward), `${GOAL_NAME} ödülü (${p.home} - ${p.away})`.slice(0, 120), async (client) => {
         const claimed = await client.query(
-          `UPDATE goal_picks SET paid = true, paid_at = now(), pay_error = NULL WHERE match_id = $1 AND user_id = $2 AND NOT paid RETURNING user_id`,
+          `UPDATE goal_picks SET paid = true, paid_at = now(), pay_error = NULL, approval = 'approved', reject_reason = NULL
+           WHERE match_id = $1 AND user_id = $2 AND NOT paid AND approval <> 'rejected' RETURNING user_id`,
           [p.match_id, userId],
         )
         return Boolean(claimed.rowCount)
@@ -354,25 +621,37 @@ export async function goalPicks(matchId: number, limit = 2000): Promise<{ event:
   const key = id(matchId, 'Maç')
   const [m] = await rows(sql`SELECT m.*, 0 AS home_picks, 0 AS away_picks FROM goal_matches m WHERE m.id = ${key}`)
   if (!m) throw new Error('Maç bulunamadı.')
-  const [[e], picks] = await Promise.all([
-    rows(sql`SELECT * FROM goal_events WHERE id = ${Number(m.event_id)}`),
-    rows(sql`SELECT * FROM goal_picks WHERE match_id = ${key} ORDER BY created_at ASC LIMIT ${limit}`),
-  ])
+  const [e] = await rows(sql`SELECT * FROM goal_events WHERE id = ${Number(m.event_id)}`)
   if (!e) throw new Error('Etkinlik bulunamadı.')
+  const sponsor = e.category === 'sponsor'
+  // The tag columns only matter where staff judges requests; an Alkanka list skips the extra counting.
+  const picks = sponsor
+    ? await rows(sql`SELECT p.*, f.state AS flag_state, f.warns AS flag_warns,
+          (SELECT count(*) FROM goal_picks p2 JOIN goal_matches m2 ON m2.id = p2.match_id JOIN goal_events e2 ON e2.id = m2.event_id
+            WHERE p2.user_id = p.user_id AND e2.category = 'sponsor' AND p2.approval = 'rejected') AS invalid
+        FROM goal_picks p LEFT JOIN goal_flags f ON f.user_id = p.user_id WHERE p.match_id = ${key} ORDER BY p.created_at ASC LIMIT ${limit}`)
+    : await rows(sql`SELECT p.* FROM goal_picks p WHERE p.match_id = ${key} ORDER BY p.created_at ASC LIMIT ${limit}`)
   return {
     event: eventOf(e),
-    match: matchOf(m),
+    match: { ...matchOf(m), picks: picks.length },
     picks: picks.map((p) => ({
       userId: String(p.user_id),
       userName: String(p.user_name),
-      side: p.side === 'away' ? 'away' : 'home',
-      siteUsername: p.site_username ? String(p.site_username) : null,
+      side: sideOf(p.side),
+      siteUsername: str(p.site_username),
+      coupon: str(p.coupon),
       approval: isGoalApproval(p.approval) ? p.approval : 'pending',
+      rejectReason: str(p.reject_reason),
       goals: int(p.goals),
       reward: int(p.reward),
       paid: Boolean(p.paid),
-      payError: p.pay_error ? String(p.pay_error) : null,
+      payError: str(p.pay_error),
+      fee: Number(p.fee ?? 0),
+      feeRefunded: Boolean(p.fee_refunded),
       at: iso(p.created_at),
+      invalid: Number(p.invalid ?? 0),
+      flag: flagOf(p.flag_state),
+      warns: Number(p.flag_warns ?? 0),
     })),
   }
 }
@@ -387,22 +666,27 @@ async function sponsorMatch(matchId: number) {
   const key = id(matchId, 'Maç')
   const [m] = await rows(sql`SELECT e.category FROM goal_matches m JOIN goal_events e ON e.id = m.event_id WHERE m.id = ${key}`)
   if (!m) throw new Error('Maç bulunamadı.')
-  if (m.category !== 'sponsor') throw new Error('Şart onayı ve teslim sadece sponsor etkinliklerinde var; Alkanka ödülleri kendiliğinden yatar.')
+  if (m.category !== 'sponsor') throw new Error('Kupon kontrolü ve teslim sadece sponsor etkinliklerinde var; Alkanka ödülleri kendiliğinden yatar.')
   return key
 }
 
-/** Staff confirms (or refuses) that members met the sponsor's condition. A delivered reward is not reopened. */
-export async function setGoalApproval(matchId: number, userIds: string[], approval: GoalApproval) {
+/**
+ * Staff finds members' coupons valid or invalid. An invalid request keeps its reason, which the member sees
+ * and which counts towards the member's tag. A delivered reward is not reopened.
+ */
+export async function setGoalApproval(matchId: number, userIds: string[], approval: GoalApproval, reason?: unknown) {
   await ensureGoal()
   const key = await sponsorMatch(matchId)
   if (!isGoalApproval(approval)) throw new Error('Geçersiz onay durumu.')
   const list = idList(userIds)
   if (!list) return 0
-  const r = await rows(sql`UPDATE goal_picks SET approval = ${approval} WHERE match_id = ${key} AND NOT paid AND user_id IN (SELECT jsonb_array_elements_text(${list}::jsonb)) RETURNING user_id`)
+  const why = approval === 'rejected' ? String(reason ?? '').replace(/\s+/g, ' ').trim().slice(0, 160) || 'Şartlara uymuyor' : null
+  const r = await rows(sql`UPDATE goal_picks SET approval = ${approval}, reject_reason = ${why}
+    WHERE match_id = ${key} AND NOT paid AND user_id IN (SELECT jsonb_array_elements_text(${list}::jsonb)) RETURNING user_id`)
   return r.length
 }
 
-/** Marks sponsor rewards as handed over. Only a scored, approved pick with something to give counts. */
+/** Marks sponsor rewards as handed over. Only a scored, valid request with something to give counts. */
 export async function setGoalDelivered(matchId: number, userIds: string[], delivered: boolean) {
   await ensureGoal()
   const key = await sponsorMatch(matchId)
@@ -413,6 +697,65 @@ export async function setGoalDelivered(matchId: number, userIds: string[], deliv
         WHERE p.match_id = ${key} AND NOT p.paid AND p.approval = 'approved' AND p.reward > 0 AND p.user_id IN (SELECT jsonb_array_elements_text(${list}::jsonb)) RETURNING p.user_id`)
     : await rows(sql`UPDATE goal_picks p SET paid = false, paid_at = NULL WHERE p.match_id = ${key} AND p.paid AND p.user_id IN (SELECT jsonb_array_elements_text(${list}::jsonb)) RETURNING p.user_id`)
   return r.length
+}
+
+// --- Tags for invalid requests (panel) -----------------------------------
+
+/** Everyone who sent an invalid sponsor request or carries a tag, the heaviest cases first. */
+export async function goalFlagList(): Promise<GoalFlagRow[]> {
+  await ensureGoal()
+  const found = await rows(sql`WITH s AS (
+      SELECT p.user_id, max(p.user_name) AS user_name, count(*) AS total,
+        count(*) FILTER (WHERE p.approval = 'rejected') AS invalid,
+        max(p.created_at) FILTER (WHERE p.approval = 'rejected') AS last_at
+      FROM goal_picks p JOIN goal_matches m ON m.id = p.match_id JOIN goal_events e ON e.id = m.event_id
+      WHERE e.category = 'sponsor' GROUP BY p.user_id)
+    SELECT coalesce(s.user_id, f.user_id) AS user_id, coalesce(s.user_name, nullif(f.user_name, ''), 'Üye') AS user_name,
+      coalesce(s.total, 0) AS total, coalesce(s.invalid, 0) AS invalid, s.last_at,
+      (SELECT p.reject_reason FROM goal_picks p JOIN goal_matches m ON m.id = p.match_id JOIN goal_events e ON e.id = m.event_id
+        WHERE p.user_id = coalesce(s.user_id, f.user_id) AND e.category = 'sponsor' AND p.approval = 'rejected' ORDER BY p.created_at DESC LIMIT 1) AS last_reason,
+      f.state, coalesce(f.warns, 0) AS warns, coalesce(f.note, '') AS note, f.updated_by, f.updated_at
+    FROM s FULL JOIN goal_flags f ON f.user_id = s.user_id
+    WHERE coalesce(s.invalid, 0) > 0 OR f.user_id IS NOT NULL
+    ORDER BY (f.state = 'blocked') DESC NULLS LAST, coalesce(s.invalid, 0) DESC, s.last_at DESC NULLS LAST LIMIT 300`)
+  return found.map((x) => ({
+    userId: String(x.user_id),
+    userName: String(x.user_name),
+    state: flagOf(x.state),
+    warns: Number(x.warns),
+    note: String(x.note ?? ''),
+    invalid: Number(x.invalid),
+    total: Number(x.total),
+    lastReason: str(x.last_reason),
+    lastAt: x.last_at ? iso(x.last_at) : null,
+    updatedBy: str(x.updated_by),
+    updatedAt: x.updated_at ? iso(x.updated_at) : null,
+  }))
+}
+
+/**
+ * Warns a member, closes their participation in sponsor events, or opens it again. Warnings add up and
+ * are kept when a block is lifted; warning a blocked member does not unblock them.
+ */
+export async function setGoalFlag(userId: string, action: GoalFlagAction, note: unknown, by: string): Promise<{ userName: string; warns: number; state: GoalFlagState | null }> {
+  await ensureGoal()
+  const key = String(userId ?? '').slice(0, 80)
+  if (!key) throw new Error('Üye bulunamadı.')
+  const [known] = await rows(sql`SELECT user_name FROM goal_picks WHERE user_id = ${key} ORDER BY created_at DESC LIMIT 1`)
+  const [flagged] = await rows(sql`SELECT user_name FROM goal_flags WHERE user_id = ${key}`)
+  if (!known && !flagged) throw new Error('Bu üyenin Gol Yağmuru kaydı yok.')
+  const name = String(known?.user_name ?? flagged?.user_name ?? 'Üye')
+  const text = String(note ?? '').replace(/\s+/g, ' ').trim().slice(0, 300)
+  const state = action === 'warn' ? 'warned' : action === 'block' ? 'blocked' : 'open'
+  const [saved] = await rows(sql`INSERT INTO goal_flags (user_id, user_name, state, warns, note, updated_by)
+    VALUES (${key}, ${name}, ${state}, ${action === 'warn' ? 1 : 0}, ${text}, ${by.slice(0, 60)})
+    ON CONFLICT (user_id) DO UPDATE SET user_name = EXCLUDED.user_name,
+      state = CASE WHEN ${action} = 'warn' AND goal_flags.state = 'blocked' THEN 'blocked' ELSE EXCLUDED.state END,
+      warns = goal_flags.warns + EXCLUDED.warns,
+      note = CASE WHEN EXCLUDED.note = '' THEN goal_flags.note ELSE EXCLUDED.note END,
+      updated_by = EXCLUDED.updated_by, updated_at = now()
+    RETURNING state, warns`)
+  return { userName: name, warns: Number(saved.warns), state: flagOf(saved.state) }
 }
 
 // --- Background ----------------------------------------------------------
@@ -454,13 +797,13 @@ export async function goalTick() {
   await payGoalRewards().catch((e) => console.error('[goal] ödeme', e))
 }
 
-export const goalSummaryText = (s: GoalSettleSummary) =>
-  s.picks === 0
-    ? 'Maç sonuçlandı; seçim yapan üye yoktu.'
-    : s.sponsor
-      ? `${s.picks} seçim hesaplandı, ${s.winners} üye toplam ${goalAmount(s.total, s.unit)} hak etti. Şartı onayla, sonra teslim et.`
-      : s.failed > 0
-        ? `${s.picks} seçim hesaplandı, ${s.winners} üye toplam ${goalAmount(s.total, s.unit)} kazandı. ${s.failed} ödeme YAZILAMADI: maçın katılımcı listesini aç ve yeniden dene.`
-        : `${s.picks} seçim hesaplandı, ${s.winners} üyeye toplam ${goalAmount(s.total, s.unit)} yatırıldı.`
+export function goalSummaryText(s: GoalSettleSummary) {
+  if (s.picks === 0) return 'Maç sonuçlandı; katılan üye yoktu.'
+  const head = `${s.picks} katılım hesaplandı, ${s.winners} üye toplam ${goalAmount(s.total, s.unit)}`
+  if (s.sponsor) return `${head} hak etti. Kuponları kontrol et, geçerli olanları teslim et.`
+  if (s.failed > 0) return `${head} kazandı. ${s.failed} ödeme YAZILAMADI: maçın katılımcı listesini aç ve yeniden dene.`
+  if (s.waiting > 0) return `${head} kazandı. ${s.waiting} üyenin ödülü, etkinliğin şartını maç günü tamamlayınca yatacak; tamamlamayanınki verilmez.`
+  return `${head} kazandı ve ödüller yatırıldı.`
+}
 
 export type { GoalSide }

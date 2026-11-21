@@ -1,13 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { Crown, Gift } from 'lucide-react'
+import { Crown, Gift, Trophy } from 'lucide-react'
 import type { LeagueRow, LeagueScope, PaidPeriod } from '@/lib/predictions'
 import { prizeText, type Board, type PeriodKind, type Prize } from '@/lib/predictions-shared'
 import { plainClick } from '@/lib/plain-click'
 import { leaguePath } from '@/lib/record-links'
 import { cn } from '@/lib/utils'
 import { MemberRank } from '../kp/member-rank'
+import { filterChip, segmentItem, segmentTray } from './ui'
 
 export type PeriodView = { on: boolean; places: Prize[]; label: string }
 
@@ -73,15 +74,16 @@ export function Standings({
   const last = board || scope === 'all' ? undefined : paid[scope]
 
   return (
-    <section aria-labelledby="lig-tablosu" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 id="lig-tablosu" className="font-display text-base font-bold text-foreground">
-          Lig tablosu
+    <section aria-labelledby="lig-tablosu" className="flex flex-col gap-3 overflow-hidden rounded-xl border border-border bg-card p-4">
+      <div className="-mx-4 -mt-4 flex items-center justify-between gap-2 border-b border-border bg-secondary/50 px-4 py-3">
+        <h2 id="lig-tablosu" className="flex items-center gap-2 font-display text-base font-bold text-foreground">
+          <Trophy className="size-4 text-primary" aria-hidden="true" />
+          {board ? board.name : 'Lig tablosu'}
         </h2>
-        {period && <span className="text-xs text-muted-foreground">{period.label}</span>}
-        {board && <span className="text-xs text-muted-foreground">{board.open ? 'Devam ediyor' : 'Sona erdi'}</span>}
+        {period && <span className="rounded-full bg-background px-2 py-0.5 text-xs font-semibold text-foreground/80">{period.label}</span>}
+        {board && <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', board.open ? 'bg-live/15 text-live' : 'bg-background text-muted-foreground')}>{board.open ? 'Devam ediyor' : 'Sona erdi'}</span>}
       </div>
-      <div role="tablist" aria-label="Dönem" className="grid grid-cols-3 gap-1 rounded-lg bg-background p-1">
+      <div role="tablist" aria-label="Dönem" className={cn(segmentTray, 'grid grid-cols-3 gap-1')}>
         {SCOPES.map((s) => (
           <button
             key={s.id}
@@ -89,7 +91,7 @@ export function Standings({
             role="tab"
             aria-selected={!board && scope === s.id}
             onClick={() => onScope(s.id)}
-            className={cn('h-8 rounded-md text-xs font-bold transition-colors', !board && scope === s.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
+            className={cn(segmentItem(!board && scope === s.id), 'h-9 text-xs')}
           >
             {s.label}
           </button>
@@ -110,10 +112,7 @@ export function Standings({
                   e.preventDefault()
                   onBoard(board?.id === b.id ? null : b.id)
                 }}
-                className={cn(
-                  'flex min-h-9 items-center rounded-full border px-3 py-1 text-left text-xs font-semibold transition-colors',
-                  board?.id === b.id ? 'border-primary bg-primary/15 text-primary' : 'border-border text-foreground hover:border-primary hover:text-primary',
-                )}
+                className={cn(filterChip(board?.id === b.id), 'text-left')}
               >
                 <span>
                   {b.name}
@@ -155,7 +154,13 @@ export function Standings({
       )}
 
       {table.length ? (
-        <ol className="flex flex-col">
+        <ol className="flex flex-col gap-1">
+          <li aria-hidden="true" className="flex items-center gap-2.5 px-2 pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <span className="w-6 shrink-0 text-center">#</span>
+            <span className="min-w-0 flex-1">Üye</span>
+            <span className="shrink-0">İsabet</span>
+            <span className="w-10 shrink-0 text-right">Puan</span>
+          </li>
           {shown.map((r, i) => (
             <Row key={r.userId} row={r} place={i + 1} me={r.userId === meId} />
           ))}
@@ -194,18 +199,23 @@ export function Standings({
 
 function Row({ row, place, me }: { row: LeagueRow; place: number; me: boolean }) {
   return (
-    <li className={cn('flex items-center gap-2.5 border-b border-border py-2 text-sm last:border-0', me && 'rounded-md bg-primary/10 px-2 font-bold')}>
-      <span className="flex w-5 shrink-0 justify-center font-display font-bold tabular-nums text-muted-foreground">
-        {place === 1 ? <Crown className="size-4 text-primary" aria-label="Lider" /> : place}
+    <li className={cn('flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm transition-colors', me ? 'bg-primary/10 font-bold ring-1 ring-primary/40' : place <= 3 ? 'bg-background' : 'hover:bg-background')}>
+      <span
+        className={cn(
+          'flex size-6 shrink-0 items-center justify-center rounded-full font-display text-xs font-bold tabular-nums',
+          place === 1 ? 'bg-primary text-primary-foreground' : place <= 3 ? 'bg-primary/15 text-primary' : 'text-muted-foreground',
+        )}
+      >
+        {place === 1 ? <Crown className="size-3.5" aria-label="Lider" /> : place}
       </span>
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="truncate text-foreground">{me ? 'Sen' : firstName(row.name)}</span>
         <MemberRank userId={row.userId} />
       </span>
-      <span className="shrink-0 text-xs font-normal text-muted-foreground" title="Puan aldığı tahmin / toplam tahmin">
+      <span className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground" title="Puan aldığı tahmin / toplam tahmin">
         {row.hits}/{row.picks}
       </span>
-      <span className="w-9 shrink-0 text-right font-display font-bold tabular-nums text-primary">{row.points}</span>
+      <span className="w-10 shrink-0 text-right font-display text-base font-bold tabular-nums text-primary">{row.points}</span>
     </li>
   )
 }

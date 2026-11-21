@@ -8,6 +8,7 @@ import {
   deleteGoalEvent,
   deleteGoalMatch,
   goalBoard,
+  goalFlagList,
   goalPicks,
   goalSummaryText,
   importGoalFixtures,
@@ -15,12 +16,25 @@ import {
   saveGoalEvent,
   setGoalApproval,
   setGoalDelivered,
+  setGoalFlag,
   settleGoalMatch,
   voidGoalMatch,
   type GoalFixture,
 } from '@/lib/goal-rewards'
 import type { LeaguePin } from '@/lib/prediction-book-shared'
-import { goalAmount, isGoalApproval, type GoalApproval, type GoalEvent, type GoalEventView, type GoalMatch, type GoalPickRow } from '@/lib/goal-rewards-shared'
+import {
+  GOAL_NAME,
+  goalAmount,
+  isGoalApproval,
+  isGoalFlagAction,
+  type GoalApproval,
+  type GoalEvent,
+  type GoalEventView,
+  type GoalFlagAction,
+  type GoalFlagRow,
+  type GoalMatch,
+  type GoalPickRow,
+} from '@/lib/goal-rewards-shared'
 
 type Result = { ok: true; message?: string } | { ok: false; error: string }
 
@@ -111,9 +125,10 @@ export async function removeGoalMatch(id: number) {
 
 export async function cancelGoalMatch(id: number) {
   return guard(async () => {
-    await voidGoalMatch(Number(id))
-    await logPanel('community', 'Gol başı ödül maçı iptal edildi', `Maç #${id}`, 'Ödül verilmez')
-    return 'Maç iptal edildi. Bu maçtan ödül verilmez; seçim yapan üyeler kartta iptal yazısını görür.'
+    const fees = await voidGoalMatch(Number(id))
+    const refund = fees.feePicks === 0 ? '' : fees.refunded === fees.feePicks ? ` ${fees.feePicks} üyenin katılım ücreti (toplam ${goalAmount(fees.feeTotal, 'KC')}) geri yatırıldı.` : ` ${fees.feePicks} üyenin katılım ücretinden ${fees.refunded} tanesi geri yatırıldı; kalanı site ziyaret edildikçe kendiliğinden yeniden denenir.`
+    await logPanel('community', 'Gol başı ödül maçı iptal edildi', `Maç #${id}`, `Ödül verilmez${refund ? ` ·${refund}` : ''}`)
+    return `Maç iptal edildi. Bu maçtan ödül verilmez; katılan üyeler kartta iptal yazısını görür.${refund}`
   })
 }
 
@@ -137,14 +152,59 @@ export async function loadGoalPicks(matchId: number): Promise<{ ok: true; data: 
   }
 }
 
-const APPROVAL_LOG: Record<GoalApproval, string> = { approved: 'Katılım şartı onaylandı', rejected: 'Katılım şartı reddedildi', pending: 'Katılım şartı beklemeye alındı' }
+const APPROVAL_LOG: Record<GoalApproval, string> = { approved: 'Kupon geçerli sayıldı', rejected: 'Talep geçersiz sayıldı', pending: 'Talep yeniden kontrole alındı' }
 
-export async function approveGoalPicks(matchId: number, userIds: string[], approval: GoalApproval) {
+/** `reason` is why a request is invalid; the member sees it and it counts towards their tag. */
+export async function approveGoalPicks(matchId: number, userIds: string[], approval: GoalApproval, reason?: string) {
   return guard(async () => {
     if (!isGoalApproval(approval)) throw new Error('Geçersiz onay durumu.')
-    const n = await setGoalApproval(Number(matchId), userIds, approval)
-    if (n) await logPanel('community', APPROVAL_LOG[approval], `Maç #${matchId}`, `${n} üye`)
-    return n ? `${n} üyede işlendi.` : 'Değişen kayıt yok. Teslim edilmiş bir ödülün şartı değiştirilemez; önce teslimi geri al.'
+    if (approval === 'rejected' && !String(reason ?? '').trim()) throw new Error('Talebin neden geçersiz olduğunu seç ya da yaz; üye bu nedeni görür.')
+    const n = await setGoalApproval(Number(matchId), userIds, approval, reason)
+    if (n) await logPanel('community', APPROVAL_LOG[approval], `Maç #${matchId}`, `${n} üye${approval === 'rejected' ? ` · ${String(reason).trim().slice(0, 160)}` : ''}`)
+    if (!n) return 'Değişen kayıt yok. Teslim edilmiş bir ödülün talebi değiştirilemez; önce teslimi geri al.'
+    return approval === 'rejected' ? `${n} talep geçersiz sayıldı. Tekrarlayan üyeleri "Geçersiz talepler" listesinden uyarabilir ya da katılımını kapatabilirsin.` : `${n} üyede işlendi.`
+  })
+}
+
+export async function loadGoalFlags(): Promise<{ ok: true; data: GoalFlagRow[] } | { ok: false; error: string }> {
+  if (!(await allowed())) return { ok: false, error: EXPIRED }
+  try {
+    return { ok: true, data: await goalFlagList() }
+  } catch (error) {
+    console.error('[goal] etiket listesi okunamadı', (error as Error).message)
+    return { ok: false, error: 'Geçersiz talep listesi okunamadı.' }
+  }
+}
+
+const FLAG_LOG: Record<GoalFlagAction, string> = { warn: 'Gol Yağmuru: üye uyarıldı', block: 'Gol Yağmuru: sponsor etkinliklerine katılım kapatıldı', open: 'Gol Yağmuru: sponsor etkinliklerine katılım açıldı' }
+
+/**
+ * Warns a member, closes their participation in sponsor events, or opens it again. The member is told
+ * in their message box; if that message cannot be written the tag still stands and staff is told so.
+ */
+export async function flagGoalMember(userId: string, action: GoalFlagAction, note: string) {
+  return guard(async () => {
+    if (!isGoalFlagAction(action)) throw new Error('Geçersiz işlem.')
+    const text = String(note ?? '').replace(/\s+/g, ' ').trim().slice(0, 300)
+    if (action !== 'open' && text.length < 5) throw new Error('Üyeye gidecek açıklamayı yaz: neden uyarıldığını ya da katılımının neden kapatıldığını bilmeli.')
+    const { getPanelSession } = await import('@/lib/panel-auth')
+    const session = await getPanelSession()
+    const by = session ? session.displayName : 'panel'
+    const saved = await setGoalFlag(String(userId), action, text, by)
+    await logPanel('community', FLAG_LOG[action], saved.userName.slice(0, 60), text || null)
+    const title = action === 'warn' ? `${GOAL_NAME}: geçersiz talep uyarısı` : action === 'block' ? `${GOAL_NAME}: sponsor etkinliklerine katılımın kapatıldı` : `${GOAL_NAME}: sponsor etkinliklerine katılımın yeniden açıldı`
+    const body =
+      action === 'warn'
+        ? `Sponsor etkinliklerine gönderdiğin taleplerde şartlara uymayanlar var: ${text} Geçersiz talep göndermeye devam edersen sponsor etkinliklerine katılımın kapatılır.`
+        : action === 'block'
+          ? `Tekrarlayan geçersiz talepler nedeniyle sponsor etkinliklerine artık katılamazsın: ${text} Bir hata olduğunu düşünüyorsan destekle iletişime geç.`
+          : `Sponsor etkinliklerine yeniden katılabilirsin.${text ? ` ${text}` : ''} Talep göndermeden önce etkinliğin kurallarını oku.`
+    const told = await import('@/lib/inbox').then(
+      ({ sendMessage }) => sendMessage({ userId: String(userId), targetLabel: saved.userName, title, body, url: '/tahminler?bolum=gol-yagmuru&etkinlik=sponsor', sentBy: by }).then(() => true),
+      () => false,
+    ).catch(() => false)
+    const done = action === 'warn' ? `${saved.userName} uyarıldı (toplam ${saved.warns} uyarı).` : action === 'block' ? `${saved.userName} artık sponsor etkinliklerine katılamaz.` : `${saved.userName} yeniden katılabilir.`
+    return told ? `${done} Üyeye mesaj gönderildi.` : `${done} Üyeye mesaj GÖNDERİLEMEDİ; istersen Mesajlar bölümünden elle yaz.`
   })
 }
 
