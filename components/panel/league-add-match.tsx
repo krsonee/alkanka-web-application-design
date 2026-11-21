@@ -6,11 +6,12 @@ import { ChevronDown, Star, X } from 'lucide-react'
 import { createLeagueMatch, loadLeagueTeams, removeBookTeam } from '@/app/panel/community-actions'
 import type { FeedLeague } from '@/lib/kankatv'
 import { gameKey, type LeagueBook } from '@/lib/prediction-book-shared'
-import { ESPORT_GAMES, SPORTS, SPORT_IDS, startingSet, type LeagueSettings, type QuestionSet, type Sport } from '@/lib/predictions-shared'
+import { ESPORT_GAMES, SPORTS, SPORT_IDS, startingSet, type Board, type LeagueSettings, type QuestionSet, type Sport } from '@/lib/predictions-shared'
 import { usePanelAction } from '@/components/panel/flash'
 import { StatusLine } from '@/components/alkanka/community/use-action'
 import { cn } from '@/lib/utils'
 import { LeagueBrowser } from './league-browser'
+import { BoardSelect } from './league-boards'
 import { LengthField, QuestionSetEditor, ceilingLine, questionLine, setProblem, type PrizeOptions } from './league-fields'
 
 const field =
@@ -33,7 +34,9 @@ const START_LEAGUE: Record<Sport, string> = { football: 'Süper Lig', basketball
  * Adds a match by hand. The sport decides everything below it: where the league and the teams come from
  * (the feed's directory, or the saved e-sport list), how long the match runs and which questions it can ask.
  */
-export function AddMatchForm({ settings, options, book, onBookChanged }: { settings: LeagueSettings; options: PrizeOptions; book: LeagueBook; onBookChanged: () => void }) {
+export function AddMatchForm({ settings, options, book, onBookChanged, boards }: { settings: LeagueSettings; options: PrizeOptions; book: LeagueBook; onBookChanged: () => void; boards: Board[] }) {
+  const [boardId, setBoardId] = useState<number | null>(null)
+  const board = boards.find((b) => b.id === boardId && b.open) ?? null
   const { pending, status, run } = usePanelAction('Maç eklendi.')
   const forget = usePanelAction()
   const listId = useId()
@@ -87,6 +90,7 @@ export function AddMatchForm({ settings, options, book, onBookChanged }: { setti
               sport,
               bestOf: draft.bestOf,
               set: custom ? draft : null,
+              boardId: board?.id ?? null,
             }),
           () => {
             setForm({ ...form, home: '', away: '', kickoff: '', closesAt: '' })
@@ -250,6 +254,8 @@ export function AddMatchForm({ settings, options, book, onBookChanged }: { setti
         </div>
       )}
 
+      <BoardSelect boards={boards} value={board?.id ?? null} onChange={setBoardId} label="Tahmin ligi" className="sm:max-w-md" />
+
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-1 text-xs font-semibold text-muted-foreground">Sorular</legend>
         <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">
@@ -264,7 +270,7 @@ export function AddMatchForm({ settings, options, book, onBookChanged }: { setti
             className="mt-1 size-4 accent-primary"
           />
           <span className="flex min-w-0 flex-col">
-            <span className="font-semibold">{sport === 'football' ? 'Varsayılan sorular' : `${info.label} için hazır sorular`}</span>
+            <span className="font-semibold">{info.label} şablonu</span>
             <span className="text-xs leading-relaxed text-muted-foreground">
               {questionLine(usual)} · en fazla {ceilingLine(usual)}
             </span>

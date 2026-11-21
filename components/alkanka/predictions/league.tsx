@@ -8,7 +8,7 @@ import { LEAGUE_TAB_PARAM } from '@/lib/record-links'
 import { cn } from '@/lib/utils'
 import { MatchRow, matchState, type MatchState } from './match-row'
 import { MyAwards } from './my-awards'
-import { Standings, type PeriodView } from './standings'
+import { Standings, type BoardView, type PeriodView } from './standings'
 
 /** What a shared address can open: one of the match tabs, or the league table (its own view on a narrow screen). */
 export type LeagueStart = MatchState | 'league'
@@ -80,6 +80,7 @@ function HowTo() {
           <li>Basketbolda uzatmalar skora dahildir. Voleybol ve teniste set skoru, e-sporda harita skoru sorulur; bu maçlarda beraberlik olmaz.</li>
           <li>Verisi alınamayan bir soru iptal edilir; puanlanmaz ve bonusu etkilemez.</li>
           <li>Puanların haftalık ve aylık lig tablosuna yazılır. Eşitlikte tam skoru daha çok bilen öne geçer.</li>
+          <li>Kartında özel lig adı yazan maçın puanı o ligin kendi tablosuna yazılır; tablo &quot;Lig tablosu&quot; altında ayrı sekmededir.</li>
         </ul>
       )}
     </div>
@@ -91,6 +92,7 @@ export function League({
   tables,
   periods,
   paid,
+  boards,
   awards,
   meId,
   serverNow,
@@ -101,6 +103,8 @@ export function League({
   tables: Record<LeagueScope, LeagueRow[]>
   periods: Record<PeriodKind, PeriodView>
   paid: Partial<Record<PeriodKind, PaidPeriod>>
+  /** Special leagues, each with its own table. */
+  boards: BoardView[]
   awards: Award[]
   meId: string | null
   serverNow: number
@@ -124,6 +128,8 @@ export function League({
   }
   const [mineOnly, setMineOnly] = useState(false)
   const [onlySport, setOnlySport] = useState<Sport | null>(null)
+  // 0 stands for the general league.
+  const [onlyLeague, setOnlyLeague] = useState<number | null>(null)
   const [saved, setSaved] = useState(false)
 
   const groups: Record<MatchState, LeagueMatch[]> = { open: [], waiting: [], done: [] }
@@ -137,7 +143,9 @@ export function League({
   // The sport filter only appears where there is something to tell apart, and lets go of a sport the tab no longer has.
   const sportsHere = SPORT_IDS.filter((s) => groups[tab].some((m) => sportOf(m.set) === s))
   const sport = onlySport && sportsHere.length > 1 && sportsHere.includes(onlySport) ? onlySport : null
-  const list = groups[tab].filter((m) => (!canFilter || !mineOnly || m.myPick) && (!sport || sportOf(m.set) === sport))
+  const leaguesHere = [...new Map(groups[tab].map((m) => [m.boardId ?? 0, m.boardName ?? 'Genel lig'])).entries()].sort((a, b) => a[0] - b[0])
+  const league = onlyLeague !== null && leaguesHere.length > 1 && leaguesHere.some(([id]) => id === onlyLeague) ? onlyLeague : null
+  const list = groups[tab].filter((m) => (!canFilter || !mineOnly || m.myPick) && (!sport || sportOf(m.set) === sport) && (league === null || (m.boardId ?? 0) === league))
   const filtered = list.length < groups[tab].length
 
   const week = tables.week
@@ -273,6 +281,26 @@ export function League({
             </div>
           )}
 
+          {leaguesHere.length > 1 && (
+            <div role="group" aria-label="Lig" className="flex flex-wrap gap-1.5">
+              {[[null, 'Bütün ligler'] as const, ...leaguesHere].map(([id, name]) => (
+                <button
+                  key={id ?? 'hepsi'}
+                  type="button"
+                  aria-pressed={league === id}
+                  onClick={() => setOnlyLeague(id)}
+                  className={cn(
+                    'flex min-h-9 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
+                    league === id ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {name}
+                  <span className="tabular-nums opacity-80">{id === null ? groups[tab].length : groups[tab].filter((m) => (m.boardId ?? 0) === id).length}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
           {saved && (
             <p role="status" className="rounded-lg bg-live/10 px-3 py-2 text-xs font-semibold text-live">
               Tahminin kaydedildi. Maç bitene kadar &quot;Sonuç bekleyen&quot; sekmesinde durur.
@@ -301,7 +329,7 @@ export function League({
 
         <aside className={cn('min-w-0 flex-col gap-4 @4xl:sticky @4xl:top-20', view === 'league' ? 'flex' : 'hidden @4xl:flex')}>
           <MyAwards awards={awards} />
-          <Standings tables={tables} periods={periods} paid={paid} meId={meId} />
+          <Standings tables={tables} periods={periods} paid={paid} boards={boards} meId={meId} />
         </aside>
       </div>
     </div>

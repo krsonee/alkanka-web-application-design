@@ -31,8 +31,9 @@ import { FixturePicker } from './fixture-picker'
 import { PrizeField, QuestionSetEditor, ceilingLine, prizeProblem, questionLine, setProblem, type PrizeOptions } from './league-fields'
 import { AddMatchForm } from './league-add-match'
 import { MatchList } from './league-matches'
+import { BoardsDesk } from './league-boards'
 
-type Tab = 'maclar' | 'sorular' | 'oduller' | 'teslim'
+type Tab = 'maclar' | 'ligler' | 'sorular' | 'oduller' | 'teslim'
 
 const card = 'flex flex-col gap-3 rounded-xl border border-border bg-card p-4'
 const when = (iso: string) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })
@@ -323,15 +324,17 @@ function AwardsDesk({ awards, onChanged }: { awards: Award[]; onChanged: () => v
 }
 
 function Loaded({ matches, setup, refresh }: { matches: LeagueMatch[]; setup: LeagueSetup; refresh: () => void }) {
-  const [tab, setTab] = useUrlTab<Tab>(['maclar', 'sorular', 'oduller', 'teslim'], 'maclar', 'lig')
+  const [tab, setTab] = useUrlTab<Tab>(['maclar', 'ligler', 'sorular', 'oduller', 'teslim'], 'maclar', 'lig')
   const [adding, setAdding] = useState(false)
-  const { settings, products, sites, awards, paid } = setup
+  const { settings, boards, products, sites, awards, paid } = setup
+  const openBoards = boards.filter((b) => b.open).length
   const options: PrizeOptions = { products, sites }
   const waiting = awards.filter((a) => a.status === 'beklemede').length
   const tabs: [Tab, string][] = [
     ['maclar', `Maçlar (${matches.filter((m) => !m.settled).length})`],
+    ['ligler', `Özel ligler (${openBoards})`],
     ['sorular', 'Sorular ve puanlama'],
-    ['oduller', 'Lig ödülleri'],
+    ['oduller', 'Genel lig ödülleri'],
     ['teslim', `Ödül teslimi (${waiting})`],
   ]
   const periodLine = (kind: PeriodKind) => `${PERIOD_LABEL[kind]} ödül: ${settings[kind].on ? `açık, ilk ${settings[kind].places.length} sıra` : 'kapalı'}`
@@ -350,7 +353,7 @@ function Loaded({ matches, setup, refresh }: { matches: LeagueMatch[]; setup: Le
         <div className="flex flex-col gap-0.5">
           <dt className="text-xs font-semibold text-muted-foreground">Lig ödülleri ve puanlama</dt>
           <dd className="leading-relaxed text-foreground">
-            {periodLine('week')} · {periodLine('month')} · otomatik puanlama {settings.auto ? 'açık' : 'kapalı'}
+            {periodLine('week')} · {periodLine('month')} · {openBoards ? `${openBoards} özel lig açık` : 'özel lig yok'} · otomatik puanlama {settings.auto ? 'açık' : 'kapalı'}
           </dd>
         </div>
       </dl>
@@ -365,7 +368,7 @@ function Loaded({ matches, setup, refresh }: { matches: LeagueMatch[]; setup: Le
 
       {tab === 'maclar' && (
         <div className="flex flex-col gap-4">
-          <FixturePicker book={setup.book} onBookChanged={refresh} settings={settings} options={options} />
+          <FixturePicker book={setup.book} onBookChanged={refresh} settings={settings} options={options} boards={boards} />
           <div className="flex flex-col gap-2">
             <button
               type="button"
@@ -377,11 +380,12 @@ function Loaded({ matches, setup, refresh }: { matches: LeagueMatch[]; setup: Le
               Maçı elle ekle (e-spor ve takvimde olmayanlar)
               <ChevronDown className={cn('size-3.5 text-muted-foreground transition-transform', adding && 'rotate-180')} aria-hidden="true" />
             </button>
-            {adding && <AddMatchForm settings={settings} options={options} book={setup.book} onBookChanged={refresh} />}
+            {adding && <AddMatchForm settings={settings} options={options} book={setup.book} onBookChanged={refresh} boards={boards} />}
           </div>
-          <MatchList matches={matches} options={options} />
+          <MatchList matches={matches} options={options} boards={boards} />
         </div>
       )}
+      {tab === 'ligler' && <BoardsDesk boards={boards} options={options} onChanged={refresh} />}
       {tab === 'sorular' && (
         <div className="flex flex-col gap-4">
           <DefaultQuestions settings={settings} options={options} onSaved={refresh} />

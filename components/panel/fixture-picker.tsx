@@ -5,11 +5,12 @@ import { CalendarDays, Check, ChevronDown, Pencil, RefreshCw, Star, X } from 'lu
 import { autoSettleMatches, loadLeagueFixtures, pinLeague, publishFixtures } from '@/app/panel/community-actions'
 import type { FeedLeague, Fixture, LeagueFixtures } from '@/lib/kankatv'
 import { MAX_LEAGUES_AT_ONCE, type LeagueBook } from '@/lib/prediction-book-shared'
-import { SPORTS, SPORT_IDS, startingSet, type LeagueSettings, type QuestionSet, type Sport } from '@/lib/predictions-shared'
+import { SPORTS, SPORT_IDS, startingSet, type Board, type LeagueSettings, type QuestionSet, type Sport } from '@/lib/predictions-shared'
 import { usePanelAction } from '@/components/panel/flash'
 import { StatusLine, useAction } from '@/components/alkanka/community/use-action'
 import { cn } from '@/lib/utils'
 import { LeagueBrowser } from './league-browser'
+import { BoardSelect } from './league-boards'
 import { QuestionSetEditor, ceilingLine, questionLine, setProblem, type PrizeOptions } from './league-fields'
 
 const FEED_SPORTS = SPORT_IDS.filter((s) => SPORTS[s].feed)
@@ -46,7 +47,7 @@ const tabs = 'flex w-fit max-w-full flex-wrap gap-1 rounded-lg border border-bor
 const tab = (on: boolean) => cn('h-9 rounded-md px-3 text-xs font-bold', on ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')
 
 /** Publishes calendar games: pick the sport, then the leagues, and only those leagues' games are listed. */
-export function FixturePicker({ book, onBookChanged, settings, options }: { book: LeagueBook; onBookChanged: () => void; settings: LeagueSettings; options: PrizeOptions }) {
+export function FixturePicker({ book, onBookChanged, settings, options, boards }: { book: LeagueBook; onBookChanged: () => void; settings: LeagueSettings; options: PrizeOptions; boards: Board[] }) {
   const [sport, setSport] = useState<Sport>('football')
   const [leagues, setLeagues] = useState<FeedLeague[]>([])
   const [browsing, setBrowsing] = useState(false)
@@ -58,6 +59,9 @@ export function FixturePicker({ book, onBookChanged, settings, options }: { book
   const [own, setOwn] = useState<Map<number, QuestionSet>>(new Map())
   const [editing, setEditing] = useState<number | 'all' | null>(null)
   const [shared, setShared] = useState<QuestionSet | null>(null)
+  const [boardId, setBoardId] = useState<number | null>(null)
+  // A league closed while this screen was open is no longer a place to publish into.
+  const board = boards.find((b) => b.id === boardId && b.open) ?? null
   const [error, setError] = useState('')
   const [loading, startLoading] = useTransition()
   const publish = useAction()
@@ -392,7 +396,13 @@ export function FixturePicker({ book, onBookChanged, settings, options }: { book
               </ul>
             </section>
           )}
-          <p className="text-xs leading-relaxed text-muted-foreground">Yayınladıktan sonra da, maça tahmin gelmeden önce aşağıdaki listeden sorularını değiştirebilirsin.</p>
+          {chosen.length > 0 && <BoardSelect boards={boards} value={board?.id ?? null} onChange={setBoardId} label="Seçilen maçlar hangi lige eklensin" className="sm:max-w-md" />}
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {board
+              ? `Maçlar "${board.name}" ligine eklenir${board.general ? '; puanları haftalık ve aylık genel lige de sayılır.' : '; puanları sadece o ligin tablosuna yazılır.'}`
+              : 'Maçlar genel lige (haftalık ve aylık tablo) eklenir.'}{' '}
+            Yayınladıktan sonra da, maça tahmin gelmeden önce aşağıdaki listeden sorularını ve ligini değiştirebilirsin.
+          </p>
         </div>
       )}
 
@@ -402,7 +412,7 @@ export function FixturePicker({ book, onBookChanged, settings, options }: { book
           disabled={publish.pending || !chosen.length || Boolean(broken)}
           onClick={() =>
             publish.run(
-              () => publishFixtures(chosen.map(({ started: _started, ...f }) => ({ ...f, set: own.get(f.extId) }))),
+              () => publishFixtures(chosen.map(({ started: _started, ...f }) => ({ ...f, set: own.get(f.extId) })), board?.id ?? null),
               () => {
                 setPublished((prev) => new Set([...prev, ...chosen.map((f) => f.extId)]))
                 setPicked(new Set())

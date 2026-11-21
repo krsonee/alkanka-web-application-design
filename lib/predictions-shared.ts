@@ -648,11 +648,34 @@ export const AWARD_STATUS_LABEL: Record<AwardStatus, string> = {
   iptal: 'İptal edildi',
 }
 
+// --- Special leagues ------------------------------------------------------
+
+export const MAX_BOARD_NAME = 60
+export const MAX_OPEN_BOARDS = 20
+
+export type BoardWinner = { place: number; userId: string; name: string; points: number; prize: Prize }
+
+/** A league of its own: the matches filed under it are scored on its table instead of the weekly and monthly one. */
+export type Board = {
+  id: number
+  name: string
+  /** Whether its matches count in the weekly and monthly table as well. */
+  general: boolean
+  /** One prize per place, first place first; paid when the league is closed. */
+  places: Prize[]
+  open: boolean
+  winners: BoardWinner[]
+  closedAt: string | null
+  /** The matches filed under it, and how many of them still wait for a result. */
+  matches: number
+  waiting: number
+}
+
 export type Award = {
   id: number
   userId: string
   userName: string
-  source: 'match' | PeriodKind
+  source: 'match' | PeriodKind | 'board'
   title: string
   prize: Prize
   status: AwardStatus

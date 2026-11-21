@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
-import { editLeagueQuestions, finishLeagueMatch, loadLeaguePicks, removeLeagueMatch } from '@/app/panel/community-actions'
+import { editLeagueQuestions, finishLeagueMatch, loadLeaguePicks, moveLeagueMatch, removeLeagueMatch } from '@/app/panel/community-actions'
 import type { LeagueMatch } from '@/lib/predictions'
 import {
   MARKETS,
@@ -15,6 +15,7 @@ import {
   rewardText,
   sportOf,
   voidedBy,
+  type Board,
   type MatchResult,
   type QuestionSet,
 } from '@/lib/predictions-shared'
@@ -25,6 +26,7 @@ import { RecordLink } from '@/components/panel/record-link'
 import { StatusLine } from '@/components/alkanka/community/use-action'
 import { cn } from '@/lib/utils'
 import { QuestionSetEditor, setProblem, type PrizeOptions } from './league-fields'
+import { BoardSelect } from './league-boards'
 
 const caption = 'flex flex-col gap-1 text-xs font-semibold text-muted-foreground'
 
@@ -203,7 +205,7 @@ function sportLine(set: QuestionSet) {
   return `${info.label}${set.bestOf && info.bestOf.length > 1 ? `, ${set.bestOf} ${info.unit} üzerinden` : ''} · `
 }
 
-function MatchAdminRow({ m, state, options }: { m: LeagueMatch; state: AdminState; options: PrizeOptions }) {
+function MatchAdminRow({ m, state, options, boards }: { m: LeagueMatch; state: AdminState; options: PrizeOptions; boards: Board[] }) {
   const { pending, status, run } = usePanelAction()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<QuestionSet>(m.set)
@@ -224,6 +226,9 @@ function MatchAdminRow({ m, state, options }: { m: LeagueMatch; state: AdminStat
             {m.closesAt && m.closesAt !== m.kickoff ? ` · tahmin ${when(m.closesAt)} kapanır` : ''}
             {m.extId ? ' · takvimden' : ' · elle eklendi'}
           </span>
+          <span className="text-xs text-muted-foreground">
+            Lig: <b className={m.boardName ? 'text-primary' : 'text-foreground'}>{m.boardName ?? 'Genel lig'}</b>
+          </span>
         </div>
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           <span className="text-xs font-semibold text-foreground">{m.picks} tahmin</span>
@@ -239,7 +244,7 @@ function MatchAdminRow({ m, state, options }: { m: LeagueMatch; state: AdminStat
               className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-foreground hover:bg-secondary"
             >
               <Pencil className="size-3.5" aria-hidden="true" />
-              {editing ? 'Vazgeç' : 'Soruları değiştir'}
+              {editing ? 'Vazgeç' : boards.some((b) => b.open) ? 'Soruları ve ligi değiştir' : 'Soruları değiştir'}
             </button>
           )}
           {!m.settled && (
@@ -260,6 +265,7 @@ function MatchAdminRow({ m, state, options }: { m: LeagueMatch; state: AdminStat
 
       {editing ? (
         <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
+          <BoardSelect boards={boards} value={m.boardId} onChange={(id) => id !== m.boardId && run(() => moveLeagueMatch(m.id, id))} label="Bu maçın ligi (seçince hemen kaydedilir)" className="sm:max-w-md" />
           <QuestionSetEditor value={draft} onChange={setDraft} options={options} />
           {problem && (
             <p role="alert" className="text-xs font-medium text-destructive">
@@ -279,7 +285,7 @@ function MatchAdminRow({ m, state, options }: { m: LeagueMatch; state: AdminStat
         <Questions set={m.set} />
       )}
 
-      {!m.settled && m.picks > 0 && <p className="text-xs leading-relaxed text-muted-foreground">Bu maça tahmin yapıldı; soruları ve ödülleri artık değiştirilemez.</p>}
+      {!m.settled && m.picks > 0 && <p className="text-xs leading-relaxed text-muted-foreground">Bu maça tahmin yapıldı; soruları, ödülleri ve ligi artık değiştirilemez.</p>}
 
       {state === 'done' && (
         <p className="text-sm leading-relaxed text-muted-foreground">
@@ -296,11 +302,15 @@ function MatchAdminRow({ m, state, options }: { m: LeagueMatch; state: AdminStat
   )
 }
 
-export function MatchList({ matches, options }: { matches: LeagueMatch[]; options: PrizeOptions }) {
+export function MatchList({ matches, options, boards }: { matches: LeagueMatch[]; options: PrizeOptions; boards: Board[] }) {
   const [now] = useState(() => Date.now())
   const [chosen, setChosen] = useState<AdminState | null>(null)
+  // 'all', the general league (0) or one special league.
+  const [league, setLeague] = useState<'all' | number>('all')
+  const used = boards.filter((b) => matches.some((m) => m.boardId === b.id))
+  const only = league === 'all' || league === 0 || used.some((b) => b.id === league) ? league : 'all'
   const groups: Record<AdminState, LeagueMatch[]> = { waiting: [], open: [], done: [] }
-  for (const m of matches) groups[adminState(m, now)].push(m)
+  for (const m of matches) if (only === 'all' || (m.boardId ?? 0) === only) groups[adminState(m, now)].push(m)
   groups.done.sort((a, b) => b.kickoff.localeCompare(a.kickoff))
   const tab = chosen ?? (groups.waiting.length ? 'waiting' : groups.open.length ? 'open' : 'done')
 
@@ -320,10 +330,28 @@ export function MatchList({ matches, options }: { matches: LeagueMatch[]; option
           </button>
         ))}
       </div>
+      {used.length > 0 && (
+        <div role="group" aria-label="Lig" className="flex flex-wrap gap-1.5">
+          {(['all', 0, ...used.map((b) => b.id)] as const).map((id) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={only === id}
+              onClick={() => setLeague(id)}
+              className={cn(
+                'min-h-9 rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
+                only === id ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {id === 'all' ? 'Bütün ligler' : id === 0 ? 'Genel lig' : used.find((b) => b.id === id)?.name}
+            </button>
+          ))}
+        </div>
+      )}
       {groups[tab].length ? (
         <ul className="flex flex-col gap-2">
           {groups[tab].map((m) => (
-            <MatchAdminRow key={m.id} m={m} state={tab} options={options} />
+            <MatchAdminRow key={m.id} m={m} state={tab} options={options} boards={boards} />
           ))}
         </ul>
       ) : (
