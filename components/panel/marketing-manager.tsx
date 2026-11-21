@@ -1,6 +1,7 @@
 'use client'
 
 
+import { trDay } from '@/lib/tr-time'
 import { askConfirm } from '@/components/panel/confirm-dialog'
 import { amountInput, parseAmount } from '@/lib/amount'
 import { useMemo, useState, useTransition } from 'react'
@@ -430,11 +431,10 @@ export function CampaignsManager({ campaigns, sites, siteUrl }: { campaigns: Cam
 
 type EarningDraft = { id?: number; siteId: string; period: string; model: string; ftd: string; amount: string; currency: string; note: string }
 
+/** The month before the current one, by the Turkey calendar. */
 function lastMonth() {
-  const d = new Date()
-  d.setDate(1)
-  d.setMonth(d.getMonth() - 1)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  const [year, month] = trDay().split('-').map(Number)
+  return month === 1 ? `${year - 1}-12` : `${year}-${String(month - 1).padStart(2, '0')}`
 }
 
 const STATUS_STYLE: Record<EarningStatus, string> = {

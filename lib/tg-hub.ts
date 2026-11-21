@@ -461,9 +461,9 @@ export async function adjustTrust(tgId: number, delta: number) {
 
 /** +1 trust for each day a member writes cleanly. */
 export async function dailyTrustBump(tgId: number) {
-  await rows(sql`INSERT INTO tg_trust (tg_id, score, last_day) VALUES (${tgId}, 51, CURRENT_DATE)
-    ON CONFLICT (tg_id) DO UPDATE SET score = LEAST(100, tg_trust.score + 1), last_day = CURRENT_DATE
-    WHERE tg_trust.last_day IS DISTINCT FROM CURRENT_DATE`)
+  await rows(sql`INSERT INTO tg_trust (tg_id, score, last_day) VALUES (${tgId}, 51, (now() AT TIME ZONE 'Europe/Istanbul')::date)
+    ON CONFLICT (tg_id) DO UPDATE SET score = LEAST(100, tg_trust.score + 1), last_day = (now() AT TIME ZONE 'Europe/Istanbul')::date
+    WHERE tg_trust.last_day IS DISTINCT FROM (now() AT TIME ZONE 'Europe/Istanbul')::date`)
 }
 
 export async function setTrusted(tgId: number, trusted: boolean) {

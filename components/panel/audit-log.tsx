@@ -116,7 +116,7 @@ export function AuditLog({ initial }: { initial: AuditPage }) {
         {data.rows.map((e) => (
           <li key={e.id} className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-start sm:gap-4">
             <time dateTime={e.createdAt} className="shrink-0 text-sm tabular-nums text-muted-foreground sm:w-36">
-              {new Date(e.createdAt).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })}
+              {new Date(e.createdAt).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Istanbul' })}
             </time>
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <p className="text-sm text-foreground">

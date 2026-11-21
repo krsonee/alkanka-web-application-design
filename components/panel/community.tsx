@@ -102,7 +102,7 @@ function Reviews({ reviews, published, siteNames }: { reviews: Review[]; publish
             <li key={r.id} className="flex items-start gap-3 p-3">
               <span className="flex shrink-0 items-center gap-0.5 text-sm font-bold text-primary"><Star className="size-3.5 fill-current" aria-hidden />{r.rating}</span>
               <div className="flex min-w-0 flex-1 flex-col">
-                <span className="text-xs text-muted-foreground">{siteNames[r.siteId] ?? r.siteId} · {r.userName} · {new Date(r.createdAt).toLocaleDateString('tr-TR')}</span>
+                <span className="text-xs text-muted-foreground">{siteNames[r.siteId] ?? r.siteId} · {r.userName} · {new Date(r.createdAt).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })}</span>
                 <p className="line-clamp-2 text-sm text-foreground">{r.body}</p>
               </div>
               <div className="flex shrink-0 gap-1">
@@ -135,7 +135,7 @@ function ComplaintRow({ c, site }: { c: Complaint; site: string }) {
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col">
           <span className="text-sm font-semibold text-foreground">{c.title}</span>
-          <span className="text-xs text-muted-foreground">{site} · {c.userName} · {new Date(c.createdAt).toLocaleDateString('tr-TR')}</span>
+          <span className="text-xs text-muted-foreground">{site} · {c.userName} · {new Date(c.createdAt).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })}</span>
         </div>
         <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-xs font-bold', COMPLAINT_STATUS[c.status].className)}>{COMPLAINT_STATUS[c.status].label}</span>
       </div>

@@ -788,7 +788,7 @@ function AwardList({ awards }: { awards: AwardRow[] }) {
             <div className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-sm font-semibold text-foreground">{a.userName} · {a.badgeName}</span>
               <span className="truncate text-xs text-muted-foreground">
-                {new Date(a.awardedAt).toLocaleDateString('tr-TR')}{a.note ? ` · ${a.note}` : ''}
+                {new Date(a.awardedAt).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })}{a.note ? ` · ${a.note}` : ''}
               </span>
             </div>
             <button disabled={pending} onClick={() => void askConfirm('Rozet ve bonus KP geri alınsın mı?').then((ok) => ok && run(() => takeBackAward(a.id)))} aria-label="Geri al" className="rounded-md p-2 text-muted-foreground hover:text-destructive">

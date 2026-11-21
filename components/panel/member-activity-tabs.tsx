@@ -11,7 +11,7 @@ import { TOURNAMENT_MONEY_GAME } from '@/lib/tournaments-shared'
 type Result = { ok: true; message: string } | { ok: false; error: string }
 
 const input = 'rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary'
-const when = (iso: string) => new Date(iso).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })
+const when = (iso: string) => new Date(iso).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Istanbul' })
 const signed = (n: number) => `${n > 0 ? '+' : ''}${n.toLocaleString('tr-TR')}`
 
 const RESULT: Record<string, { label: string; cls: string }> = {

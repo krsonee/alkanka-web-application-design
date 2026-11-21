@@ -17,7 +17,7 @@ function runState(lastRunAt: string | Date | null | undefined, lastError: string
   if (!lastRunAt) return { level: 'off', detail: 'Hiç çalışmadı' }
   const at = new Date(lastRunAt)
   const ago = Date.now() - at.getTime()
-  const when = at.toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })
+  const when = at.toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Istanbul' })
   return ago > STALE_MS ? { level: 'warn', detail: `Son çalışma eski: ${when}` } : { level: 'ok', detail: `Son çalışma: ${when}` }
 }
 

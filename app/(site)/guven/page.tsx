@@ -39,7 +39,7 @@ export const metadata: Metadata = {
 }
 export const dynamic = 'force-dynamic'
 
-const fmtDate = (s: string) => new Date(s).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' })
+const fmtDate = (s: string) => new Date(s).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/Istanbul' })
 
 const STEPS = [
   { icon: PenLine, title: 'Paylaş', text: 'Yorum, şikâyet ya da çekim ekran görüntüsü gönder.' },

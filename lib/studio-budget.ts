@@ -43,8 +43,8 @@ export async function holdBudget(cost: number): Promise<{ hold: BudgetHold; erro
       await client.query('SELECT pg_advisory_xact_lock($1)', [BUDGET_LOCK])
       const cap = capOf((await client.query(`SELECT value FROM site_content WHERE key = $1`, [STUDIO_BUDGET_KEY])).rows[0]?.value)
       const used = await client.query<{ spent: string }>(
-        `SELECT (SELECT COALESCE(SUM(cost), 0) FROM studio_jobs WHERE created_at > date_trunc('month', now()))
-           + (SELECT COALESCE(SUM(cost), 0) FROM studio_holds WHERE created_at > date_trunc('month', now())
+        `SELECT (SELECT COALESCE(SUM(cost), 0) FROM studio_jobs WHERE created_at > (date_trunc('month', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul'))
+           + (SELECT COALESCE(SUM(cost), 0) FROM studio_holds WHERE created_at > (date_trunc('month', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')
                 AND (kept OR created_at > now() - make_interval(mins => $1::int))) AS spent`,
         [HOLD_MINUTES],
       )

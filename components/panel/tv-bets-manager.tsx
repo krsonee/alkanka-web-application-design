@@ -72,7 +72,7 @@ const timeAgo = (iso: string | null) => {
   const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000))
   if (s < 60) return `${s} sn önce`
   if (s < 3600) return `${Math.round(s / 60)} dk önce`
-  return new Date(iso).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })
+  return new Date(iso).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Istanbul' })
 }
 
 const STATUS_TEXT: Record<AdminMarket['status'], string> = { open: 'Açık', locked: 'Kilitli', settled: 'Sonuçlandı', void: 'İptal' }

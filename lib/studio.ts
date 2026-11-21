@@ -178,9 +178,9 @@ export async function studioSpend() {
   await ensureTables()
   const r = await rows<{ total: string; month: string; count: string }>(sql`SELECT
     j.total + h.total AS total, j.month + h.month AS month, j.count
-    FROM (SELECT COALESCE(SUM(cost), 0) AS total, COALESCE(SUM(cost) FILTER (WHERE created_at > date_trunc('month', now())), 0) AS month,
+    FROM (SELECT COALESCE(SUM(cost), 0) AS total, COALESCE(SUM(cost) FILTER (WHERE created_at > (date_trunc('month', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')), 0) AS month,
             COUNT(*) AS count FROM studio_jobs) j,
-         (SELECT COALESCE(SUM(cost), 0) AS total, COALESCE(SUM(cost) FILTER (WHERE created_at > date_trunc('month', now())), 0) AS month
+         (SELECT COALESCE(SUM(cost), 0) AS total, COALESCE(SUM(cost) FILTER (WHERE created_at > (date_trunc('month', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')), 0) AS month
             FROM studio_holds WHERE kept) h`)
   return { total: Number(r[0].total), month: Number(r[0].month), count: Number(r[0].count) }
 }

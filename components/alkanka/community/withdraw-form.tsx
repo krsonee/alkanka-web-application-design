@@ -1,5 +1,6 @@
 'use client'
 
+import { trInput, trInputToIso } from '@/lib/tr-time'
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ImagePlus, Loader2, X } from 'lucide-react'
@@ -11,11 +12,8 @@ const field =
 const MAX = 5 * 1024 * 1024
 const TYPES = ['image/png', 'image/jpeg', 'image/webp']
 
-function nowLocal() {
-  const d = new Date()
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset())
-  return d.toISOString().slice(0, 16)
-}
+/** The payment time is asked for and read in Turkey time, whatever clock the member's device keeps. */
+const nowLocal = () => trInput(Date.now())
 
 export function WithdrawForm({ siteId, siteName }: { siteId: string; siteName: string }) {
   const router = useRouter()
@@ -46,7 +44,7 @@ export function WithdrawForm({ siteId, siteName }: { siteId: string; siteName: s
     const form = new FormData(e.currentTarget)
     form.set('file', file)
     form.set('siteId', siteId)
-    form.set('paidAt', new Date(String(form.get('paidAt'))).toISOString())
+    form.set('paidAt', trInputToIso(String(form.get('paidAt'))) ?? '')
     setBusy(true)
     setStatus(null)
     try {
@@ -80,7 +78,7 @@ export function WithdrawForm({ siteId, siteName }: { siteId: string; siteName: s
   <input name="amount" required inputMode="decimal" placeholder="2.500" className={`${field} min-w-0 tabular-nums`} />
   </label>
   <label className="flex min-w-0 flex-col gap-1 text-xs font-semibold text-muted-foreground">
-  Çekim saati
+  Çekim saati (Türkiye saatiyle)
   <input
   name="paidAt"
   type="datetime-local"

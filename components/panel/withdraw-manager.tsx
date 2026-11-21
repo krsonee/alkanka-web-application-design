@@ -38,7 +38,7 @@ const STATUS: Record<AdminWithdrawShare['status'], { label: string; tone: string
   fake: { label: 'Sahte', tone: 'bg-destructive/15 text-destructive' },
 }
 
-const time = (iso: string) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+const time = (iso: string) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })
 
 export function WithdrawManager({ shares, settings, siteRewards, sites, blocks }: Props) {
   const [view, setView] = useUrlTab<'queue' | 'rewards' | 'rules'>(['queue', 'rewards', 'rules'], 'queue', 'v')

@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 type Counts = { total: number; installed: number; push: number; both: number; none: number; opensToday: number; turnedOff: number }
 type Option = { value: MobileSegment; label: string }
 
-const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: '2-digit' }) : '—')
+const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: '2-digit', timeZone: 'Europe/Istanbul' }) : '—')
 
 export function MobilePanel({ counts, segments, topicLabels }: { counts: Counts; segments: Option[]; topicLabels: Record<string, string> }) {
   const [segment, setSegment] = useState<MobileSegment>('yukleyen')

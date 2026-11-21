@@ -1,5 +1,6 @@
 'use client'
 
+import { trInputToIso } from '@/lib/tr-time'
 import { useId, useState } from 'react'
 import useSWR from 'swr'
 import { ChevronDown, Star, X } from 'lucide-react'
@@ -85,8 +86,8 @@ export function AddMatchForm({ settings, options, book, onBookChanged, boards }:
           () =>
             createLeagueMatch({
               ...form,
-              kickoff: new Date(form.kickoff).toISOString(),
-              closesAt: form.closesAt ? new Date(form.closesAt).toISOString() : undefined,
+              kickoff: trInputToIso(form.kickoff) ?? '',
+              closesAt: trInputToIso(form.closesAt) ?? undefined,
               sport,
               bestOf: draft.bestOf,
               set: custom ? draft : null,
@@ -213,12 +214,12 @@ export function AddMatchForm({ settings, options, book, onBookChanged, boards }:
           <input list={listId} value={form.away} onChange={put('away')} placeholder={SAMPLE[sport][1]} autoComplete="off" className={field} />
         </label>
         <label className={caption}>
-          Başlama saati
+          Başlama saati (Türkiye saati)
           <input type="datetime-local" value={form.kickoff} onChange={put('kickoff')} className={field} />
         </label>
         <label className={caption}>
           <span>
-            Tahmin bitiş <span className="font-normal opacity-70">· boşsa maç saatinde</span>
+            Tahmin bitiş <span className="font-normal opacity-70">· Türkiye saati, boşsa maç saatinde</span>
           </span>
           <input type="datetime-local" value={form.closesAt} max={form.kickoff || undefined} onChange={put('closesAt')} className={field} />
         </label>

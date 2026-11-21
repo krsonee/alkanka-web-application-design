@@ -122,7 +122,7 @@ export function ShareSection({
         <span>
           Paylaşılan post: <strong className="text-foreground">{status.shared}</strong>
         </span>
-        {status.lastRunAt && <span>Son kontrol: {new Date(status.lastRunAt).toLocaleString('tr-TR')}</span>}
+        {status.lastRunAt && <span>Son kontrol: {new Date(status.lastRunAt).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' })}</span>}
       </div>
       {status.lastError && <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{status.lastError}</p>}
 
@@ -312,7 +312,7 @@ function OddsRow({ deal }: { deal: OddsDeal }) {
           <p className="truncate text-sm font-medium text-foreground">
             {deal.brand} · {deal.title}
           </p>
-          <p className="text-xs text-muted-foreground">{new Date(deal.createdAt).toLocaleString('tr-TR')}</p>
+          <p className="text-xs text-muted-foreground">{new Date(deal.createdAt).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' })}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {badge}

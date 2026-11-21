@@ -38,7 +38,7 @@ export const input = 'h-9 w-full rounded-lg border border-border bg-background p
 export const btn = 'inline-flex h-9 items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50'
 export const btnGhost = 'inline-flex h-9 items-center justify-center rounded-lg border border-border px-3 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50'
 export const btnDanger = 'inline-flex h-9 items-center justify-center rounded-lg border border-destructive/40 px-3 text-sm font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50'
-export const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—')
+export const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' }) : '—')
 
 /**
  * Every tab of the panel is mounted at once and only the open one is visible. A screen that reads on

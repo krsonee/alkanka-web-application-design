@@ -9,7 +9,7 @@ import { NOTE_MAX, type MemberNote } from '@/lib/members-bulk-shared'
 
 type Result = { ok: true; message: string } | { ok: false; error: string }
 
-const when = (iso: string) => new Date(iso).toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' })
+const when = (iso: string) => new Date(iso).toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Istanbul' })
 
 export function MemberNotes({
   userId,

@@ -5,8 +5,8 @@ import { memberLedgerAction } from '@/app/panel/members-actions'
 import { LEDGER_KEEP_DAYS, LEDGER_PAGE_SIZE } from '@/lib/wallet-ledger-shared'
 import { cn } from '@/lib/utils'
 
-const when = (iso: string) => new Date(iso).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })
-const day = (iso: string) => new Date(iso).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })
+const when = (iso: string) => new Date(iso).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Istanbul' })
+const day = (iso: string) => new Date(iso).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Istanbul' })
 const kc = (n: number) => `${n.toLocaleString('tr-TR')} KC`
 const signed = (n: number) => `${n > 0 ? '+' : ''}${n.toLocaleString('tr-TR')} KC`
 

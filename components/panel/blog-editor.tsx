@@ -341,7 +341,7 @@ export function BlogEditor({ posts, siteUrl }: { posts: BlogPost[]; siteUrl: str
                     <span className="text-xs text-muted-foreground">
                       {!p.published ? 'Taslak' : p.scheduled ? `Zamanlandı: ${formatLocal(p.publishAt)}` : `/rehber/${p.slug}`}
                       {' · '}
-                      {new Date(p.updatedAt).toLocaleDateString('tr-TR')}
+                      {new Date(p.updatedAt).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })}
                     </span>
                   </button>
                   <button

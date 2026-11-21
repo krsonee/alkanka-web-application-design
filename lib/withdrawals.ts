@@ -208,7 +208,7 @@ export async function checkWithdrawShare(user: { id: string }, input: ShareInput
     WHERE user_id = ${user.id} AND (until IS NULL OR until > now())`)
   if (block) {
     throw new Error(block.until
-      ? `Çok sayıda reddedilen paylaşım nedeniyle ${new Date(block.until).toLocaleDateString('tr-TR')} tarihine kadar paylaşım yapamazsın.`
+      ? `Çok sayıda reddedilen paylaşım nedeniyle ${new Date(block.until).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })} tarihine kadar paylaşım yapamazsın.`
       : 'Hesabın çekim paylaşımından kalıcı olarak engellendi.')
   }
 

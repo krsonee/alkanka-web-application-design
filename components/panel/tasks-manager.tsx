@@ -238,7 +238,7 @@ export function TasksManager({ tasks, claims, sites = [] }: { tasks: TaskRecord[
               <li key={claim.id} className="flex flex-wrap items-center gap-3 p-3 text-sm">
                 <span className="min-w-0 flex-1">
                   <span className="block font-medium text-foreground">{claim.userName}{claim.email ? ` · ${claim.email}` : ''}</span>
-                  <span className="block text-muted-foreground">{claim.taskTitle} · {new Date(claim.createdAt).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                  <span className="block text-muted-foreground">{claim.taskTitle} · {new Date(claim.createdAt).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Istanbul' })}</span>
                 </span>
                 <button type="button" disabled={pending} onClick={() => decide('approve', claim.id)} className="h-9 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-50">
                   Onayla
