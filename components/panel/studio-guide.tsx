@@ -18,7 +18,7 @@ const QUICK_START: { title: string; body: string; target: Section }[] = [
   },
   {
     title: 'Üret',
-    body: '"Üret" sekmesinde işi (Banner, Hareketli GIF, Video, Sticker) ve markayı seç, formu doldur ya da hazır bir tarif seç, "Üret"e bas.',
+    body: '"Üret" sekmesinde işi (Banner, Hareketli GIF, Video, Sticker) ve markayı seç, formu doldur ya da hazır bir tarif seç, "Üret"e bas. Her markanın üretimleri kendi alanında durur: üstteki "Marka alanları" şeridinden markaya basınca form da liste de o markaya geçer.',
     target: 'create',
   },
   {

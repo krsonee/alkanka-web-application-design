@@ -74,7 +74,7 @@ import { CommunityManager } from '@/components/panel/community'
 import { adminComplaints, pendingReviews, publishedReviews } from '@/lib/community'
 import { listLeagueMatches } from '@/lib/predictions'
 import { siteOptions } from '@/lib/sites'
-import { listAssets, listBrands, listJobs, studioSpend } from '@/lib/studio'
+import { listAssets, listBrands, listJobsByBrand, studioSpend } from '@/lib/studio'
 import { getStudioCap } from '@/lib/studio-budget'
 import { KpManager } from '@/components/panel/kp-manager'
 import { BoostManager } from '@/components/panel/boost-manager'
@@ -594,7 +594,7 @@ async function staffPanel() {
 
 export const metadata: Metadata = { title: { absolute: 'Yönetim paneli | AL KANKA' }, robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } } }
 
-export default async function PanelPage({ searchParams }: { searchParams: Promise<{ b?: string; s?: string; r?: string; from?: string; to?: string; sponsor?: string }> }) {
+export default async function PanelPage({ searchParams }: { searchParams: Promise<{ b?: string; s?: string; r?: string; from?: string; to?: string; sponsor?: string; marka?: string }> }) {
   const [session, params] = await Promise.all([getPanelSession(), searchParams])
   if (!session) {
     return (
@@ -986,16 +986,21 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         />
       )
     }),
-    section(ctx, 'studio', 'Stüdyo', async () => (
-      <Studio
-        brands={await listBrands().catch(miss([]))}
-        assets={await listAssets().catch(miss([]))}
-        jobs={await listJobs().catch(miss([]))}
-        spend={await studioSpend().catch(miss({ total: 0, month: 0, count: 0 }))}
-        budget={{ cap: await getStudioCap().catch(miss(null)), canEdit: session.isOwner }}
-        canSlide={can('slide')}
-      />
-    )),
+    section(ctx, 'studio', 'Stüdyo', async () => {
+      const board = await listJobsByBrand().catch(miss({ jobs: [], totals: [] }))
+      return (
+        <Studio
+          brands={await listBrands().catch(miss([]))}
+          assets={await listAssets().catch(miss([]))}
+          jobs={board.jobs}
+          totals={board.totals}
+          initialArea={params.marka}
+          spend={await studioSpend().catch(miss({ total: 0, month: 0, count: 0 }))}
+          budget={{ cap: await getStudioCap().catch(miss(null)), canEdit: session.isOwner }}
+          canSlide={can('slide')}
+        />
+      )
+    }),
     section(ctx, 'messages', 'Site içi mesajlar', async () => {
       const [sent, outbox, templates] = await Promise.all([listSent(), listOutbox('message').catch(miss([])), listTemplates().catch(miss([]))])
       return <MessageSender sent={sent} outbox={outbox} templates={templates} />

@@ -1,7 +1,7 @@
 import 'server-only'
 import { get, put } from '@vercel/blob'
 import { rows, sql } from '@/lib/db'
-import { cleanTexts, type StudioAsset, type StudioBrand, type StudioJob, type StudioTexts } from '@/lib/studio-types'
+import { cleanTexts, STUDIO_PAGE, type StudioAreaTotal, type StudioAsset, type StudioBrand, type StudioJob, type StudioTexts } from '@/lib/studio-types'
 
 let ready: Promise<unknown> | null = null
 export function ensureTables() {
@@ -141,6 +141,39 @@ export async function listJobs(limit = 60) {
   await ensureTables()
   const r = await rows(sql`SELECT j.*, b.name AS brand_name FROM studio_jobs j LEFT JOIN studio_brands b ON b.id = j.brand_id
     ORDER BY j.id DESC LIMIT ${limit}`)
+  return r.map(mapJob)
+}
+
+/**
+ * The newest jobs of every brand in one query, so each brand's area is full on its own instead of
+ * sharing one mixed list. A job whose brand kit was deleted counts as brandless.
+ */
+export async function listJobsByBrand(perBrand = STUDIO_PAGE) {
+  await ensureTables()
+  const r = await rows(sql`SELECT * FROM (
+      SELECT j.*, b.name AS brand_name, b.id AS area,
+        ROW_NUMBER() OVER (PARTITION BY b.id ORDER BY j.id DESC) AS rn,
+        COUNT(*) OVER (PARTITION BY b.id) AS area_count,
+        SUM(j.cost) OVER (PARTITION BY b.id) AS area_cost
+      FROM studio_jobs j LEFT JOIN studio_brands b ON b.id = j.brand_id) t
+    WHERE rn <= ${perBrand} ORDER BY id DESC`)
+  const totals = new Map<number | null, StudioAreaTotal>()
+  for (const row of r) {
+    const brandId = row.area == null ? null : Number(row.area)
+    if (!totals.has(brandId)) totals.set(brandId, { brandId, count: Number(row.area_count), cost: Number(row.area_cost) })
+  }
+  return { jobs: r.map(mapJob), totals: [...totals.values()] }
+}
+
+/** Older jobs of one brand, below the ones already on screen. */
+export async function listBrandJobs(brandId: number | null, beforeId: number, limit = STUDIO_PAGE) {
+  await ensureTables()
+  const r =
+    brandId == null
+      ? await rows(sql`SELECT j.*, b.name AS brand_name FROM studio_jobs j LEFT JOIN studio_brands b ON b.id = j.brand_id
+          WHERE b.id IS NULL AND j.id < ${beforeId} ORDER BY j.id DESC LIMIT ${limit}`)
+      : await rows(sql`SELECT j.*, b.name AS brand_name FROM studio_jobs j JOIN studio_brands b ON b.id = j.brand_id
+          WHERE b.id = ${brandId} AND j.id < ${beforeId} ORDER BY j.id DESC LIMIT ${limit}`)
   return r.map(mapJob)
 }
 
