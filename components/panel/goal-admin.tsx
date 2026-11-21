@@ -28,6 +28,7 @@ import {
   checkGoalScore,
   goalAmount,
   goalPickState,
+  goalAccountNote,
   goalPickTotals,
   goalPicksCsv,
   goalReward,
@@ -50,6 +51,12 @@ import { usePanelAction } from '@/components/panel/flash'
 import { SideSheet } from '@/components/panel/side-sheet'
 import { StatusLine } from '@/components/alkanka/community/use-action'
 import { cn } from '@/lib/utils'
+
+/** Under the username on a coupon request: whether that is still the member's linked account and whether it is approved. */
+function AccountNote({ pick }: { pick: Parameters<typeof goalAccountNote>[0] }) {
+  const note = goalAccountNote(pick)
+  return <span className={cn('text-[11px] font-medium', note.tone === 'good' ? 'text-success' : note.tone === 'bad' ? 'text-destructive' : 'text-muted-foreground')}>{note.text}</span>
+}
 
 const card = 'flex flex-col gap-3 rounded-xl border border-border bg-card p-4'
 const field = 'h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground'
@@ -633,7 +640,14 @@ function PicksSheet({ matchId, onClose, onChanged }: { matchId: number; onClose:
                       {sponsor && (p.invalid > 0 || p.flag) && <GoalTag member={{ state: p.flag, warns: p.warns, invalid: p.invalid }} />}
                     </span>
                   </td>
-                  {sponsor && <td className="p-2">{p.siteUsername ?? '-'}</td>}
+                  {sponsor && (
+                    <td className="p-2">
+                      <span className="flex flex-col items-start gap-0.5">
+                        {p.siteUsername ?? '-'}
+                        <AccountNote pick={p} />
+                      </span>
+                    </td>
+                  )}
                   {sponsor && <td className="p-2 font-mono">{p.coupon ?? '-'}</td>}
                   {sponsor && (
                     <td className={cn('p-2', p.approval === 'approved' ? 'text-success' : p.approval === 'rejected' ? 'text-destructive' : 'text-muted-foreground')}>

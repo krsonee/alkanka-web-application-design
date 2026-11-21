@@ -13,7 +13,7 @@ import { deleteAsset, deleteBrand, deleteJob, getJob, listBrandJobs, readFile, s
 import { briefProblem, cleanBrief, type Brief, type Improved, type Motion, type StudioFlow } from '@/lib/studio-brief'
 import { saveStudioCap } from '@/lib/studio-budget'
 import { improveBrief } from '@/lib/studio-improve'
-import { STUDIO_CAP_RANGE, usd, type StudioJob } from '@/lib/studio-types'
+import { STUDIO_CAP_RANGE, STUDIO_TEXT_CEILING, usd, type StudioJob } from '@/lib/studio-types'
 
 type Result = { ok?: boolean; message?: string; brand?: { name: string; domain: string; logo: string; colors: string[]; font: string } }
 
@@ -41,7 +41,7 @@ export async function saveBrandAction(input: {
   notes: string
 }): Promise<Result> {
   if (!(await canPanel('studio'))) return EXPIRED
-  const name = input.name.trim().slice(0, 60)
+  const name = input.name.trim().slice(0, STUDIO_TEXT_CEILING)
   if (!name) return { message: 'Marka adı gerekli.' }
   if (input.logo && !/^studio\/logos\/[a-z0-9._-]+$/i.test(input.logo)) return { message: 'Geçersiz logo.' }
   if (input.mascot && !/^studio\/mascots\/[a-z0-9._-]+$/i.test(input.mascot)) return { message: 'Geçersiz maskot.' }
@@ -52,8 +52,8 @@ export async function saveBrandAction(input: {
     logo: input.logo,
     mascot: input.mascot,
     colors: input.colors.filter((c) => /^#[0-9a-f]{6}$/i.test(c)).slice(0, 6),
-    font: input.font.trim().slice(0, 60),
-    notes: input.notes.trim().slice(0, 600),
+    font: input.font.trim().slice(0, STUDIO_TEXT_CEILING),
+    notes: input.notes.trim().slice(0, STUDIO_TEXT_CEILING),
   })
   revalidatePath('/panel')
   await logPanel('studio', 'Marka kiti kaydedildi', input.name)

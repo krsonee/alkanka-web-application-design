@@ -59,7 +59,6 @@ import {
   STICKER_MOTION_COST,
   STUDIO_CATEGORIES,
   STUDIO_FORMATS,
-  TEXT_LIMITS,
   videoCost,
   type ImageSize,
   type MotionQuality,
@@ -863,7 +862,6 @@ function TextFields({ value, onChange }: { value: StudioTexts; onChange: (texts:
           <input
             value={value[field.key]}
             onChange={(e) => onChange({ ...value, [field.key]: e.target.value })}
-            maxLength={TEXT_LIMITS[field.key]}
             placeholder={field.placeholder}
             className={input}
           />
@@ -1190,11 +1188,11 @@ function BrandKits({ brands }: { brands: StudioBrand[] }) {
         <div className="grid gap-3 md:grid-cols-2">
           <label className={label}>
             Marka adı
-            <input value={draft.name} onChange={(e) => set({ name: e.target.value })} maxLength={60} className={input} />
+            <input value={draft.name} onChange={(e) => set({ name: e.target.value })} className={input} />
           </label>
           <label className={label}>
             Font
-            <input value={draft.font} onChange={(e) => set({ font: e.target.value })} maxLength={60} placeholder="Montserrat" className={input} />
+            <input value={draft.font} onChange={(e) => set({ font: e.target.value })} placeholder="Montserrat" className={input} />
           </label>
         </div>
         <div className="flex flex-col gap-1.5">
@@ -1293,8 +1291,7 @@ function BrandKits({ brands }: { brands: StudioBrand[] }) {
           <textarea
             value={draft.notes}
             onChange={(e) => set({ notes: e.target.value })}
-            rows={2}
-            maxLength={600}
+            rows={4}
             placeholder="Örn: koyu lacivert zemin, altın vurgular, aslan maskotu"
             className={cn(input, 'resize-y')}
           />

@@ -4,9 +4,7 @@ import { useState, useTransition } from 'react'
 import { Loader2, Wand2 } from 'lucide-react'
 import { improveBriefAction } from '@/app/panel/studio-actions'
 import {
-  BRIEF_LIMITS,
   CAMERA_MOVES,
-  MOTION_LIMIT,
   RECIPES,
   STUDIO_STYLES,
   briefProblem,
@@ -84,8 +82,7 @@ export function BriefFields({
         <textarea
           value={brief.subject}
           onChange={(e) => set({ subject: e.target.value })}
-          rows={2}
-          maxLength={BRIEF_LIMITS.subject}
+          rows={3}
           placeholder={hint.subject}
           className={cn(input, 'resize-y leading-relaxed')}
         />
@@ -96,8 +93,7 @@ export function BriefFields({
           <textarea
             value={brief.scene}
             onChange={(e) => set({ scene: e.target.value })}
-            rows={2}
-            maxLength={BRIEF_LIMITS.scene}
+            rows={3}
             placeholder="Örn: Mor bulutların arasında altın paralar, sinematik ışık"
             className={cn(input, 'resize-y leading-relaxed')}
           />
@@ -108,8 +104,7 @@ export function BriefFields({
         <textarea
           value={brief.character}
           onChange={(e) => set({ character: e.target.value })}
-          rows={2}
-          maxLength={BRIEF_LIMITS.character}
+          rows={3}
           placeholder={hint.character}
           className={cn(input, 'resize-y leading-relaxed')}
         />
@@ -137,7 +132,6 @@ export function BriefFields({
         <input
           value={brief.colors}
           onChange={(e) => set({ colors: e.target.value })}
-          maxLength={BRIEF_LIMITS.colors}
           placeholder="Örn: altın ve mor"
           className={input}
         />
@@ -148,7 +142,6 @@ export function BriefFields({
           <input
             value={brief.caption}
             onChange={(e) => set({ caption: e.target.value })}
-            maxLength={BRIEF_LIMITS.caption}
             placeholder="Örn: KOD GELDİ!"
             className={input}
           />
@@ -208,8 +201,7 @@ export function MotionFields({
         <textarea
           value={motion.action}
           onChange={(e) => onMotion({ ...motion, action: e.target.value })}
-          rows={2}
-          maxLength={MOTION_LIMIT}
+          rows={3}
           placeholder={
             flow === 'sticker'
               ? 'Örn: karakter megafonu sallıyor ve zıplıyor'
