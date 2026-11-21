@@ -286,7 +286,8 @@ const SETUP_STEPS: GuideStep[] = [
         </li>
         <li>Botu çalışacağı grup ve kanallarda yönetici yap (mesaj silme, kullanıcı yasaklama, davet, sabitleme; kanalda mesaj gönderme ve düzenleme).</li>
         <li>
-          <b>Botlar → Bağlantı &amp; Cron</b>: token’ı yapıştırıp botu bağla, hedef kanalları ekle, <b>Test</b>’e bas.
+          <b>Botlar → Bağlantı &amp; Cron</b>: token’ı yapıştırıp botu bağla, hedef kanalları ekle, <b>Test</b>’e bas. Token’ı ve gizli otomatik kontrol
+          adresini sadece ana yönetici görür, ekler ve yeniler; diğer hesaplar bağlı bota hedef kanal ekleyebilir.
         </li>
         <li>
           <b>Koruma → Telegram Merkezi → Kurulum</b>: Bekçi, Destek ve Postçu rollerine bot ata, korunacak grupları ve gizli kayıt grubunu ekle.

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { canPanel } from '@/lib/admin-auth'
+import { canPanel, isPanelOwner } from '@/lib/admin-auth'
 import { logPanel } from '@/lib/panel-log'
 import { rejectCrossSite } from '@/lib/same-origin'
 import { addJob, assetsByIds, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
   if (problem) return NextResponse.json({ error: problem }, { status: 400 })
   // A revised sticker already carries its edge, so a second one is never drawn on top of it.
   const outline = kind === 'sticker' && !parent && body.outline !== false
-  const held = await holdBudget(retext ? 0 : imageCost(size))
+  const held = await holdBudget(retext ? 0 : imageCost(size), await isPanelOwner())
   if (held.error !== null) return NextResponse.json({ error: held.error }, { status: 409 })
   const hold = held.hold
 

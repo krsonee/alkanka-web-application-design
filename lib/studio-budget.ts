@@ -32,8 +32,9 @@ export type BudgetHold = { id: number | null; billed: boolean }
 /**
  * Sets the job's cost aside before it starts. Jobs asking at the same moment are answered one at a time
  * and each sees what the others set aside, so together they cannot pass the cap. A free job holds nothing.
+ * The refusal names the amounts only when `figures` is set: the cap and the spend are the owner account's to see.
  */
-export async function holdBudget(cost: number): Promise<{ hold: BudgetHold; error: null } | { hold: null; error: string }> {
+export async function holdBudget(cost: number, figures = false): Promise<{ hold: BudgetHold; error: null } | { hold: null; error: string }> {
   if (!(cost > 0)) return { hold: { id: null, billed: false }, error: null }
   try {
     await ensureStudio()
@@ -53,7 +54,9 @@ export async function holdBudget(cost: number): Promise<{ hold: BudgetHold; erro
         await client.query('ROLLBACK')
         return {
           hold: null,
-          error: `Bu üretim (~${usd(cost)}) Stüdyo'nun aylık tavanını aşıyor: bu ay ${usd(spent)} harcandı ya da şu an üretiliyor, tavan ${usd(cap)}. Tavanı ana yönetici Stüdyo ekranından değiştirebilir.`,
+          error: figures
+            ? `Bu üretim (~${usd(cost)}) Stüdyo'nun aylık tavanını aşıyor: bu ay ${usd(spent)} harcandı ya da şu an üretiliyor, tavan ${usd(cap)}. Tavanı Stüdyo ekranının sağ üstünden değiştirebilirsin.`
+            : `Bu üretim Stüdyo'nun aylık harcama sınırını aşıyor. Sınırı sadece ana yönetici görür ve değiştirir.`,
         }
       }
       const made = await client.query<{ id: string }>(`INSERT INTO studio_holds (cost) VALUES ($1) RETURNING id`, [cost])

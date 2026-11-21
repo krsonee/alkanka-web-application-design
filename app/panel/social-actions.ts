@@ -2,7 +2,7 @@
 
 import { logPanel, memberTag } from '@/lib/panel-log'
 import { revalidatePath } from 'next/cache'
-import { canPanel } from '@/lib/admin-auth'
+import { canPanel, isPanelOwner } from '@/lib/admin-auth'
 import {
   createSocialEvent,
   deleteSocialEvent,
@@ -42,8 +42,11 @@ export async function saveSocialLinksAction(links: SocialLinks): Promise<Result>
   }
 }
 
+const ownerOnly: Result = { ok: false, message: 'API anahtarlarını sadece ana yönetici görür ve değiştirir.' }
+
 export async function saveSocialApiAction(platform: SocialPlatform, fields: Record<string, string>): Promise<Result> {
   if (!(await canPanel('social'))) return denied
+  if (!(await isPanelOwner())) return ownerOnly
   try {
     const { saveSocialApi } = await import('@/lib/social-verify')
     await saveSocialApi(platform, fields)
@@ -57,6 +60,7 @@ export async function saveSocialApiAction(platform: SocialPlatform, fields: Reco
 
 export async function clearSocialApiAction(platform: SocialPlatform): Promise<Result> {
   if (!(await canPanel('social'))) return denied
+  if (!(await isPanelOwner())) return ownerOnly
   try {
     const { clearSocialApi } = await import('@/lib/social-verify')
     await clearSocialApi(platform)

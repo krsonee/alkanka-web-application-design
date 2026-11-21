@@ -287,7 +287,8 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
             Ücretler Vercel AI Gateway bakiyenden düşer. Üretim sunucuda yapıldığı için site ve panel kasmaz.
           </p>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Ana yönetici ekranın sağ üstünden aylık harcama tavanı koyabilir. Tavanın %80&apos;i dolunca uyarı çıkar, tavan dolunca ücretli üretim
+            Aylık harcama tavanını ve harcanan tutarı sadece ana yönetici görür; tavanı ekranın sağ üstünden o koyar. Diğer hesaplara yalnızca
+            tavan dolduğunda uyarı çıkar. Tavanın %80&apos;i dolunca uyarı çıkar, tavan dolunca ücretli üretim
             ay başına kadar kapanır; yazı güncelleme, ışık efektli GIF, sallanan sticker ve paket ikonu gibi ücretsiz işlemler çalışmaya devam eder. Sayaç liste
             fiyatlarından hesaplanan tahmindir, kesin tutar Vercel faturasında yazar.
           </p>
