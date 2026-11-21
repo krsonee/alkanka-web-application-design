@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { Crown, Gift } from 'lucide-react'
 import type { LeagueRow, LeagueScope, PaidPeriod } from '@/lib/predictions'
 import { prizeText, type Board, type PeriodKind, type Prize } from '@/lib/predictions-shared'
+import { plainClick } from '@/lib/plain-click'
+import { leaguePath } from '@/lib/record-links'
 import { cn } from '@/lib/utils'
 import { MemberRank } from '../kp/member-rank'
 
@@ -45,15 +47,22 @@ export function Standings({
   paid,
   boards,
   meId,
+  scope,
+  onScope,
+  boardId,
+  onBoard,
 }: {
   tables: Record<LeagueScope, LeagueRow[]>
   periods: Record<PeriodKind, PeriodView>
   paid: Partial<Record<PeriodKind, PaidPeriod>>
   boards: BoardView[]
   meId: string | null
+  /** The period and the special league on show live with the page, which also writes them to the address. */
+  scope: LeagueScope
+  onScope: (scope: LeagueScope) => void
+  boardId: number | null
+  onBoard: (id: number | null) => void
 }) {
-  const [scope, setScope] = useState<LeagueScope>('week')
-  const [boardId, setBoardId] = useState<number | null>(null)
   const [all, setAll] = useState(false)
   const board = boards.find((b) => b.id === boardId) ?? null
   const table = board ? board.table : tables[scope]
@@ -79,10 +88,7 @@ export function Standings({
             type="button"
             role="tab"
             aria-selected={!board && scope === s.id}
-            onClick={() => {
-              setScope(s.id)
-              setBoardId(null)
-            }}
+            onClick={() => onScope(s.id)}
             className={cn('h-8 rounded-md text-xs font-bold transition-colors', !board && scope === s.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
           >
             {s.label}
@@ -91,26 +97,32 @@ export function Standings({
       </div>
 
       {boards.length > 0 && (
-        <div role="group" aria-label="Özel ligler" className="flex flex-col gap-1.5">
+        <nav aria-label="Özel ligler" className="flex flex-col gap-1.5">
           <span className="text-xs font-semibold text-muted-foreground">Özel ligler</span>
           <div className="flex flex-wrap gap-1.5">
             {boards.map((b) => (
-              <button
+              <a
                 key={b.id}
-                type="button"
-                aria-pressed={board?.id === b.id}
-                onClick={() => setBoardId(board?.id === b.id ? null : b.id)}
+                href={leaguePath(b.id, b.name)}
+                aria-current={board?.id === b.id ? 'page' : undefined}
+                onClick={(e) => {
+                  if (!plainClick(e)) return
+                  e.preventDefault()
+                  onBoard(board?.id === b.id ? null : b.id)
+                }}
                 className={cn(
-                  'min-h-9 rounded-full border px-3 py-1 text-left text-xs font-semibold transition-colors',
+                  'flex min-h-9 items-center rounded-full border px-3 py-1 text-left text-xs font-semibold transition-colors',
                   board?.id === b.id ? 'border-primary bg-primary/15 text-primary' : 'border-border text-foreground hover:border-primary hover:text-primary',
                 )}
               >
-                {b.name}
-                {!b.open && <span className="font-normal text-muted-foreground"> · bitti</span>}
-              </button>
+                <span>
+                  {b.name}
+                  {!b.open && <span className="font-normal text-muted-foreground"> · bitti</span>}
+                </span>
+              </a>
             ))}
           </div>
-        </div>
+        </nav>
       )}
 
       {board && (

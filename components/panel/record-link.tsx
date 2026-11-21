@@ -22,7 +22,7 @@ type Note = { ok: boolean; text: string; url?: string }
 export function RecordLink({ kind, id, name, compact = false, className }: { kind: RecordKind; id: string | number; name: string; compact?: boolean; className?: string }) {
   const [pending, start] = useTransition()
   const [note, setNote] = useState<Note | null>(null)
-  const full = `${SITE_URL}${recordPath(kind, id)}`
+  const full = `${SITE_URL}${recordPath(kind, id, name)}`
 
   const copyFull = async () => {
     const done = await copy(full)

@@ -4,6 +4,7 @@ import { Events } from '@/components/alkanka/events'
 import { getMember, type Member } from '@/lib/member'
 import { getLeagueSettings, lastPaidPeriods, leagueTable, listLeagueMatches } from '@/lib/predictions'
 import { periodBounds, type Award, type PeriodKind } from '@/lib/predictions-shared'
+import { LEAGUE_SPORT_ADDRESS, LEAGUE_TABLE_ADDRESS, fromAddress } from '@/lib/record-links'
 import { GoalBoard } from './goal-board'
 import { League, type LeagueStart } from './league'
 import type { BoardView, PeriodView } from './standings'
@@ -12,10 +13,19 @@ export const leagueMember = cache(() => getMember())
 /** Read once per request: the page's title and the page itself ask for the same list. */
 export const leagueMatches = cache((userId: string | null) => listLeagueMatches(userId, { crowd: true }))
 
+/** Every special league, read once per request: a league's own page asks for the list twice. */
+export const allBoards = cache(async () => (await import('@/lib/prediction-boards')).listBoards())
+
 const STARTS: Record<string, LeagueStart> = { acik: 'open', bekleyen: 'waiting', sonuclanan: 'done', lig: 'league' }
 
-/** The prediction league as /tahminler shows it; `focus` opens one match, `tab` is the ?sekme= of a shared address. */
-export async function LeagueView({ focus, tab }: { focus?: number; tab?: string }) {
+/** What a shared address may ask for: `tab`, `table` and `sport` are its ?sekme=, ?tablo= and ?spor= words. */
+export type LeagueAddress = { tab?: string; table?: string; sport?: string }
+
+/**
+ * The prediction league as /tahminler shows it. `focus` opens one match; `league` is the league of a
+ * /tahminler/lig/... address, 0 for the general one.
+ */
+export async function LeagueView({ focus, league, tab, table, sport }: { focus?: number; league?: number } & LeagueAddress) {
   const member = await leagueMember()
   const [matches, week, month, all, settings, paid, awards, boards] = await Promise.all([
     leagueMatches(member?.id ?? null),
@@ -25,7 +35,7 @@ export async function LeagueView({ focus, tab }: { focus?: number; tab?: string 
     getLeagueSettings(),
     lastPaidPeriods().catch(() => ({})),
     member ? import('@/lib/prediction-awards').then((m) => m.myAwards(member.id)).catch(() => [] as Award[]) : ([] as Award[]),
-    specialLeagues(),
+    specialLeagues(league),
   ])
   const now = Date.now()
   // A match's own page shows that match; the goal events stay on the list page.
@@ -54,6 +64,9 @@ export async function LeagueView({ focus, tab }: { focus?: number; tab?: string 
         serverNow={now}
         focus={focus}
         start={tab ? STARTS[tab] : undefined}
+        league={league}
+        table={fromAddress(LEAGUE_TABLE_ADDRESS, table)}
+        sport={fromAddress(LEAGUE_SPORT_ADDRESS, sport)}
       />
     </>
   )
@@ -64,11 +77,17 @@ const BOARDS_SHOWN = 8
 /** A closed league keeps its table and winners on the page for this long. */
 const BOARD_DAYS = 14
 
-/** Special leagues with a match in them, each with its own table. A failure here leaves the general league standing. */
-async function specialLeagues(): Promise<BoardView[]> {
+/**
+ * Special leagues with a match in them, each with its own table. `keep` is the league whose page is open:
+ * it is listed even when it is older or emptier than the rest. A failure here leaves the general league standing.
+ */
+async function specialLeagues(keep?: number): Promise<BoardView[]> {
   try {
-    const { boardTable, listBoards } = await import('@/lib/prediction-boards')
-    const boards = (await listBoards({ recentDays: BOARD_DAYS })).filter((b) => b.matches > 0).slice(0, BOARDS_SHOWN)
+    const [{ boardTable }, all] = await Promise.all([import('@/lib/prediction-boards'), allBoards()])
+    const cutoff = Date.now() - BOARD_DAYS * 86_400_000
+    const recent = all.filter((b) => b.matches > 0 && (b.open || (b.closedAt !== null && Date.parse(b.closedAt) > cutoff))).slice(0, BOARDS_SHOWN)
+    const kept = keep ? all.find((b) => b.id === keep) : undefined
+    const boards = kept && !recent.includes(kept) ? [kept, ...recent] : recent
     return Promise.all(boards.map(async (b) => ({ ...b, table: await boardTable(b.id) })))
   } catch (error) {
     console.error('[league] özel ligler okunamadı', (error as Error).message)
