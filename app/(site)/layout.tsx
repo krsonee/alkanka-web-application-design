@@ -114,7 +114,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
           <div className={CHROME_BAND}>
             <WinnersTicker />
           </div>
-          <main className="mx-auto flex max-w-screen-2xl flex-col gap-10 px-4 py-5 pb-24 lg:px-6 lg:pb-5">
+          <main className="mx-auto flex max-w-screen-2xl flex-col gap-10 px-4 py-5 pb-[calc(6rem+var(--app-banner-h,0px))] lg:px-6 lg:pb-[calc(1.25rem+var(--app-banner-h,0px))]">
             <TournamentMatchBanner />
             {boosts.length > 0 && (
               <div className={CHROME_BAND}>

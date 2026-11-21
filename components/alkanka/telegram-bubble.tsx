@@ -41,7 +41,7 @@ export function TelegramBubble() {
   if (onGameTable) return null
 
   return (
-    <div className="fixed right-3 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-40 flex items-end gap-2 lg:hidden">
+    <div className="fixed right-3 bottom-[calc(5.25rem+env(safe-area-inset-bottom)+var(--app-banner-h,0px))] z-40 flex items-end gap-2 lg:hidden">
       {peek && (
         <button
           type="button"

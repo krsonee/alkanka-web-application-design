@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { BellRing, CheckCircle2, Download, X } from 'lucide-react'
@@ -9,15 +9,20 @@ import { dismissReminder, getPushReminder } from '@/app/actions/app'
 import { JakoAvatar } from '../jako'
 import { usePoints } from '../points-context'
 import { usePwa } from './pwa-provider'
-import { TOUR_DONE_EVENT, TOUR_KEY } from './site-tour'
+import { TOUR_DONE_EVENT, TOUR_KEY, useTourOpen } from './site-tour'
 
 const BANNER_KEY = 'alk_app_banner_hidden_until'
 const HIDE_FOR_MS = 3 * 24 * 60 * 60 * 1000
+/** Read by the page's bottom padding in the site layout. */
+const BANNER_SPACE_VAR = '--app-banner-h'
+const BANNER_GAP = 12
 
 function InstallBanner() {
   const { ready, standalone, platform, canPrompt, promptInstall, installBonus, pushBonus } = usePwa()
   const pathname = usePathname()
+  const touring = useTourOpen()
   const [visible, setVisible] = useState(false)
+  const barRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!ready || standalone) return
@@ -35,7 +40,24 @@ function InstallBanner() {
     }
   }, [ready, standalone])
 
-  if (!visible || standalone || pathname === '/uygulama' || pathname?.startsWith('/oyunlar/')) return null
+  const shown = visible && !standalone && !touring && pathname !== '/uygulama' && !pathname?.startsWith('/oyunlar/')
+
+  // The page keeps this much room at its foot, so nothing stays out of reach underneath the banner.
+  useEffect(() => {
+    const bar = barRef.current
+    if (!shown || !bar) return
+    const root = document.documentElement
+    const publish = () => root.style.setProperty(BANNER_SPACE_VAR, `${bar.offsetHeight + BANNER_GAP}px`)
+    publish()
+    const observer = new ResizeObserver(publish)
+    observer.observe(bar)
+    return () => {
+      observer.disconnect()
+      root.style.removeProperty(BANNER_SPACE_VAR)
+    }
+  }, [shown])
+
+  if (!shown) return null
 
   const dismiss = () => {
     localStorage.setItem(BANNER_KEY, String(Date.now() + HIDE_FOR_MS))
@@ -44,22 +66,23 @@ function InstallBanner() {
 
   return (
     <div
+      ref={barRef}
       role="region"
       aria-label="Mobil uygulama"
-      className="fixed inset-x-3 bottom-20 z-40 animate-in fade-in slide-in-from-bottom-4 duration-500 sm:left-auto sm:right-6 sm:bottom-6 sm:w-96 lg:right-[21.5rem] xl:right-[21.5rem]"
+      className="fixed inset-x-3 bottom-20 z-40 animate-in fade-in slide-in-from-bottom-4 duration-500 sm:left-auto sm:right-6 sm:w-96 lg:right-0 lg:bottom-0 lg:left-[var(--sidebar-w)] lg:w-auto xl:right-80"
     >
-      <div className="flex items-start gap-3 rounded-2xl border border-primary/40 bg-card p-3 shadow-2xl sm:p-4">
+      <div className="flex items-start gap-3 rounded-2xl border border-primary/40 bg-card p-3 shadow-2xl sm:p-4 lg:items-center lg:rounded-none lg:border-x-0 lg:border-b-0 lg:px-6 lg:py-2">
         <span className="hidden sm:block">
-          <JakoAvatar pose="duyuru" size="sm" />
+          <JakoAvatar pose="duyuru" size="sm" className="lg:size-10" />
         </span>
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-0.5">
+        <div className="flex min-w-0 flex-1 flex-col gap-2 lg:flex-row lg:items-center lg:gap-4">
+          <div className="flex min-w-0 flex-col gap-0.5 lg:flex-1">
             <p className="text-sm font-bold text-foreground">Uygulamayı kur, +{installBonus + pushBonus} KC kap</p>
-            <p className="hidden text-pretty text-xs leading-relaxed text-muted-foreground sm:block">
+            <p className="hidden text-pretty text-xs leading-relaxed text-muted-foreground sm:block lg:truncate">
               Ana ekrana ekle +{installBonus} KC, bildirimleri aç +{pushBonus} KC. Turnuva ve promo kodları ilk sen duy.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             {canPrompt && platform !== 'ios' ? (
               <button
                 type="button"

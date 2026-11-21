@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { ArrowLeft, ArrowRight, Coins, Compass, Eye, Loader2, Menu, X } from 'lucide-react'
@@ -29,6 +29,31 @@ export const TOUR_DONE_EVENT = 'alk:tour-done'
 const TOUR_CLAIM_KEY = 'alk_tour_claim'
 const TRACK_URL = '/api/tour/track'
 const GAP = 12
+
+let tourOpen = false
+const tourWatchers = new Set<() => void>()
+
+function setTourOpen(open: boolean) {
+  if (tourOpen === open) return
+  tourOpen = open
+  tourWatchers.forEach((notify) => notify())
+}
+
+function watchTour(notify: () => void) {
+  tourWatchers.add(notify)
+  return () => {
+    tourWatchers.delete(notify)
+  }
+}
+
+/** True while the tour is on screen, so other prompts wait their turn instead of stacking up behind it. */
+export function useTourOpen() {
+  return useSyncExternalStore(
+    watchTour,
+    () => tourOpen,
+    () => false,
+  )
+}
 
 type Result = { tone: 'ok' | 'info' | 'error'; text: string }
 type RunStep = TourStep & { at: TourScreen }
@@ -112,7 +137,9 @@ export function SiteTour({ settings }: { settings: TourSettings }) {
   const running = useRef(false)
   useEffect(() => {
     running.current = run !== null
+    setTourOpen(run !== null)
   }, [run])
+  useEffect(() => () => setTourOpen(false), [])
 
   const begin = useCallback((audience: TourAudience, source: TourSettings, preview: boolean) => {
     const steps = tourSteps(source, audience).map((s) => ({ ...s, at: tourScreen(s.screen) }))
@@ -162,7 +189,9 @@ export function SiteTour({ settings }: { settings: TourSettings }) {
     if (!member) {
       if (run.reward > 0) localStorage.setItem(TOUR_CLAIM_KEY, '1')
       close()
-      requireLogin()
+      // The button says "Kayıt ol", so it opens the sign-up tab. With the session still unknown, requireLogin re-checks it first.
+      if (loading) requireLogin()
+      else window.location.hash = 'kayit'
       return
     }
     if (run.reward <= 0) return close()
@@ -189,7 +218,7 @@ export function SiteTour({ settings }: { settings: TourSettings }) {
     } else {
       setResult({ tone: 'error', text: ('message' in res && res.message) || 'Bir şeyler ters gitti, tekrar dene.' })
     }
-  }, [run, member, settings.version, report, close, requireLogin, setBalance])
+  }, [run, member, loading, settings.version, report, close, requireLogin, setBalance])
 
   useEffect(() => {
     if (!settings.enabled) return

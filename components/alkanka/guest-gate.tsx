@@ -8,6 +8,7 @@ import { Award, Gift, LogIn, Sparkles, Trophy, UserPlus, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePoints } from './points-context'
 import { isGuestTrialPath } from '@/lib/guest-trial'
+import { useTourOpen } from './app/site-tour'
 
 const PREVIEW_SECONDS = 5
 const SOFT_PROMPT_SECONDS = 25
@@ -32,15 +33,17 @@ export function GuestGate() {
   const { member, loading } = usePoints()
   const [remaining, setRemaining] = useState(PREVIEW_SECONDS)
   const [dismissed, setDismissed] = useState(false)
+  const touring = useTourOpen()
 
   // Trial game pages stay open: the guest plays one hand first and meets the membership prompt at the result.
-  const isGuest = !loading && !member && !OPEN_PAGES.includes(pathname) && !isGuestTrialPath(pathname)
+  // The site tour walks a guest through member-only pages, so the prompt waits until the tour is over.
+  const isGuest = !loading && !member && !touring && !OPEN_PAGES.includes(pathname) && !isGuestTrialPath(pathname)
   // The game list is browsable, so a guest can reach a trial game; it only gets the dismissable prompt.
   const hard = isMemberOnly(pathname) && pathname !== '/oyunlar'
 
   useEffect(() => {
     setRemaining(hard ? PREVIEW_SECONDS : SOFT_PROMPT_SECONDS)
-  }, [pathname, hard])
+  }, [pathname, hard, touring])
 
   useEffect(() => {
     if (sessionStorage.getItem(DISMISS_KEY)) setDismissed(true)
@@ -73,7 +76,7 @@ export function GuestGate() {
   if (!locked) {
     if (!hard || remaining <= 0) return null
     return (
-      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(9rem+env(safe-area-inset-bottom))] z-30 flex justify-center px-4 lg:bottom-6 lg:left-[var(--sidebar-w)] xl:right-80">
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(9rem+env(safe-area-inset-bottom)+var(--app-banner-h,0px))] z-30 flex justify-center px-4 lg:bottom-[calc(1.5rem+var(--app-banner-h,0px))] lg:left-[var(--sidebar-w)] xl:right-80">
         <p className="flex items-center gap-2 rounded-full border border-primary/30 bg-card/95 px-4 py-2 text-xs font-semibold text-foreground shadow-lg backdrop-blur">
           <Sparkles className="size-3.5 text-primary" aria-hidden="true" />
           Önizleme modu · {remaining} sn sonra üyelik gerekli
@@ -91,7 +94,7 @@ export function GuestGate() {
         'fixed z-30 flex justify-center px-4',
         hard
           ? 'inset-x-0 top-16 bottom-0 items-center bg-background/70 backdrop-blur-md lg:left-[var(--sidebar-w)] xl:right-80'
-          : 'inset-x-0 bottom-20 lg:bottom-6 lg:left-[var(--sidebar-w)] xl:right-80',
+          : 'inset-x-0 bottom-[calc(5rem+var(--app-banner-h,0px))] lg:bottom-[calc(1.5rem+var(--app-banner-h,0px))] lg:left-[var(--sidebar-w)] xl:right-80',
       )}
     >
       <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-primary/30 bg-card shadow-2xl animate-pop">
