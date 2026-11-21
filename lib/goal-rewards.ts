@@ -471,6 +471,28 @@ export async function submitGoalCoupon(user: { id: string; name: string }, match
   return mine ? 'updated' : 'saved'
 }
 
+/**
+ * A member has one account at a sponsor. When they correct it, the requests staff has not looked at yet
+ * follow the new username, so one member never shows up under several names; a checked request keeps the
+ * username staff judged it with.
+ */
+export async function followSponsorAccount(userId: string, siteSlug: string, username: string) {
+  await ensureGoal()
+  await rows(sql`UPDATE goal_picks p SET site_username = ${username}
+    FROM goal_matches m JOIN goal_events e ON e.id = m.event_id
+    WHERE m.id = p.match_id AND p.user_id = ${userId} AND p.approval = 'pending' AND p.coupon IS NOT NULL
+      AND e.category = 'sponsor' AND e.site_slug = ${siteSlug} AND p.site_username IS DISTINCT FROM ${username}`)
+}
+
+/** How many coupon requests of the member at this sponsor staff has not checked yet. */
+export async function openSponsorRequests(userId: string, siteSlug: string) {
+  await ensureGoal()
+  const [r] = await rows(sql`SELECT count(*) AS n FROM goal_picks p JOIN goal_matches m ON m.id = p.match_id JOIN goal_events e ON e.id = m.event_id
+    WHERE p.user_id = ${userId} AND p.approval = 'pending' AND p.coupon IS NOT NULL AND m.status <> 'void'
+      AND e.category = 'sponsor' AND e.site_slug = ${siteSlug}`)
+  return Number(r?.n ?? 0)
+}
+
 // --- Scoring and paying --------------------------------------------------
 
 /**
@@ -634,6 +656,13 @@ export async function goalPicks(matchId: number, limit = 2000): Promise<{ event:
             WHERE p2.user_id = p.user_id AND e2.category = 'sponsor' AND p2.approval = 'rejected') AS invalid
         FROM goal_picks p LEFT JOIN goal_flags f ON f.user_id = p.user_id WHERE p.match_id = ${key} ORDER BY p.created_at ASC LIMIT ${limit}`)
     : await rows(sql`SELECT p.* FROM goal_picks p WHERE p.match_id = ${key} ORDER BY p.created_at ASC LIMIT ${limit}`)
+  // Staff sees next to each request which account the member has linked right now and whether it is approved.
+  const linked = new Map<string, { username: string; status: GoalApproval }>()
+  if (sponsor && e.site_slug && picks.length > 0) {
+    const { sponsorAccountsOf } = await import('@/lib/growth')
+    const found = await sponsorAccountsOf(String(e.site_slug), picks.map((p) => String(p.user_id))).catch(() => [])
+    for (const a of found) linked.set(a.userId, { username: a.username, status: a.status })
+  }
   return {
     event: eventOf(e),
     match: { ...matchOf(m), picks: picks.length },
@@ -642,6 +671,7 @@ export async function goalPicks(matchId: number, limit = 2000): Promise<{ event:
       userName: String(p.user_name),
       side: sideOf(p.side),
       siteUsername: str(p.site_username),
+      accountNow: linked.get(String(p.user_id)) ?? null,
       coupon: str(p.coupon),
       approval: isGoalApproval(p.approval) ? p.approval : 'pending',
       rejectReason: str(p.reject_reason),

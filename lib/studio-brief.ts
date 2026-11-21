@@ -1,4 +1,4 @@
-import type { StudioAsset, StudioTexts } from '@/lib/studio-types'
+import { STUDIO_TEXT_CEILING, type StudioAsset, type StudioTexts } from '@/lib/studio-types'
 
 /** The four jobs of the Studio. Each has its own form; `gif` and `video` animate a banner. */
 export type StudioFlow = 'banner' | 'gif' | 'video' | 'sticker'
@@ -48,8 +48,15 @@ export type Brief = {
 }
 export type Motion = { action: string; camera: CameraId }
 
-export const BRIEF_LIMITS = { subject: 300, scene: 300, character: 300, colors: 120, caption: 40 } as const
-export const MOTION_LIMIT = 400
+// Staff writes as much detail as the job needs; the only bound is the technical ceiling shared by all Studio fields.
+export const BRIEF_LIMITS = {
+  subject: STUDIO_TEXT_CEILING,
+  scene: STUDIO_TEXT_CEILING,
+  character: STUDIO_TEXT_CEILING,
+  colors: STUDIO_TEXT_CEILING,
+  caption: STUDIO_TEXT_CEILING,
+} as const
+export const MOTION_LIMIT = STUDIO_TEXT_CEILING
 export const SUBJECT_MIN = 5
 
 export const EMPTY_BRIEF: Brief = { subject: '', scene: '', character: '', style: 'auto', colors: '', caption: '' }

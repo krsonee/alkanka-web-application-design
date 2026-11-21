@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { canPanel } from '@/lib/admin-auth'
+import { canPanel, isPanelOwner } from '@/lib/admin-auth'
 import { logPanel } from '@/lib/panel-log'
 import { rejectCrossSite } from '@/lib/same-origin'
 import { addJob, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
         : mode === 'tgmotion'
           ? STICKER_MOTION_COST
           : 0
-  const held = await holdBudget(paid)
+  const held = await holdBudget(paid, await isPanelOwner())
   if (held.error !== null) return NextResponse.json({ error: held.error }, { status: 409 })
   const hold = held.hold
   const onBilled = () => {

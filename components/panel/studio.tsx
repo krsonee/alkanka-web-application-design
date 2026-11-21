@@ -59,7 +59,6 @@ import {
   STICKER_MOTION_COST,
   STUDIO_CATEGORIES,
   STUDIO_FORMATS,
-  TEXT_LIMITS,
   videoCost,
   type ImageSize,
   type MotionQuality,
@@ -86,8 +85,11 @@ type Props = {
   totals: StudioAreaTotal[]
   /** The brand area named in the address, if any. */
   initialArea?: string
-  spend: { total: number; month: number; count: number }
-  budget: { cap: number | null; canEdit: boolean }
+  /** Spend and cap are sent to the owner account only; everyone else gets `null`. */
+  spend: { total: number; month: number; count: number } | null
+  budget: { cap: number | null; canEdit: boolean } | null
+  /** This month's cap is used up. The one thing about the cap an account without the figures is told. */
+  capFull: boolean
   /** The account may also open the Slider section, so a banner can be sent there. */
   canSlide: boolean
 }
@@ -101,7 +103,7 @@ const primaryBtn =
 const ghostBtn =
   'flex items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary disabled:opacity-50'
 
-function BudgetMeter({ spend, budget }: Pick<Props, 'spend' | 'budget'>) {
+function BudgetMeter({ spend, budget }: { spend: NonNullable<Props['spend']>; budget: NonNullable<Props['budget']> }) {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState('')
@@ -192,7 +194,7 @@ function BudgetMeter({ spend, budget }: Pick<Props, 'spend' | 'budget'>) {
   )
 }
 
-export function Studio({ brands, assets, jobs, totals, initialArea, spend, budget, canSlide }: Props) {
+export function Studio({ brands, assets, jobs, totals, initialArea, spend, budget, capFull, canSlide }: Props) {
   const [view, setView] = useState<StudioView>(brands.length ? 'create' : 'guide')
   const [picked, setPicked] = useState<StudioArea>(() => startArea(initialArea, brands))
   // A brand kit deleted while its area is open falls back to the first brand.
@@ -201,7 +203,9 @@ export function Studio({ brands, assets, jobs, totals, initialArea, spend, budge
     setPicked(next)
     writeArea(next)
   }
-  const { left } = budgetState(spend.month, budget.cap)
+  const figures = spend && budget ? { spend, budget } : null
+  // Without the figures the screen only knows whether the cap is used up; the server refuses anything over it.
+  const left = figures ? budgetState(figures.spend.month, figures.budget.cap).left : capFull ? 0 : null
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -229,7 +233,13 @@ export function Studio({ brands, assets, jobs, totals, initialArea, spend, budge
             </button>
           ))}
         </div>
-        <BudgetMeter spend={spend} budget={budget} />
+        {figures ? (
+          <BudgetMeter spend={figures.spend} budget={figures.budget} />
+        ) : capFull ? (
+          <p role="status" className="min-w-0 text-pretty text-sm font-semibold text-destructive sm:ml-auto sm:max-w-sm sm:text-right">
+            Bu ayın harcama sınırı doldu. Ücretli üretim ay başına kadar kapalı; ücretsiz işlemler çalışır.
+          </p>
+        ) : null}
       </div>
       {view === 'guide' ? (
         <StudioGuide onNavigate={setView} />
@@ -237,7 +247,7 @@ export function Studio({ brands, assets, jobs, totals, initialArea, spend, budge
         <StudioHint section={view} onOpenGuide={() => setView('guide')} />
       )}
       {view === 'create' ? (
-        <Creator brands={brands} assets={assets} jobs={jobs} totals={totals} area={area} onArea={pickArea} left={left} canSlide={canSlide} />
+        <Creator brands={brands} assets={assets} jobs={jobs} totals={totals} area={area} onArea={pickArea} left={left} figures={Boolean(figures)} canSlide={canSlide} />
       ) : view === 'brands' ? (
         <BrandKits brands={brands} />
       ) : view === 'library' ? (
@@ -255,8 +265,11 @@ function Creator({
   area: brandId,
   onArea,
   left,
+  figures,
   canSlide,
 }: Pick<Props, 'brands' | 'assets' | 'jobs' | 'totals' | 'canSlide'> & {
+  /** The account sees the cap and what is left of it. */
+  figures: boolean
   /** The brand whose area is open; the form makes new work for it and the list shows only its jobs. */
   area: StudioArea
   onArea: (area: StudioArea) => void
@@ -666,7 +679,7 @@ function Creator({
           {running + videoRuns > 0 ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
           {running + videoRuns > 0 ? `Üretiliyor (${running + videoRuns})...` : `Üret · ~${usd(plannedCost)}`}
         </button>
-        {overCap(plannedCost) ? <CapNote cost={plannedCost} left={left} /> : null}
+        {overCap(plannedCost) ? <CapNote cost={plannedCost} left={figures ? left : null} /> : null}
         {error ? (
           <p role="alert" className="text-sm text-destructive">
             {error}
@@ -711,7 +724,7 @@ function Creator({
                 Vazgeç
               </button>
             </div>
-            {overCap(revisionCost) ? <CapNote cost={revisionCost} left={left} /> : null}
+            {overCap(revisionCost) ? <CapNote cost={revisionCost} left={figures ? left : null} /> : null}
           </div>
         ) : null}
 
@@ -772,7 +785,7 @@ function Creator({
                 Vazgeç
               </button>
             </div>
-            {overCap(animCost) ? <CapNote cost={animCost} left={left} /> : null}
+            {overCap(animCost) ? <CapNote cost={animCost} left={figures ? left : null} /> : null}
           </div>
         ) : null}
 
@@ -833,7 +846,9 @@ function Creator({
 function CapNote({ cost, left }: { cost: number; left: number | null }) {
   return (
     <p role="status" className="text-pretty text-sm text-destructive">
-      {`Bu iş (~${usd(cost)}) aylık tavandan kalan ${usd(left ?? 0)} tutarını aşıyor. Tavanı ana yönetici yukarıdan değiştirebilir.`}
+      {left == null
+        ? 'Bu iş bu ayın harcama sınırını aşıyor. Sınırı sadece ana yönetici görür ve değiştirir.'
+        : `Bu iş (~${usd(cost)}) aylık tavandan kalan ${usd(left)} tutarını aşıyor. Tavanı yukarıdan değiştirebilirsin.`}
     </p>
   )
 }
@@ -863,7 +878,6 @@ function TextFields({ value, onChange }: { value: StudioTexts; onChange: (texts:
           <input
             value={value[field.key]}
             onChange={(e) => onChange({ ...value, [field.key]: e.target.value })}
-            maxLength={TEXT_LIMITS[field.key]}
             placeholder={field.placeholder}
             className={input}
           />
@@ -1190,11 +1204,11 @@ function BrandKits({ brands }: { brands: StudioBrand[] }) {
         <div className="grid gap-3 md:grid-cols-2">
           <label className={label}>
             Marka adı
-            <input value={draft.name} onChange={(e) => set({ name: e.target.value })} maxLength={60} className={input} />
+            <input value={draft.name} onChange={(e) => set({ name: e.target.value })} className={input} />
           </label>
           <label className={label}>
             Font
-            <input value={draft.font} onChange={(e) => set({ font: e.target.value })} maxLength={60} placeholder="Montserrat" className={input} />
+            <input value={draft.font} onChange={(e) => set({ font: e.target.value })} placeholder="Montserrat" className={input} />
           </label>
         </div>
         <div className="flex flex-col gap-1.5">
@@ -1293,8 +1307,7 @@ function BrandKits({ brands }: { brands: StudioBrand[] }) {
           <textarea
             value={draft.notes}
             onChange={(e) => set({ notes: e.target.value })}
-            rows={2}
-            maxLength={600}
+            rows={4}
             placeholder="Örn: koyu lacivert zemin, altın vurgular, aslan maskotu"
             className={cn(input, 'resize-y')}
           />

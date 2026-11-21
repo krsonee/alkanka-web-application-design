@@ -25,7 +25,12 @@ export const TELEGRAM_LIMITS = {
 export type StudioTexts = { headline: string; subline: string; cta: string }
 
 export const EMPTY_TEXTS: StudioTexts = { headline: '', subline: '', cta: '' }
-export const TEXT_LIMITS: Record<keyof StudioTexts, number> = { headline: 60, subline: 110, cta: 28 }
+/**
+ * Not a writing limit: Studio fields take as much detail as staff wants to give. This is only the size
+ * past which a single field stops being a description and the request itself becomes unreasonable.
+ */
+export const STUDIO_TEXT_CEILING = 20_000
+export const TEXT_LIMITS: Record<keyof StudioTexts, number> = { headline: STUDIO_TEXT_CEILING, subline: STUDIO_TEXT_CEILING, cta: STUDIO_TEXT_CEILING }
 
 const tidy = (value: unknown, max: number) => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : '')
 

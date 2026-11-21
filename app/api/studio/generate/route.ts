@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { canPanel } from '@/lib/admin-auth'
+import { canPanel, isPanelOwner } from '@/lib/admin-auth'
 import { logPanel } from '@/lib/panel-log'
 import { rejectCrossSite } from '@/lib/same-origin'
 import { addJob, assetsByIds, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
@@ -7,7 +7,7 @@ import { briefLabel, briefProblem, briefText, cleanBrief } from '@/lib/studio-br
 import { closeHold, holdBudget } from '@/lib/studio-budget'
 import { runGeneration } from '@/lib/studio-generate'
 import { applyOverlay, brushOf } from '@/lib/studio-overlay'
-import { cleanTexts, imageCost, STUDIO_CATEGORIES, STUDIO_FORMATS, toImageSize, type StudioTexts } from '@/lib/studio-types'
+import { cleanTexts, imageCost, STUDIO_CATEGORIES, STUDIO_TEXT_CEILING, STUDIO_FORMATS, toImageSize, type StudioTexts } from '@/lib/studio-types'
 
 export const maxDuration = 300
 
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
   const category = STUDIO_CATEGORIES.find((c) => c === body.category) ?? STUDIO_CATEGORIES[0]
   // New pictures come from the form's fields; a revision is a free instruction about one picture.
   const brief = body.brief && typeof body.brief === 'object' ? cleanBrief(body.brief) : null
-  const prompt = brief ? briefText(brief) : String(body.prompt ?? '').trim().slice(0, 1500)
+  const prompt = brief ? briefText(brief) : String(body.prompt ?? '').trim().slice(0, STUDIO_TEXT_CEILING)
 
   const brandId = Number.parseInt(String(body.brandId ?? ''), 10)
   const brand = Number.isFinite(brandId) ? await getBrand(brandId) : null
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
   if (problem) return NextResponse.json({ error: problem }, { status: 400 })
   // A revised sticker already carries its edge, so a second one is never drawn on top of it.
   const outline = kind === 'sticker' && !parent && body.outline !== false
-  const held = await holdBudget(retext ? 0 : imageCost(size))
+  const held = await holdBudget(retext ? 0 : imageCost(size), await isPanelOwner())
   if (held.error !== null) return NextResponse.json({ error: held.error }, { status: 409 })
   const hold = held.hold
 

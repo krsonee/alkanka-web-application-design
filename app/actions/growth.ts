@@ -27,6 +27,7 @@ export async function linkSponsorAccountAction(siteId: string, username: string)
   try {
     await linkSponsorAccount(member.id, siteId, username)
     revalidatePath('/profil')
+    revalidatePath('/tahminler')
     return { ok: true, message: 'Hesap gönderildi. Onaylanınca çevrim sıralamasında görünürsün.' }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Hesap bağlanamadı.' }
@@ -36,7 +37,12 @@ export async function linkSponsorAccountAction(siteId: string, username: string)
 export async function removeSponsorAccountAction(siteId: string): Promise<ActionResult> {
   const member = await getMember()
   if (!member) return { ok: false, error: 'Giriş yapmalısın.' }
-  await removeSponsorAccount(member.id, siteId)
+  try {
+    await removeSponsorAccount(member.id, siteId)
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Bağlantı kaldırılamadı.' }
+  }
   revalidatePath('/profil')
+  revalidatePath('/tahminler')
   return { ok: true, message: 'Bağlantı kaldırıldı.' }
 }

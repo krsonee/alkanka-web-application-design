@@ -257,7 +257,7 @@ export async function makeVideo({
   })
   onBilled?.()
   const clip = Buffer.from(video.uint8Array)
-  const overlay = brush ? await buildOverlay(art.width, art.height, brush) : null
+  const overlay = brush ? await buildOverlay(art.width, art.height, brush, image) : null
   return padded || overlay ? finishClip(clip, { width, height }, padded ? art : null, overlay) : clip
 }
 

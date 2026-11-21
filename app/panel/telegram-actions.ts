@@ -34,6 +34,8 @@ const errorText = (error: unknown) => String((error as Error).message ?? error)
 
 export async function addBotAction(_: ActionState, form: FormData): Promise<ActionState> {
   if (!(await canPanel('telegram'))) return EXPIRED
+  // A bot token is a password: only the owner account enters one.
+  if (!(await isPanelOwner())) return { message: 'Bot tokenını sadece ana yönetici ekleyebilir.' }
   try {
     const me = await addBot(String(form.get('token') ?? '').trim())
     revalidatePath('/panel')
@@ -187,7 +189,7 @@ export async function deleteSourceAction(form: FormData) {
 }
 
 export async function rotateCronKeyAction() {
-  if (!(await canPanel('telegram'))) return
+  if (!(await isPanelOwner())) return
   await getCronKey(true)
   await logPanel('telegram', 'Cron anahtarı yenilendi')
   revalidatePath('/panel')

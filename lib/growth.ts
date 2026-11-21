@@ -278,13 +278,33 @@ export async function linkSponsorAccount(userId: string, siteId: string, rawUser
   const taken = await rows(sql`SELECT 1 FROM sponsor_accounts WHERE site_id = ${siteId} AND lower(username) = lower(${username})
     AND user_id <> ${userId} AND status <> 'rejected'`)
   if (taken.length) throw new Error('Bu kullanıcı adı başka bir üyeye bağlı. Hata olduğunu düşünüyorsan şikâyet aç.')
+  // Sending the same approved username again changes nothing; only a different username goes back to staff.
   await rows(sql`INSERT INTO sponsor_accounts (user_id, site_id, username) VALUES (${userId}, ${siteId}, ${username})
-    ON CONFLICT (user_id, site_id) DO UPDATE SET username = EXCLUDED.username, status = 'pending', note = NULL, updated_at = now()`)
+    ON CONFLICT (user_id, site_id) DO UPDATE SET username = EXCLUDED.username,
+      status = CASE WHEN lower(sponsor_accounts.username) = lower(EXCLUDED.username) AND sponsor_accounts.status = 'approved' THEN 'approved' ELSE 'pending' END,
+      note = CASE WHEN lower(sponsor_accounts.username) = lower(EXCLUDED.username) AND sponsor_accounts.status = 'approved' THEN sponsor_accounts.note ELSE NULL END,
+      updated_at = now()`)
+  // Coupon requests still waiting for staff carry the member's one linked account, not the name it had before.
+  const { followSponsorAccount } = await import('@/lib/goal-rewards')
+  await followSponsorAccount(userId, siteId, username)
 }
 
 export async function removeSponsorAccount(userId: string, siteId: string) {
   await ensureGrowth()
+  const { openSponsorRequests } = await import('@/lib/goal-rewards')
+  if ((await openSponsorRequests(userId, siteId)) > 0) {
+    throw new Error('Bu sponsorda kontrol bekleyen kupon talebin var; talep sonuçlanana kadar hesap kaldırılamaz. Kullanıcı adın yanlışsa doğrusunu yazıp yeniden bağla.')
+  }
   await rows(sql`DELETE FROM sponsor_accounts WHERE user_id = ${userId} AND site_id = ${siteId}`)
+}
+
+/** The accounts these members linked at one sponsor; the panel shows them next to coupon requests. */
+export async function sponsorAccountsOf(siteId: string, userIds: string[]) {
+  if (userIds.length === 0) return []
+  await ensureGrowth()
+  const r = await rows(sql`SELECT * FROM sponsor_accounts WHERE site_id = ${siteId}
+    AND user_id IN (SELECT jsonb_array_elements_text(${JSON.stringify([...new Set(userIds)])}::jsonb))`)
+  return r.map(mapAccount)
 }
 
 export async function mySponsorAccounts(userId: string) {

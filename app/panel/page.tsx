@@ -76,6 +76,7 @@ import { listLeagueMatches } from '@/lib/predictions'
 import { siteOptions } from '@/lib/sites'
 import { listAssets, listBrands, listJobsByBrand, studioSpend } from '@/lib/studio'
 import { getStudioCap } from '@/lib/studio-budget'
+import { budgetState } from '@/lib/studio-types'
 import { KpManager } from '@/components/panel/kp-manager'
 import { BoostManager } from '@/components/panel/boost-manager'
 import { getBoostConfig } from '@/lib/boosts'
@@ -307,7 +308,11 @@ type TgShared = {
 }
 
 /** Bots, automations and channel settings: the tabs that need the setup permission, and the data only they use. */
-async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Promise<{ tabs: TgTab[]; chats: Array<{ chatId?: string | null; title?: string | null }> }> {
+async function telegramSetupTabs(
+  { bots, targets, suite, chat }: TgShared,
+  /** Only the owner account is sent the secret cron address. */
+  owner: boolean,
+): Promise<{ tabs: TgTab[]; chats: Array<{ chatId?: string | null; title?: string | null }> }> {
   const [oddsConfig, oddsStatus, oddsSources, oddsPage, oddsQueue, linkOptions] = await Promise.all([
     getOddsBotConfig().catch(miss(DEFAULT_ODDS_BOT)),
     oddsBotStatus().catch(miss(EMPTY_ODDS_STATUS)),
@@ -319,7 +324,7 @@ async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Prom
   const [sources, log, cronKey, invite, addresses, shareInfo, tgRules] = await Promise.all([
     listSources().catch(miss([])),
     listLog().catch(miss([])),
-    getCronKey().catch(miss('ANAHTAR')),
+    owner ? getCronKey().catch(miss('ANAHTAR')) : null,
     getInviteConfig().catch(miss(null)),
     getTelegramAddresses(TELEGRAM_URL).catch(miss(null)),
     shareStatus().catch(miss({ lastError: null, lastRunAt: null, shared: 0 })),
@@ -339,8 +344,8 @@ async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Prom
   ])
   const tgPromo = await getTelegramPromo().catch(miss(TELEGRAM_PROMO_DEFAULTS))
   const siteHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? 'siteadresin.com'
-  const cronUrl = `https://${siteHost}/api/cron/telegram?key=${cronKey}`
-  const tvCronUrl = `https://${siteHost}/api/cron/kankatv?key=${cronKey}`
+  const cronUrl = cronKey ? `https://${siteHost}/api/cron/telegram?key=${cronKey}` : null
+  const tvCronUrl = cronKey ? `https://${siteHost}/api/cron/kankatv?key=${cronKey}` : null
   return {
     chats: [
       { chatId: invite?.chatId, title: invite?.title },
@@ -417,7 +422,10 @@ async function telegramSetupTabs({ bots, targets, suite, chat }: TgShared): Prom
 /** One section for all three Telegram permissions; each tab is built only for an account that may use it. */
 async function telegramPanel(access: TelegramAccess) {
   const [bots, targets, suite, chat, savedHub] = await Promise.all([
-    listBots().catch(miss([])),
+    // The hint shows the bot's number and the token's last characters: the owner account's to see. A broken token is still named.
+    listBots()
+      .then((list) => (access.owner ? list : list.map((b) => ({ ...b, tokenHint: b.tokenHint.includes(':') ? '' : b.tokenHint }))))
+      .catch(miss([])),
     listTargets().catch(miss([])),
     getBotSuite().catch(miss(DEFAULT_SUITE)),
     chatStatus().catch(miss(null)),
@@ -437,7 +445,7 @@ async function telegramPanel(access: TelegramAccess) {
         return null
       })
     : null
-  const setup = access.setup ? await telegramSetupTabs({ bots, targets, suite, chat }) : { tabs: [], chats: [] }
+  const setup = access.setup ? await telegramSetupTabs({ bots, targets, suite, chat }, access.owner) : { tabs: [], chats: [] }
 
   const hub = hubData?.hub ?? savedHub
   const chats = uniqueChats([
@@ -911,9 +919,13 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         accounts={await adminSocialAccounts().catch(miss([]))}
         events={await listSocialEvents({ includeInactive: true }).catch(miss([]))}
         entries={await adminEntries().catch(miss([]))}
-        api={await import('@/lib/social-verify')
-          .then(async (m) => ({ summary: await m.socialApiSummary(), fields: m.API_FIELDS }))
-          .catch(miss(undefined))}
+        api={
+          session.isOwner
+            ? await import('@/lib/social-verify')
+                .then(async (m) => ({ summary: await m.socialApiSummary(), fields: m.API_FIELDS }))
+                .catch(miss(undefined))
+            : undefined
+        }
       />
     )),
     section(ctx, 'limits', 'Kısıtlamalar', async () => <LimitsManager limits={await listLimits().catch(miss([]))} />),
@@ -988,6 +1000,8 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     }),
     section(ctx, 'studio', 'Stüdyo', async () => {
       const board = await listJobsByBrand().catch(miss({ jobs: [], totals: [] }))
+      const spend = await studioSpend().catch(miss({ total: 0, month: 0, count: 0 }))
+      const cap = await getStudioCap().catch(miss(null))
       return (
         <Studio
           brands={await listBrands().catch(miss([]))}
@@ -995,8 +1009,9 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           jobs={board.jobs}
           totals={board.totals}
           initialArea={params.marka}
-          spend={await studioSpend().catch(miss({ total: 0, month: 0, count: 0 }))}
-          budget={{ cap: await getStudioCap().catch(miss(null)), canEdit: session.isOwner }}
+          spend={session.isOwner ? spend : null}
+          budget={session.isOwner ? { cap, canEdit: true } : null}
+          capFull={budgetState(spend.month, cap).level === 'full'}
           canSlide={can('slide')}
         />
       )

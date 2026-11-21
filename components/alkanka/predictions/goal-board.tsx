@@ -20,7 +20,7 @@ import {
 import { TR_ZONE_NOTE } from '@/lib/tr-time'
 import { cn } from '@/lib/utils'
 import { StatusLine, useAction } from '../community/use-action'
-import { CouponMatchCard, JoinMatchCard } from './goal-match'
+import { CouponMatchCard, JoinMatchCard, type CouponLock } from './goal-match'
 import { segmentCount, segmentItem, segmentTray } from './ui'
 
 /** What the two event kinds are called in the page's address. */
@@ -76,10 +76,9 @@ function RuleBox({ event }: { event: GoalEventView }) {
 }
 
 /** Sponsor events ask for the member's account at the sponsor; it is linked once and written onto every request. */
-function AccountBox({ event, account }: { event: GoalEventView; account: GoalMe['accounts'][string] | null }) {
+function AccountBox({ event, account, fieldId }: { event: GoalEventView; account: GoalMe['accounts'][string] | null; fieldId: string }) {
   const { pending, status, run } = useAction()
   const [username, setUsername] = useState('')
-  const fieldId = useId()
   const site = event.siteName ?? 'Sponsor'
   const slug = event.siteSlug
 
@@ -137,6 +136,9 @@ function EventBlock({ event, now, me }: { event: GoalEventView; now: number; me:
   const account = sponsor && event.siteSlug ? (me?.accounts[event.siteSlug] ?? null) : null
   const usable = account && account.status !== 'rejected' ? account.username : null
   const blocked = me?.flag?.state === 'blocked'
+  // The coupon field opens only for the account linked at this very sponsor; an account elsewhere does not count.
+  const lock: CouponLock | null = !me ? 'guest' : !account ? 'none' : account.status === 'rejected' ? 'rejected' : null
+  const linkFieldId = `gol-hesap-${event.id}`
   return (
     <section aria-label={event.title} className="flex flex-col gap-3">
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
@@ -154,11 +156,15 @@ function EventBlock({ event, now, me }: { event: GoalEventView; now: number; me:
           </dl>
         </div>
         <RuleBox event={event} />
-        {sponsor && me && !blocked && <AccountBox event={event} account={account} />}
+        {sponsor && me && !blocked && <AccountBox event={event} account={account} fieldId={linkFieldId} />}
       </div>
       <div className="grid items-start gap-3 @4xl:grid-cols-2">
         {ordered(event.matches, now).map((m) =>
-          sponsor ? <CouponMatchCard key={m.id} event={event} m={m} now={now} account={usable} blocked={blocked} /> : <JoinMatchCard key={m.id} event={event} m={m} now={now} />,
+          sponsor ? (
+            <CouponMatchCard key={m.id} event={event} m={m} now={now} account={usable} blocked={blocked} lock={lock} linkFieldId={linkFieldId} />
+          ) : (
+            <JoinMatchCard key={m.id} event={event} m={m} now={now} />
+          ),
         )}
       </div>
     </section>
