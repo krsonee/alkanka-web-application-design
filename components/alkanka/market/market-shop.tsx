@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import useSWR, { mutate as refreshShared } from 'swr'
-import { Clock, Coins, Star, Target } from 'lucide-react'
+import { Clock, Coins, Percent, Star, Target } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getMyMarketRequests } from '@/app/actions/market'
+import { getMyMarketDeals, getMyMarketRequests } from '@/app/actions/market'
 import type { MarketProduct } from '@/lib/market'
 import { productImage } from '@/lib/market-image'
-import { FEATURED_SLOTS, MARKET_CATEGORIES, isMarketCategory, rewardText, type MarketCategory } from '@/lib/market-shared'
+import { FEATURED_SLOTS, MARKET_CATEGORIES, dealShown, isMarketCategory, payable, rewardText, type MarketCategory } from '@/lib/market-shared'
 import { MARKET_KIND_PARAM } from '@/lib/record-links'
+import { TR_TZ } from '@/lib/tr-time'
 import { DetailModal } from '../detail-modal'
 import { JakoTip } from '../jako'
 import { formatAC, usePoints } from '../points-context'
@@ -37,11 +38,15 @@ const EMPTY_TEXT: Record<'sponsor' | 'alkanka', string> = {
   alkanka: 'Şu an site içi ödül yok. Yenileri eklendiğinde burada görünür.',
 }
 
+const kindCategory = (items: MarketProduct[]): MarketCategory => (items.some((i) => i.kind === 'sponsor') ? 'sponsor' : 'alkanka')
+
 function startCategory(items: MarketProduct[], kind: string | undefined, focus: MarketProduct | null): MarketCategory {
   if (isMarketCategory(kind)) return kind
   if (focus) return focus.kind
-  return items.some((i) => i.kind === 'sponsor') ? 'sponsor' : 'alkanka'
+  return kindCategory(items)
 }
+
+const saleEnd = (iso: string) => new Date(iso).toLocaleString('tr-TR', { timeZone: TR_TZ, day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
 
 export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; focus?: string; kind?: string }) {
   const { points, member, setBalance, requireLogin } = usePoints()
@@ -53,6 +58,7 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
   const [flash, setFlash] = useState<{ ok: boolean; text: string } | null>(null)
   const [stock, setStock] = useState<Record<string, number>>(() => Object.fromEntries(items.map((i) => [i.id, i.stock])))
   const { data: mine, mutate } = useSWR(member ? ['market-mine', member.id] : null, () => getMyMarketRequests())
+  const { data: doneTasks } = useSWR(member ? ['market-deals', member.id] : null, () => getMyMarketDeals())
 
   // Task rewards and the in-table theme picker still link to /market#masa-temalari from before themes had their own tab.
   useEffect(() => {
@@ -64,20 +70,31 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
   const signedIn = Boolean(member)
   const leftOf = (item: MarketProduct) => stock[item.id] ?? item.stock
   const usedOf = (item: MarketProduct) => (mine ?? []).filter((r) => r.itemId === item.id && r.status !== 'reddedildi').length
+  const taskDoneOf = (item: MarketProduct) => item.dealTaskId != null && (doneTasks ?? []).includes(item.dealTaskId)
+  const payOf = (item: MarketProduct) => payable(item, taskDoneOf(item))
   const cardProps = (item: MarketProduct) => ({
     item,
     left: leftOf(item),
     used: usedOf(item),
     points,
     signedIn,
+    pay: payOf(item),
+    taskDone: taskDoneOf(item),
     onBuy: () => start(item),
     onDetail: () => setDetail(item),
   })
 
+  const soldOutLast = (a: MarketProduct, b: MarketProduct) => Number(leftOf(a) <= 0) - Number(leftOf(b) <= 0)
   const featured = items.filter((i) => i.featured && leftOf(i) > 0).slice(0, FEATURED_SLOTS)
-  const inCategory = (id: 'sponsor' | 'alkanka') => items.filter((i) => i.kind === id).sort((a, b) => Number(leftOf(a) <= 0) - Number(leftOf(b) <= 0))
-  const counts: Partial<Record<MarketCategory, number>> = { sponsor: inCategory('sponsor').length, alkanka: inCategory('alkanka').length }
-  const reachable = items.filter((i) => leftOf(i) > 0 && points >= i.price).length
+  const inCategory = (id: 'sponsor' | 'alkanka') => items.filter((i) => i.kind === id).sort(soldOutLast)
+  const deals = items.filter((i) => dealShown(i, taskDoneOf(i))).sort(soldOutLast)
+  const counts: Partial<Record<MarketCategory, number>> = { firsat: deals.length, sponsor: inCategory('sponsor').length, alkanka: inCategory('alkanka').length }
+  const categories = MARKET_CATEGORIES.filter((c) => c.id !== 'firsat' || deals.length > 0)
+  // The deals tab disappears with its last product; a link that still points at it lands on a real category.
+  const shown: MarketCategory = category === 'firsat' && deals.length === 0 ? kindCategory(items) : category
+  const reachable = items.filter((i) => leftOf(i) > 0 && points >= payOf(i)).length
+  const sales = Array.from(new Map(items.flatMap((i) => (i.sale && leftOf(i) > 0 ? [[i.sale.id, i.sale] as const] : []))).values())
+  const onSale = (id: number) => items.filter((i) => i.sale?.id === id && leftOf(i) > 0).length
 
   function setCategory(next: MarketCategory) {
     setCategoryState(next)
@@ -105,7 +122,8 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
     void refreshShared('mini-status')
   }
 
-  const detailState = detail ? buyState(detail, leftOf(detail), usedOf(detail), points, signedIn) : null
+  const detailPay = detail ? payOf(detail) : 0
+  const detailState = detail ? buyState(detail, leftOf(detail), usedOf(detail), points, signedIn, detailPay) : null
 
   return (
     <section aria-label="Puan marketi" className="@container flex flex-col gap-6">
@@ -146,6 +164,22 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
         </div>
       </div>
 
+      {sales.length > 0 && (
+        <ul aria-label="Yayındaki indirimler" className="flex flex-col gap-2">
+          {sales.map((sale) => (
+            <li key={sale.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-primary/50 bg-primary/10 px-4 py-3">
+              <span className="flex items-center gap-2 font-display text-base font-bold text-foreground">
+                <Percent className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                {sale.name}
+              </span>
+              <span className="text-sm leading-relaxed text-muted-foreground text-pretty">
+                {`${onSale(sale.id)} üründe %${sale.pct} indirim. ${saleEnd(sale.endsAt)} tarihinde biter.`}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
       {flash && (
         <JakoTip pose={flash.ok ? 'kazandi' : 'uzgun'} title={flash.ok ? 'Tamamdır kanka' : 'Olmadı kanka'}>
           {flash.text}
@@ -168,18 +202,18 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
 
       <div className="flex flex-col gap-4">
         <div role="tablist" aria-label="Market kategorisi" className="flex max-w-full gap-1 self-start overflow-x-auto rounded-xl border border-border bg-card p-1 [scrollbar-width:none]">
-          {MARKET_CATEGORIES.map((c) => (
+          {categories.map((c) => (
             <button
               key={c.id}
               type="button"
               role="tab"
               id={`market-sekme-${c.id}`}
-              aria-selected={category === c.id}
+              aria-selected={shown === c.id}
               aria-controls="market-icerik"
               onClick={() => setCategory(c.id)}
               className={cn(
                 'whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-semibold',
-                category === c.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+                shown === c.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
               )}
             >
               {c.label}
@@ -197,23 +231,34 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
           ))}
         </div>
 
-        <div id="market-icerik" role="tabpanel" aria-labelledby={`market-sekme-${category}`} className="flex flex-col gap-4">
-          {category === 'tema' ? (
+        <div id="market-icerik" role="tabpanel" aria-labelledby={`market-sekme-${shown}`} className="flex flex-col gap-4">
+          {shown === 'tema' ? (
             <ThemeShop />
-          ) : category === 'avatar' ? (
+          ) : shown === 'avatar' ? (
             <LookShelf />
+          ) : shown === 'firsat' ? (
+            <>
+              <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
+                Bu ürünleri normal fiyatından da alabilirsin. Kartta yazan görevi tamamlarsan görev fiyatı kendiliğinden uygulanır; ayrıca bir şey yapmana gerek yok.
+              </p>
+              <ul className="grid grid-cols-2 gap-3 @2xl:grid-cols-3 @5xl:grid-cols-4">
+                {deals.map((item) => (
+                  <ProductCard key={item.id} {...cardProps(item)} />
+                ))}
+              </ul>
+            </>
           ) : (
             <>
-              {category === 'sponsor' && inCategory('sponsor').length > 0 && (
+              {shown === 'sponsor' && inCategory('sponsor').length > 0 && (
                 <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
                   Sponsor ödülleri sponsorun sitesindeki hesabına yüklenir. Talep ederken o sitedeki kullanıcı adını doğru yaz; ekip onaylayınca ödül oraya eklenir.
                 </p>
               )}
-              {inCategory(category).length === 0 ? (
-                <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">{EMPTY_TEXT[category]}</p>
+              {inCategory(shown).length === 0 ? (
+                <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">{EMPTY_TEXT[shown]}</p>
               ) : (
                 <ul className="grid grid-cols-2 gap-3 @2xl:grid-cols-3 @5xl:grid-cols-4">
-                  {inCategory(category).map((item) => (
+                  {inCategory(shown).map((item) => (
                     <ProductCard key={item.id} {...cardProps(item)} />
                   ))}
                 </ul>
@@ -253,7 +298,11 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
             image: productImage(detail),
             description: detail.description,
             facts: [
-              { label: 'Fiyat', value: `${formatAC(detail.price)} KC` },
+              { label: 'Fiyat', value: detailPay < detail.price ? `${formatAC(detailPay)} KC (normali ${formatAC(detail.price)} KC)` : `${formatAC(detail.price)} KC` },
+              ...(detail.sale ? [{ label: 'Kampanya', value: `${detail.sale.name} · %${detail.sale.pct} · ${saleEnd(detail.sale.endsAt)} tarihinde biter` }] : []),
+              ...(dealShown(detail, taskDoneOf(detail)) && detail.dealTask
+                ? [{ label: 'Görevle', value: `${formatAC(detail.dealPrice)} KC · ${detail.dealTask.title}${taskDoneOf(detail) ? ' (tamamladın)' : ''}` }]
+                : []),
               { label: 'Stok', value: `${leftOf(detail)}${detail.total ? ` / ${detail.total}` : ''}` },
               { label: 'Limit', value: `Kişi başı ${detail.perUser}` },
               {
@@ -280,7 +329,7 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
                   ? 'Sınırına ulaştın'
                   : detailState.kind === 'short'
                     ? `${formatAC(detailState.short)} KC eksik`
-                    : `${formatAC(detail.price)} KC ile ${buyLabel(detail).toLocaleLowerCase('tr')}`}
+                    : `${formatAC(detailPay)} KC ile ${buyLabel(detail).toLocaleLowerCase('tr')}`}
             </button>
           )
         }
@@ -289,6 +338,8 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
       {asking && (
         <RequestDialog
           item={asking}
+          pay={payOf(asking)}
+          taskDone={taskDoneOf(asking)}
           points={points}
           error={flash && !flash.ok ? flash.text : null}
           onClose={() => {

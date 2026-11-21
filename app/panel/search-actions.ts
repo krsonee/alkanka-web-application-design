@@ -98,6 +98,8 @@ const SETTINGS: ({ title: string; words?: string; query?: string; anyOf?: PanelM
   { title: 'Market stok uyarıları', words: 'stok azaldı bitti tükendi uyarı', row: 'market', query: 's=products' },
   { title: 'Ürün teslim şekli', words: 'otomatik teslim elle teslim ödül hesaba eklenir kc kp çark zar sandık seri kalkanı rozet', row: 'market', query: 's=products' },
   { title: 'Öne çıkan ürünler', words: 'öne çıkar vitrin market üstü yıldız sıralama sürükle', row: 'market', query: 's=products' },
+  { title: 'Market indirim kampanyaları', words: 'indirim kampanya yüzde başlangıç bitiş tarihi fiyat düşür üstü çizili', row: 'market', query: 's=sales' },
+  { title: 'Görevle indirimli ürün', words: 'görevi tamamla ucuza al şartlı koşullu fiyat görevli fırsatlar editörün seçimi', row: 'market', query: 's=products' },
   { title: 'Hazır cevaplar', words: 'hazır cevap red sebebi kalıp yorum şikayet', row: 'community', query: 's=reviews' },
   { title: 'Mini oyun beklenen günlük çıkış', words: 'beklenen coin çıkış tahmin günlük maliyet çark zar sandık', row: 'rewards' },
   { title: 'Personelin 2FA kaydını yenilet', words: '2fa yenile yeni barkod yeni yedek kod personel', row: 'staff' },

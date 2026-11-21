@@ -24,9 +24,11 @@ export function rewardText(reward: Reward, badgeName?: string | null) {
   return `+${reward.amount.toLocaleString('tr-TR')} ${rewardMeta(reward.kind).unit}`
 }
 
-export type MarketCategory = 'sponsor' | 'alkanka' | 'avatar' | 'tema'
+export type MarketCategory = 'firsat' | 'sponsor' | 'alkanka' | 'avatar' | 'tema'
 
+/** 'firsat' lists the products that are cheaper for members who finished a task; the site hides the tab while there are none. */
 export const MARKET_CATEGORIES: { id: MarketCategory; label: string }[] = [
+  { id: 'firsat', label: 'Görevli fırsatlar' },
   { id: 'sponsor', label: 'Sponsor ödülleri' },
   { id: 'alkanka', label: 'Site içi ödüller' },
   { id: 'avatar', label: 'Avatar & kapak' },
@@ -36,3 +38,78 @@ export const MARKET_CATEGORIES: { id: MarketCategory; label: string }[] = [
 export const isMarketCategory = (v: unknown): v is MarketCategory => MARKET_CATEGORIES.some((c) => c.id === v)
 
 export const FEATURED_SLOTS = 4
+
+// --- Discount campaigns and task prices ------------------------------------
+
+export type SaleScope = 'all' | 'alkanka' | 'sponsor' | 'items'
+
+export const SALE_SCOPES: { id: SaleScope; label: string; hint: string }[] = [
+  { id: 'all', label: 'Bütün ürünler', hint: 'Marketteki her ürün indirime girer.' },
+  { id: 'alkanka', label: 'Site içi ürünler', hint: 'Sadece site içi ürünler indirime girer.' },
+  { id: 'sponsor', label: 'Sponsor ödülleri', hint: 'Sadece sponsor ödülleri indirime girer.' },
+  { id: 'items', label: 'Seçtiğim ürünler', hint: 'Sadece aşağıda işaretlediğin ürünler indirime girer.' },
+]
+
+export const SALE_MIN_PCT = 1
+export const SALE_MAX_PCT = 90
+export const SALE_MAX_ITEMS = 500
+
+export type MarketSale = {
+  id: number
+  name: string
+  pct: number
+  startsAt: string
+  endsAt: string
+  scope: SaleScope
+  itemIds: string[]
+  active: boolean
+}
+
+/** `startsAt` and `endsAt` arrive as the panel's date fields hold them: Turkey time, "2026-11-21T20:00". */
+export type SaleInput = Omit<MarketSale, 'id'> & { id: number | null }
+
+export type SaleState = 'kapali' | 'bekliyor' | 'yayinda' | 'bitti'
+
+export function saleState(sale: Pick<MarketSale, 'active' | 'startsAt' | 'endsAt'>, now = Date.now()): SaleState {
+  if (Date.parse(sale.endsAt) <= now) return 'bitti'
+  if (!sale.active) return 'kapali'
+  return Date.parse(sale.startsAt) > now ? 'bekliyor' : 'yayinda'
+}
+
+type Priced = { id: string; kind: 'alkanka' | 'sponsor'; reward: Reward | null }
+
+/**
+ * A product that hands out Kanka Coin is never discounted: a cheaper price could drop below the coins
+ * it gives and turn the product into free money.
+ */
+export const givesCoin = (item: Pick<Priced, 'reward'>) => item.reward?.kind === 'kc'
+
+export function saleCovers(sale: Pick<MarketSale, 'scope' | 'itemIds'>, item: Priced) {
+  if (givesCoin(item)) return false
+  if (sale.scope === 'all') return true
+  if (sale.scope === 'items') return sale.itemIds.includes(item.id)
+  return sale.scope === item.kind
+}
+
+/** The campaign a product is sold under right now: of the ones running, the biggest discount. */
+export function bestSale<S extends MarketSale>(sales: S[], item: Priced, now = Date.now()): S | null {
+  let best: S | null = null
+  for (const sale of sales) {
+    if (saleState(sale, now) !== 'yayinda' || !saleCovers(sale, item)) continue
+    if (!best || sale.pct > best.pct) best = sale
+  }
+  return best
+}
+
+export const afterPct = (price: number, pct: number) => (pct > 0 ? Math.max(1, Math.floor((price * (100 - pct)) / 100)) : price)
+
+type Payable = { salePrice: number; dealTaskId: number | null; dealPrice: number; dealTask: { live: boolean } | null }
+
+/** Whether the task price is the cheaper way to buy this product, for a member who finished the task. */
+export const dealWins = (item: Payable) => Boolean(item.dealTaskId && item.dealTask && item.dealPrice > 0 && item.dealPrice < item.salePrice)
+
+/** What a member pays before any personal discount: the campaign price, or the task price when the task is done and cheaper. */
+export const payable = (item: Payable, taskDone: boolean) => (taskDone && dealWins(item) ? item.dealPrice : item.salePrice)
+
+/** A task price is shown to members who can still do the task, and to those who already did it. */
+export const dealShown = (item: Payable, taskDone: boolean) => dealWins(item) && (taskDone || Boolean(item.dealTask?.live))

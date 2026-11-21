@@ -112,7 +112,10 @@ import { istanbulToday } from '@/lib/sites-shared'
 import { TasksManager } from '@/components/panel/tasks-manager'
 import { FaqsManager } from '@/components/panel/faqs-manager'
 import { listFaqs } from '@/lib/faqs'
-import { listPendingClaims, listTasks } from '@/lib/tasks'
+import { isLiveTask, listPendingClaims, listTasks } from '@/lib/tasks'
+import { listSales } from '@/lib/market-sales'
+import { saleState, type MarketSale } from '@/lib/market-shared'
+import { MarketSales } from '@/components/panel/market-sales'
 import { EMPTY_PENDING, moderationTotal, pendingDetail, type PendingDetail } from '@/lib/panel-pending'
 import { ModerationQueue, type ModerationItem } from '@/components/panel/moderation-queue'
 
@@ -530,12 +533,16 @@ async function telegramSection({ session, active }: SectionCtx): Promise<ReactNo
 }
 
 async function marketPanel(themesHere: boolean) {
-  const [products, requests, sites, badgeList] = await Promise.all([
+  const [products, requests, sites, badgeList, sales, taskList] = await Promise.all([
     listProducts({ includeInactive: true }),
     listRequests(),
     listSites(),
     listSpecialBadges({ includeInactive: true }).catch(miss([])),
+    listSales().catch(miss<MarketSale[]>([])),
+    listTasks().catch(miss<Awaited<ReturnType<typeof listTasks>>>([])),
   ])
+  const dealTasks = taskList.filter((t) => !t.archived).map((t) => ({ id: t.id, title: t.title, period: String(t.period), live: isLiveTask(t) }))
+  const running = sales.filter((s) => saleState(s) === 'yayinda').length
   const sponsors = sites.filter((site) => site.slug).map((site) => ({ id: String(site.id), name: site.name }))
   const badges = badgeList.map((b) => ({ id: String(b.id), name: String(b.name) }))
   const waiting = requests.filter((r) => r.status === 'beklemede').length
@@ -551,7 +558,8 @@ async function marketPanel(themesHere: boolean) {
       label="Market bölümleri"
       tabs={[
         { id: 'requests', label: `Talepler${waiting ? ` (${waiting} bekliyor)` : ''}`, content: <MarketRequests requests={requests} /> },
-        { id: 'products', label: `Ürünler (${products.length})`, content: <MarketProducts products={products} sponsors={sponsors} badges={badges} /> },
+        { id: 'products', label: `Ürünler (${products.length})`, content: <MarketProducts products={products} sponsors={sponsors} badges={badges} tasks={dealTasks} /> },
+        { id: 'sales', label: `İndirim kampanyaları${running ? ` (${running} yayında)` : ''}`, content: <MarketSales sales={sales} products={products} /> },
         { id: 'avatars', label: 'Avatarlar & kapaklar', content: <AvatarManager avatars={avatars} stats={stats} covers={COVERS} coverUsage={coverUsage} /> },
         ...(themeCatalog ? [{ id: 'themes', label: 'Masa temaları', content: <ThemeManager catalog={themeCatalog} /> }] : []),
       ]}

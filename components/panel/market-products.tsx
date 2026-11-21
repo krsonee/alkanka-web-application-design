@@ -13,7 +13,7 @@ import { MarketGuide } from '@/components/panel/area-guides'
 import { askConfirm } from '@/components/panel/confirm-dialog'
 import { Flash } from '@/components/panel/flash'
 import { HideButton } from '@/components/panel/hide-button'
-import { MarketProductForm, type BadgeOption, type SponsorOption } from '@/components/panel/market-product-form'
+import { MarketProductForm, type BadgeOption, type SponsorOption, type TaskOption } from '@/components/panel/market-product-form'
 import { RecordLink } from '@/components/panel/record-link'
 import { SortableList, mergeOrder, useOrder } from '@/components/panel/sortable-list'
 import { useUrlTab } from '@/components/panel/use-url-tab'
@@ -21,7 +21,7 @@ import { useUrlTab } from '@/components/panel/use-url-tab'
 const EMPTY: ProductInput = {
   id: null, kind: 'sponsor', sponsorId: null, sponsorName: null, type: 'SPONSOR BONUSU', name: '', description: '', delivery: '',
   rules: [], image: '', price: 1000, stock: 10, total: 10, perUser: 1, needsUsername: true, active: true, sort: 0,
-  deliveryMode: 'manual', reward: null, featured: false,
+  deliveryMode: 'manual', reward: null, featured: false, dealTaskId: null, dealPrice: 0,
 }
 
 type KindFilter = 'hepsi' | 'sponsor' | 'alkanka'
@@ -53,7 +53,17 @@ function matchesStock(p: MarketProduct, filter: StockFilter) {
   return filter === 'var' ? level === 'ok' : filter === 'az' ? level === 'low' : level === 'out'
 }
 
-export function MarketProducts({ products, sponsors, badges }: { products: MarketProduct[]; sponsors: SponsorOption[]; badges: BadgeOption[] }) {
+export function MarketProducts({
+  products,
+  sponsors,
+  badges,
+  tasks,
+}: {
+  products: MarketProduct[]
+  sponsors: SponsorOption[]
+  badges: BadgeOption[]
+  tasks: TaskOption[]
+}) {
   const [view, setView] = useUrlTab<'kart' | 'tablo'>(['kart', 'tablo'], 'kart', 'g')
   const [query, setQuery] = useState('')
   const [kind, setKind] = useState<KindFilter>('hepsi')
@@ -120,6 +130,24 @@ export function MarketProducts({ products, sponsors, badges }: { products: Marke
         Elle teslim
       </span>
     )
+
+  const pricing = (p: MarketProduct) => (
+    <>
+      {p.sale && (
+        <span title={p.sale.name} className="inline-flex items-center rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
+          {`%${p.sale.pct} indirimde: ${p.salePrice.toLocaleString('tr-TR')} KC`}
+        </span>
+      )}
+      {p.dealTaskId != null && (
+        <span
+          title={p.dealTask?.title ?? undefined}
+          className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold', p.dealTask ? 'bg-accent text-accent-foreground' : 'bg-destructive/15 text-destructive')}
+        >
+          {p.dealTask ? `Görevle ${p.dealPrice.toLocaleString('tr-TR')} KC${p.dealTask.live ? '' : ' · görev yayında değil'}` : 'Bağlı görev silinmiş'}
+        </span>
+      )}
+    </>
+  )
 
   const stockBadge = (p: MarketProduct) => {
     const level = p.active ? stockLevel(p.stock, p.total) : 'ok'
@@ -273,7 +301,7 @@ export function MarketProducts({ products, sponsors, badges }: { products: Marke
               <div className="flex flex-1 flex-col gap-2 p-3">
                 <div className="flex flex-wrap items-center gap-1.5">
                   {owner(p)}
-                  {delivery(p)}
+                  {delivery(p)}{pricing(p)}
                 </div>
                 <h3 className="text-sm font-semibold leading-snug text-foreground text-pretty">{p.name}</h3>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -306,7 +334,7 @@ export function MarketProducts({ products, sponsors, badges }: { products: Marke
                 <span className="font-medium text-foreground text-pretty">{p.name}</span>
                 <span className="flex flex-wrap items-center gap-1.5">
                   {owner(p)}
-                  {delivery(p)}
+                  {delivery(p)}{pricing(p)}
                 </span>
               </span>
               <span className="w-24 text-right font-semibold text-foreground tabular-nums">{`${p.price.toLocaleString('tr-TR')} KC`}</span>
@@ -323,6 +351,7 @@ export function MarketProducts({ products, sponsors, badges }: { products: Marke
           value={editing}
           sponsors={sponsors}
           badges={badges}
+          tasks={tasks}
           pending={pending}
           error={formError}
           onCancel={() => setEditing(null)}

@@ -80,7 +80,7 @@ const MARKET_STEPS: GuideStep[] = [
     title: 'Ürün listesi: arama, süzgeç, görünüm ve sıra',
     body: (
       <ol className={ol}>
-        <li>Market dört sekmedir: <b>Talepler</b> (bekleyen iş), <b>Ürünler</b>, <b>Avatarlar &amp; kapaklar</b> ve yetkin varsa <b>Masa temaları</b>.</li>
+        <li>Market beş sekmedir: <b>Talepler</b> (bekleyen iş), <b>Ürünler</b>, <b>İndirim kampanyaları</b>, <b>Avatarlar &amp; kapaklar</b> ve yetkin varsa <b>Masa temaları</b>.</li>
         <li><b>Ürünler</b> sekmesinde üstteki kutudan ürün ya da sponsor adıyla ararsın. Yanındaki iki liste ürünleri <b>türe</b> (sponsor bonusu / site içi ürün) ve <b>stoka</b> (stokta / azaldı / bitti / gizli) göre süzer.</li>
         <li><b>Kart / Tablo</b> düğmesi görünümü değiştirir: kartta görsel öndedir, tabloda aynı ekrana daha çok ürün sığar. İkisinde de aynı düğmeler vardır.</li>
         <li>Soldaki <b>tutamaçtan sürükleyerek</b> sırayı değiştirirsin; klavyeyle de tutamaca gelip boşluk + ok tuşlarıyla taşıyabilirsin. Market sayfası ürünleri bu sırayla gösterir. Süzgeç açıkken yaptığın sıralama sadece görünen ürünlerin kendi aralarındaki yerini değiştirir.</li>
@@ -97,6 +97,33 @@ const MARKET_STEPS: GuideStep[] = [
         <li><b>Fiyat (KC)</b> üyenin ödeyeceği Kanka Coin’dir. <b>Toplam stok</b> başta kaç adet olduğunu, <b>Kalan stok</b> şu an kaç adet kaldığını gösterir. Kalan 0 olunca ürün “tükendi” olur. <b>Kişi başı sınır</b> bir üyenin aynı üründen kaç kez alabileceğidir.</li>
         <li>Yayındaki bir ürünün stoku azalınca (toplamın beşte biri, en az 3 adet) ya da bitince bu ekranın üstünde ve Genel bakışta uyarı çıkar. Uyarıdaki ürün adına basınca form açılır; <b>Kalan stok</b>’u artır. Gizli ürün için uyarı çıkmaz.</li>
         <li><b>Görsel</b> alanına link yapıştır ya da yükle; boşsa varsayılan market görseli çıkar.</li>
+      </ol>
+    ),
+  },
+  {
+    title: 'Görevle indirimli ürün',
+    body: (
+      <ol className={ol}>
+        <li>Ürün formunda <b>Görevle indirim</b> bölümündeki kutuyu işaretle, bir <b>görev</b> seç ve <b>görevi tamamlayanın fiyatını</b> yaz. Örnek: normal fiyat 2.000 KC, görev fiyatı 1.000 KC.</li>
+        <li>Üye ürünü normal fiyatından her zaman alabilir. Seçtiğin görevi tamamlamışsa görev fiyatını öder; fiyat satın alırken kendiliğinden uygulanır, senin onaylaman gerekmez.</li>
+        <li>Bu ürünler markette kendi kategorilerinde durmaya devam eder, ayrıca <b>Görevli fırsatlar</b> sekmesinde toplanır. Kartta görevin adı ve görev fiyatı yazar; üye karttan göreve gider.</li>
+        <li>Günlük görevde üyenin görevi o gün, haftalık görevde o hafta tamamlamış olması gerekir. Onay isteyen görevde indirim, görev onaylandıktan sonra açılır.</li>
+        <li>Görev yayından kalkarsa (kapatılır, süresi biter) indirim sitede gösterilmez; görevi o dönem zaten tamamlamış üye indirimli almaya devam eder. Görev silinirse indirim tamamen kapanır ve ürün listesinde <b>Bağlı görev silinmiş</b> uyarısı çıkar.</li>
+        <li>Görev fiyatı normal fiyattan düşük olmak zorundadır. Coin veren üründe görev fiyatı, verilen coinden fazla olmalıdır.</li>
+      </ol>
+    ),
+  },
+  {
+    title: 'İndirim kampanyaları',
+    body: (
+      <ol className={ol}>
+        <li><b>İndirim kampanyaları</b> sekmesinde <b>Yeni kampanya</b>’ya bas. Ad (üye markette görür), <b>indirim yüzdesi</b>, <b>başlangıç</b> ve <b>bitiş</b> tarihini gir. Tarihler Türkiye saatidir.</li>
+        <li>Kampanya başlangıç saatinde kendiliğinden başlar, bitiş saatinde kendiliğinden biter. Sitede eski fiyat üstü çizili, yeni fiyat yanında görünür; market sayfasının üstünde kampanyanın adı ve bitiş tarihi yazar.</li>
+        <li><b>Hangi ürünler?</b> bölümünden bütün ürünleri, sadece site içi ürünleri, sadece sponsor ödüllerini ya da tek tek işaretlediğin ürünleri seçersin. Formun altında kaç ürünün indirime girdiği ve örnek yeni fiyatlar görünür.</li>
+        <li>Bir ürüne aynı anda iki kampanya denk gelirse indirimler toplanmaz, yüksek olan uygulanır. Görevle indirimli üründe üye, kampanya fiyatı ile görev fiyatından düşük olanı öder.</li>
+        <li>Kanka Coin veren ürünler hiçbir kampanyaya girmez. Avatarlar ve masa temaları da bu kampanyaların dışındadır.</li>
+        <li>Listedeki <b>güç</b> düğmesi kampanyayı durdurur ya da yeniden açar; durdurulan kampanyada fiyatlar hemen normale döner. Kalem düzenler, çöp kutusu siler.</li>
+        <li>Üye sayfayı açık bırakmışken kampanya biterse eski fiyattan satın alamaz; site &quot;Fiyat değişti&quot; der ve coin düşmez.</li>
       </ol>
     ),
   },
@@ -142,6 +169,8 @@ const MARKET_STEPS: GuideStep[] = [
       <ol className={ol}>
         <li>Sayfanın üstünde üyenin bakiyesi ve coininin kaç ürüne yettiği yazar. Altında <b>öne çıkan</b> ürünler büyük kartla durur.</li>
         <li>Ürünler dört kategoride gezilir: <b>Sponsor ödülleri</b>, <b>Site içi ödüller</b>, <b>Avatar &amp; kapak</b>, <b>Masa temaları</b>. Avatarlar ve temalar kendi ekranlarından yönetilir; burada sadece nerede göründükleri değişti.</li>
+        <li>Görevle indirimli en az bir ürün varsa başa beşinci bir sekme gelir: <b>Görevli fırsatlar</b>. Böyle ürün yokken sekme görünmez.</li>
+        <li>İndirim kampanyası yayındayken sayfanın üstünde kampanyanın adı, yüzdesi ve bitiş tarihi yazar; indirimli kartlarda yüzde etiketi ve üstü çizili eski fiyat görünür.</li>
         <li>Her kartta stok çubuğu (stokta / son birkaç adet / tükendi), kişi başı sınır ve üyenin kaç tane aldığı yazar. Coini yetmeyen üye düğmede kaç coin eksiği olduğunu görür; sınırına ulaşan üyede düğme kapanır.</li>
         <li>Otomatik teslim edilen üründe kartta &quot;anında&quot; yazar ve düğme <b>Satın al</b> olur; elle teslim edilende <b>Talep et</b>.</li>
       </ol>
