@@ -17,7 +17,7 @@ export type StudioKind = 'banner' | 'sticker' | 'gif' | 'video' | 'tgsticker' | 
 
 export const TELEGRAM_LIMITS = {
   sticker: { kb: 512, label: 'WEBP · 512x512 · en fazla 512 KB' },
-  tgsticker: { kb: 256, label: 'WEBM VP9 · 512x512 · 3 sn · 30 fps · sessiz · en fazla 256 KB' },
+  tgsticker: { kb: 256, label: 'WEBM VP9 · uzun kenar 512 px · 3 sn · 30 fps · sessiz · en fazla 256 KB' },
   tgicon: { kb: 32, label: 'WEBP · 100x100 · en fazla 32 KB' },
 } as const
 

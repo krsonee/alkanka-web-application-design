@@ -7,7 +7,7 @@ import { makeGif, makeMotionSticker, makeVideo, videoToGif } from '@/lib/studio-
 import { cleanMotion, motionLabel } from '@/lib/studio-brief'
 import { closeHold, holdBudget } from '@/lib/studio-budget'
 import { brushOf } from '@/lib/studio-overlay'
-import { makeStickerIcon, makeVideoSticker } from '@/lib/studio-telegram'
+import { makeStickerIcon, makeVideoSticker, videoStickerFacts } from '@/lib/studio-telegram'
 import { GIF_DURATIONS, gifCost, STICKER_MOTION_COST, toMotionQuality, VIDEO_DURATIONS, videoCost } from '@/lib/studio-types'
 
 export const maxDuration = 300
@@ -22,6 +22,8 @@ const STICKER_MODES: Mode[] = ['tgsticker', 'tgmotion', 'tgicon']
 
 const kb = (data: Buffer) => `${Math.max(1, Math.round(data.length / 1024))} KB`
 const mb = (data: Buffer) => `${(data.length / 1024 / 1024).toFixed(1)} MB`
+/** Size, length and weight of a finished video sticker, so the card shows it meets Telegram's list. */
+const stickerAbout = async (data: Buffer) => [await videoStickerFacts(data), kb(data)].filter(Boolean).join(' · ')
 
 export async function POST(request: NextRequest) {
   const crossSite = rejectCrossSite(request)
@@ -85,11 +87,11 @@ export async function POST(request: NextRequest) {
       }
       if (mode === 'tgsticker') {
         const data = await makeVideoSticker(image)
-        return { data, contentType: 'video/webm', ext: 'webm', folder: 'stickers', label: `Telegram hareketli sticker (sallanma) · ${kb(data)}` }
+        return { data, contentType: 'video/webm', ext: 'webm', folder: 'stickers', label: `Telegram hareketli sticker (sallanma) · ${await stickerAbout(data)}` }
       }
       if (mode === 'tgmotion') {
         const data = await makeMotionSticker(image, motion, onBilled)
-        const about = `Telegram hareketli sticker · ${kb(data)}`
+        const about = `Telegram hareketli sticker · ${await stickerAbout(data)}`
         return { data, contentType: 'video/webm', ext: 'webm', folder: 'stickers', label: asked ? `${asked} · ${about}` : about }
       }
       if (mode === 'tgicon') {

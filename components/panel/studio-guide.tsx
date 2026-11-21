@@ -214,7 +214,9 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
               <>{b('Hareketli sticker')}: {b('Ne hareket etsin')} alanını yaz, {b('Hareketlisini de üret')} kutusunu işaretle ya da hazır stickerın altındaki {b('Hareketlendir')} düğmesine bas. Karakter gerçekten hareket eder; çıktı Telegram&apos;ın kabul ettiği 3 saniyelik, şeffaf video stickerdır. 1-2 dakika sürer ve ücretlidir.</>,
               <>{b('Sallanma · ücretsiz')} düğmesi stickerı olduğu gibi hafifçe sallar; yapay zeka çalışmaz.</>,
               <>Hareketlendirirken karakterin çevresine çıkan fazlalıklar (yazı, şimşek, parıltı) kendiliğinden kesilir: stickerda sadece karakterin kendi şekli kalır. Bu yüzden büyük hareket isteme (zıplama, kayma); küçük hareketler en temiz sonucu verir.</>,
-              <>{b('İndir')} ile al. Telegram&apos;a eklemek için dosyayı sohbete atmak yetmez: @Stickers botunu aç, hareketli sticker için {b('/newvideo')} yaz (hazır paketine eklemek için {b('/addsticker')}), sonra indirdiğin dosyayı {b('dosya olarak')} gönder ve botun istediği emojiyi yolla.</>,
+              <>Sticker boş kenarı atılarak hazırlanır: uzun kenarı tam 512 px olur ve karakter kareyi doldurur, böylece Telegram&apos;da küçük görünmez. Hareketli stickerda kalite 256 KB sınırına sığan en yüksek ayarla verilir; kartın altında ölçüsü, süresi ve boyutu yazar.</>,
+              <>{b('İndir')} ile al. Hareketli sticker bir .webm dosyasıdır ve Telegram&apos;a sadece @Stickers botuyla eklenir: botu aç, yeni paket için {b('/newvideo')} (hazır paketine eklemek için {b('/addsticker')}) yaz, dosyayı gönder, botun istediği emojiyi yolla, yeni pakette {b('/publish')} ile yayınla. Aynı adımlar hareketli stickerın kartında {b('Telegram\'a nasıl eklenir?')} başlığında da durur.</>,
+              <>Telegram&apos;ın sticker panelindeki {b('+')} düğmesi (sticker düzenleyicisi) sadece fotoğraf alır; hareketli sticker oradan eklenmez.</>,
             ]}
           />
         </Block>
