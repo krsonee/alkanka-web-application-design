@@ -1,15 +1,17 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { CalendarDays, Check, ChevronDown, RefreshCw, Star, X } from 'lucide-react'
+import { CalendarDays, Check, ChevronDown, Pencil, RefreshCw, Star, X } from 'lucide-react'
 import { autoSettleMatches, loadLeagueFixtures, pinLeague, publishFixtures } from '@/app/panel/community-actions'
 import type { FeedLeague, Fixture, LeagueFixtures } from '@/lib/kankatv'
 import { MAX_LEAGUES_AT_ONCE, type LeagueBook } from '@/lib/prediction-book-shared'
-import { SPORTS, SPORT_IDS, type Sport } from '@/lib/predictions-shared'
+import { SPORTS, SPORT_IDS, startingSet, type Board, type LeagueSettings, type QuestionSet, type Sport } from '@/lib/predictions-shared'
 import { usePanelAction } from '@/components/panel/flash'
 import { StatusLine, useAction } from '@/components/alkanka/community/use-action'
 import { cn } from '@/lib/utils'
 import { LeagueBrowser } from './league-browser'
+import { BoardSelect } from './league-boards'
+import { QuestionSetEditor, ceilingLine, questionLine, setProblem, type PrizeOptions } from './league-fields'
 
 const FEED_SPORTS = SPORT_IDS.filter((s) => SPORTS[s].feed)
 
@@ -45,7 +47,7 @@ const tabs = 'flex w-fit max-w-full flex-wrap gap-1 rounded-lg border border-bor
 const tab = (on: boolean) => cn('h-9 rounded-md px-3 text-xs font-bold', on ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')
 
 /** Publishes calendar games: pick the sport, then the leagues, and only those leagues' games are listed. */
-export function FixturePicker({ book, onBookChanged }: { book: LeagueBook; onBookChanged: () => void }) {
+export function FixturePicker({ book, onBookChanged, settings, options, boards }: { book: LeagueBook; onBookChanged: () => void; settings: LeagueSettings; options: PrizeOptions; boards: Board[] }) {
   const [sport, setSport] = useState<Sport>('football')
   const [leagues, setLeagues] = useState<FeedLeague[]>([])
   const [browsing, setBrowsing] = useState(false)
@@ -53,6 +55,13 @@ export function FixturePicker({ book, onBookChanged }: { book: LeagueBook; onBoo
   const [published, setPublished] = useState<Set<number>>(new Set())
   const [picked, setPicked] = useState<Set<number>>(new Set())
   const [range, setRange] = useState<Range>('all')
+  // Questions chosen for one match; a match without an entry opens with its sport's template.
+  const [own, setOwn] = useState<Map<number, QuestionSet>>(new Map())
+  const [editing, setEditing] = useState<number | 'all' | null>(null)
+  const [shared, setShared] = useState<QuestionSet | null>(null)
+  const [boardId, setBoardId] = useState<number | null>(null)
+  // A league closed while this screen was open is no longer a place to publish into.
+  const board = boards.find((b) => b.id === boardId && b.open) ?? null
   const [error, setError] = useState('')
   const [loading, startLoading] = useTransition()
   const publish = useAction()
@@ -64,6 +73,9 @@ export function FixturePicker({ book, onBookChanged }: { book: LeagueBook; onBoo
   const reset = () => {
     setGroups(null)
     setPicked(new Set())
+    setOwn(new Map())
+    setEditing(null)
+    setShared(null)
     setError('')
   }
 
@@ -112,6 +124,17 @@ export function FixturePicker({ book, onBookChanged }: { book: LeagueBook; onBoo
   const chosen = shown.flatMap((g) => g.fixtures).filter((f) => picked.has(f.extId))
   const openFixtures = shown.flatMap((g) => g.fixtures).filter((f) => !published.has(f.extId))
   const allPicked = openFixtures.length > 0 && openFixtures.every((f) => picked.has(f.extId))
+  const template = startingSet(settings, sport)
+  const setOf = (id: number) => own.get(id) ?? template
+  const putOwn = (id: number, set: QuestionSet | null) =>
+    setOwn((prev) => {
+      const next = new Map(prev)
+      if (set) next.set(id, set)
+      else next.delete(id)
+      return next
+    })
+  const sharedDraft = shared ?? template
+  const broken = chosen.find((f) => own.has(f.extId) && setProblem(own.get(f.extId)!))
 
   return (
     <section aria-labelledby="fikstur" className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
@@ -272,11 +295,113 @@ export function FixturePicker({ book, onBookChanged }: { book: LeagueBook; onBoo
               </fieldset>
             ))}
           </div>
+          {chosen.length > 0 && (
+            <section aria-labelledby="secilen-sorular" className="flex flex-col gap-3 rounded-lg border border-border bg-background p-3">
+              <div className="flex flex-col gap-1">
+                <h4 id="secilen-sorular" className="text-sm font-bold text-foreground">
+                  Seçilen maçların soruları ({chosen.length})
+                </h4>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Her maç {SPORTS[sport].label.toLocaleLowerCase('tr')} şablonuyla açılır. İstediğin maçın yanındaki &quot;Soruları seç&quot; ile o maça tek ya da çok soruyu ayrı belirle, ya da hepsine birden aynı soruları uygula.
+                  {sport === 'tennis' ? ' Tenis 3 set üzerinden sayılır; 5 setlik maçta soruları seçerken maç uzunluğunu da seç.' : ''}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-expanded={editing === 'all'}
+                onClick={() => setEditing(editing === 'all' ? null : 'all')}
+                className="flex h-9 items-center gap-1.5 self-start rounded-lg border border-border px-3 text-xs font-semibold text-foreground hover:bg-secondary"
+              >
+                <Pencil className="size-3.5" aria-hidden="true" />
+                {editing === 'all' ? 'Vazgeç' : 'Hepsine aynı soruları uygula'}
+              </button>
+              {editing === 'all' && (
+                <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3">
+                  <QuestionSetEditor value={sharedDraft} onChange={setShared} options={options} />
+                  {setProblem(sharedDraft) && (
+                    <p role="alert" className="text-xs font-medium text-destructive">
+                      {setProblem(sharedDraft)}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    disabled={Boolean(setProblem(sharedDraft))}
+                    onClick={() => {
+                      setOwn((prev) => {
+                        const next = new Map(prev)
+                        for (const f of chosen) next.set(f.extId, sharedDraft)
+                        return next
+                      })
+                      setEditing(null)
+                    }}
+                    className="h-9 self-start rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground disabled:opacity-40"
+                  >
+                    Seçilen {chosen.length} maça uygula
+                  </button>
+                </div>
+              )}
+              <ul className="flex flex-col gap-2">
+                {chosen.map((f) => {
+                  const set = setOf(f.extId)
+                  const mine = own.has(f.extId)
+                  const open = editing === f.extId
+                  const problem = mine ? setProblem(set) : null
+                  return (
+                    <li key={f.extId} className={cn('flex flex-col gap-2 rounded-lg border bg-card p-3', mine ? 'border-primary/40' : 'border-border')}>
+                      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                        <div className="flex min-w-0 flex-1 basis-56 flex-col gap-0.5">
+                          <span className="text-sm font-bold text-foreground">
+                            {f.home} - {f.away}
+                          </span>
+                          <span className="text-xs leading-relaxed text-muted-foreground">
+                            {stamp(f.kickoff)} · {mine ? 'bu maça özel' : 'şablon'}: <span className="text-foreground">{questionLine(set)}</span> · en fazla {ceilingLine(set)}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            aria-expanded={open}
+                            onClick={() => {
+                              if (!open && !mine) putOwn(f.extId, template)
+                              setEditing(open ? null : f.extId)
+                            }}
+                            className="flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-foreground hover:bg-secondary"
+                          >
+                            <Pencil className="size-3.5" aria-hidden="true" />
+                            {open ? 'Tamam' : 'Soruları seç'}
+                          </button>
+                          {mine && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                putOwn(f.extId, null)
+                                if (open) setEditing(null)
+                              }}
+                              className="h-9 rounded-lg border border-border px-3 text-xs font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground"
+                            >
+                              Şablona dön
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {open && <QuestionSetEditor value={set} onChange={(next) => putOwn(f.extId, next)} options={options} />}
+                      {problem && (
+                        <p role="alert" className="text-xs font-medium text-destructive">
+                          {problem}
+                        </p>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
+          )}
+          {chosen.length > 0 && <BoardSelect boards={boards} value={board?.id ?? null} onChange={setBoardId} label="Seçilen maçlar hangi lige eklensin" className="sm:max-w-md" />}
           <p className="text-xs leading-relaxed text-muted-foreground">
-            {sport === 'football'
-              ? 'Maçlar varsayılan sorularla açılır.'
-              : `${SPORTS[sport].label} maçları "kazanan" ve sporun ana sorusuyla açılır.${sport === 'tennis' ? ' Tenis 3 set üzerinden sayılır; 5 setlik maçta soruları değiştirirken maç uzunluğunu seç.' : ''}`}{' '}
-            Tahmin gelmeden önce aşağıdaki listeden maçın sorularını değiştirebilirsin.
+            {board
+              ? `Maçlar "${board.name}" ligine eklenir${board.general ? '; puanları haftalık ve aylık genel lige de sayılır.' : '; puanları sadece o ligin tablosuna yazılır.'}`
+              : 'Maçlar genel lige (haftalık ve aylık tablo) eklenir.'}{' '}
+            Yayınladıktan sonra da, maça tahmin gelmeden önce aşağıdaki listeden sorularını ve ligini değiştirebilirsin.
           </p>
         </div>
       )}
@@ -284,13 +409,15 @@ export function FixturePicker({ book, onBookChanged }: { book: LeagueBook; onBoo
       <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
         <button
           type="button"
-          disabled={publish.pending || !chosen.length}
+          disabled={publish.pending || !chosen.length || Boolean(broken)}
           onClick={() =>
             publish.run(
-              () => publishFixtures(chosen.map(({ started: _started, ...f }) => f)),
+              () => publishFixtures(chosen.map(({ started: _started, ...f }) => ({ ...f, set: own.get(f.extId) })), board?.id ?? null),
               () => {
                 setPublished((prev) => new Set([...prev, ...chosen.map((f) => f.extId)]))
                 setPicked(new Set())
+                setOwn(new Map())
+                setEditing(null)
               },
             )
           }

@@ -32,6 +32,7 @@ import {
   parseSport,
   prizeText,
   type Award,
+  type Board,
   type LeagueSettings,
   type MatchResult,
   type PeriodKind,
@@ -126,6 +127,7 @@ export async function createLeagueMatch(input: {
   set?: QuestionSet | null
   sport?: string
   bestOf?: number
+  boardId?: number | null
 }) {
   return guard(async () => {
     await addLeagueMatch({ ...input, set: input.set ?? undefined })
@@ -206,11 +208,12 @@ export async function removeBookTeam(game: string, name: string) {
   })
 }
 
-export async function publishFixtures(list: FixtureInput[]) {
+export async function publishFixtures(list: FixtureInput[], boardId?: number | null) {
   return guard(async () => {
-    const added = await importLeagueFixtures(list)
-    if (added) await logPanel('community', 'Fikstür maçları yayınlandı', null, `${added} maç`)
-    return added ? `${added} maç varsayılan sorularla sitede yayınlandı.` : 'Seçilen maçlar zaten yayında veya başlamış.'
+    const added = await importLeagueFixtures(list, boardId)
+    const own = (Array.isArray(list) ? list : []).filter((f) => f.set).length
+    if (added) await logPanel('community', 'Fikstür maçları yayınlandı', null, `${added} maç${own ? ` · ${own} maça özel soru seçildi` : ''}`)
+    return added ? `${added} maç sitede yayınlandı.` : 'Seçilen maçlar zaten yayında veya başlamış.'
   })
 }
 
@@ -275,8 +278,47 @@ export async function finishLeagueMatch(id: number, result: MatchResult) {
   })
 }
 
+export async function saveLeagueBoard(input: { id?: number | null; name: string; general: boolean; places: Prize[] }) {
+  return guard(async () => {
+    const { saveBoard } = await import('@/lib/prediction-boards')
+    const { board, created } = await saveBoard(input)
+    const detail = [board.general ? 'genel lige de sayılır' : 'sadece kendi tablosu', board.places.length ? board.places.map((p, i) => `${i + 1}. ${prizeText(p)}`).join(' · ') : 'ödülsüz'].join(' · ')
+    await logPanel('community', created ? 'Özel tahmin ligi açıldı' : 'Özel tahmin ligi güncellendi', board.name, detail.slice(0, 400))
+    return created ? `"${board.name}" açıldı. Maç eklerken ya da takvimden yayınlarken bu ligi seç.` : `"${board.name}" kaydedildi.`
+  })
+}
+
+export async function closeLeagueBoard(id: number) {
+  return guard(async () => {
+    const { closeBoard } = await import('@/lib/prediction-boards')
+    const { board, winners } = await closeBoard(Number(id))
+    await logPanel('community', 'Özel tahmin ligi kapatıldı', board.name, winners.length ? winners.map((w) => `${w.place}. ${w.name}: ${prizeText(w.prize)}`).join(' · ').slice(0, 400) : 'ödül dağıtılmadı')
+    if (!board.places.length) return `"${board.name}" kapatıldı. Tablosu sitede 14 gün daha görünür.`
+    return winners.length ? `"${board.name}" kapatıldı, ${winners.length} kişiye ödülü dağıtıldı.` : `"${board.name}" kapatıldı. Puan alan üye olmadığı için ödül dağıtılmadı.`
+  })
+}
+
+export async function removeLeagueBoard(id: number) {
+  return guard(async () => {
+    const { deleteBoard } = await import('@/lib/prediction-boards')
+    const { name, moved } = await deleteBoard(Number(id))
+    await logPanel('community', 'Özel tahmin ligi silindi', name, moved ? `${moved} maç genel lige döndü` : undefined)
+    return moved ? `"${name}" silindi, ${moved} maçı genel lige döndü.` : `"${name}" silindi.`
+  })
+}
+
+export async function moveLeagueMatch(matchId: number, boardId: number | null) {
+  return guard(async () => {
+    const { setMatchBoard } = await import('@/lib/prediction-boards')
+    await setMatchBoard(Number(matchId), boardId)
+    await logPanel('community', 'Tahmin maçının ligi değişti', `Maç #${matchId}`, boardId ? `Özel lig #${boardId}` : 'Genel lig')
+    return 'Maçın ligi değişti.'
+  })
+}
+
 export type LeagueSetup = {
   settings: LeagueSettings
+  boards: Board[]
   products: { id: string; name: string; sponsor: boolean }[]
   sites: { id: string; name: string }[]
   awards: Award[]
@@ -289,8 +331,9 @@ export async function loadLeagueSetup(): Promise<{ ok: true; data: LeagueSetup }
   if (!(await canPanel('community'))) return { ok: false, error: 'Oturum süresi doldu, tekrar giriş yap.' }
   try {
     const [{ listProducts }, { siteOptions }, { listAwards }] = await Promise.all([import('@/lib/market'), import('@/lib/sites'), import('@/lib/prediction-awards')])
-    const [settings, products, sites, awards, paid, book] = await Promise.all([
+    const [settings, boards, products, sites, awards, paid, book] = await Promise.all([
       getLeagueSettings(),
+      import('@/lib/prediction-boards').then((m) => m.listBoards()),
       listProducts({ includeInactive: true }).catch(() => []),
       siteOptions().catch(() => []),
       listAwards().catch(() => []),
@@ -301,6 +344,7 @@ export async function loadLeagueSetup(): Promise<{ ok: true; data: LeagueSetup }
       ok: true,
       data: {
         settings,
+        boards,
         products: products.map((p) => ({ id: p.id, name: p.name, sponsor: p.kind === 'sponsor' })),
         sites: sites.map((s) => ({ id: String(s.id), name: s.name })),
         awards,
@@ -314,11 +358,12 @@ export async function loadLeagueSetup(): Promise<{ ok: true; data: LeagueSetup }
   }
 }
 
-export async function saveLeagueDefaultSet(set: QuestionSet) {
+export async function saveLeagueDefaultSet(set: QuestionSet, sportInput: string = 'football') {
   return guard(async () => {
-    await saveLeagueDefaults(set)
-    await logPanel('community', 'Varsayılan tahmin soruları değişti', null, questionNames(normalizeSet(set)))
-    return 'Varsayılan sorular kaydedildi. Bundan sonra eklenen maçlar bu sorularla açılır.'
+    const sport = parseSport(sportInput)
+    await saveLeagueDefaults(set, sport)
+    await logPanel('community', 'Varsayılan tahmin soruları değişti', SPORTS[sport].label, questionNames(normalizeSet({ ...set, sport })))
+    return `${SPORTS[sport].label} şablonu kaydedildi. Bundan sonra eklenen ${SPORTS[sport].label.toLocaleLowerCase('tr')} maçları bu sorularla açılır.`
   })
 }
 

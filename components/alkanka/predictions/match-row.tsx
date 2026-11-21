@@ -60,7 +60,8 @@ type Fact = { text: string; tone?: string }
 /** The one line under the teams: what is asked and what it pays, or how the member did. */
 function facts(m: LeagueMatch, state: MatchState, ids: MarketId[], now: number, signedIn: boolean): Fact[] {
   const sport = sportOf(m.set)
-  const league: Fact = { text: sport === 'football' ? m.league : `${SPORTS[sport].label} · ${m.league}` }
+  // A match of a special league says so: its points go to that league's own table.
+  const league: Fact = { text: [sport === 'football' ? m.league : `${SPORTS[sport].label} · ${m.league}`, m.boardName].filter(Boolean).join(' · ') }
   if (state === 'open') {
     const closing = closingText(m, now)
     return [

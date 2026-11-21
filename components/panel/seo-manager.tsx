@@ -178,7 +178,7 @@ function SearchConsoleCard({ verification, siteUrl }: { verification: Verificati
           {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
           Kaydet
         </button>
-        <a href="/sitemap.xml" target="_blank" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <a href="/sitemap.xml" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           Site haritasını gör <ExternalLink className="size-3.5" aria-hidden />
         </a>
         <Status state={state} />

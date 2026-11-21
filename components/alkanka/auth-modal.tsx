@@ -50,9 +50,19 @@ export function AuthModal({ signupClosed = false }: { signupClosed?: boolean }) 
       setNotice(null)
       setError(null)
     }
+    // A link to the hash the address already carries fires no hashchange, so the window would stay shut.
+    const reopen = (e: MouseEvent) => {
+      const link = e.target instanceof Element ? e.target.closest<HTMLAnchorElement>('a[href]') : null
+      if (!link || link.origin !== window.location.origin || link.pathname !== window.location.pathname) return
+      if (link.hash === window.location.hash && readHash()) sync()
+    }
     sync()
     window.addEventListener('hashchange', sync)
-    return () => window.removeEventListener('hashchange', sync)
+    document.addEventListener('click', reopen)
+    return () => {
+      window.removeEventListener('hashchange', sync)
+      document.removeEventListener('click', reopen)
+    }
   }, [])
 
   function close() {

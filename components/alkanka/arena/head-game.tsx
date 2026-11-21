@@ -708,7 +708,7 @@ function HeadEngineGame({ sport, mode, onEnd, onRematch, names = ['Sen', 'Bot'],
             <div className="absolute right-3 top-3 z-20 flex gap-2">
               <button
                 type="button"
-                onClick={() => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.()).catch?.(() => {})}
+                onClick={() => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.())?.catch?.(() => {})}
                 aria-label="Tam ekran"
                 className="flex size-10 items-center justify-center rounded-full border border-foreground/30 bg-background/50 text-foreground backdrop-blur-sm transition-colors hover:bg-background/80"
               >

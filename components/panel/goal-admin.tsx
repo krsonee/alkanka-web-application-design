@@ -37,6 +37,7 @@ import {
   type GoalMatch,
 } from '@/lib/goal-rewards-shared'
 import { askConfirm } from '@/components/panel/confirm-dialog'
+import { GoalFixturePicker } from '@/components/panel/goal-fixture-picker'
 import { usePanelAction } from '@/components/panel/flash'
 import { SideSheet } from '@/components/panel/side-sheet'
 import { StatusLine } from '@/components/alkanka/community/use-action'
@@ -514,9 +515,24 @@ function PicksSheet({ matchId, onClose, onChanged }: { matchId: number; onClose:
   )
 }
 
-function EventCard({ event, now, onEdit, onChanged, onOpenPicks }: { event: GoalEventView; now: number; onEdit: () => void; onChanged: () => void; onOpenPicks: (matchId: number) => void }) {
+function EventCard({
+  event,
+  now,
+  pins,
+  onEdit,
+  onChanged,
+  onOpenPicks,
+}: {
+  event: GoalEventView
+  now: number
+  pins: GoalAdminData['pins']
+  onEdit: () => void
+  onChanged: () => void
+  onOpenPicks: (matchId: number) => void
+}) {
   const { pending, status, run } = usePanelAction()
-  const [adding, setAdding] = useState(event.matches.length === 0)
+  const [adding, setAdding] = useState<'feed' | 'manual' | null>(event.matches.length === 0 ? 'feed' : null)
+  const taken = event.matches.flatMap((m) => (m.extId === null ? [] : [m.extId]))
   const sponsor = event.category === 'sponsor'
   const joined = event.matches.reduce((s, m) => s + m.homePicks + m.awayPicks, 0)
   const waiting = event.matches.filter((m) => m.status === 'open' && Date.parse(m.kickoff) <= now).length
@@ -529,12 +545,15 @@ function EventCard({ event, now, onEdit, onChanged, onOpenPicks }: { event: Goal
             {sponsor ? `Sponsor etkinliği · ${event.siteName ?? 'sponsor silinmiş'}` : 'Alkanka etkinliği'} · gol başı <b className="text-foreground">{goalAmount(event.perGoal, event.unit)}</b> ·{' '}
             <span className={cn('font-semibold', event.active ? 'text-success' : 'text-destructive')}>{event.active ? 'yayında' : 'kapalı'}</span> · {event.matches.length} maç · {joined} seçim
           </p>
-          {event.active && event.matches.length === 0 && <p className="text-xs font-medium text-destructive">Maçı olmayan etkinlik sitede görünmez. Aşağıdan maç ekle.</p>}
+          {event.active && event.matches.length === 0 && <p className="text-xs font-medium text-destructive">Maçı olmayan etkinlik sitede görünmez. Takvimden maç al ya da elle ekle.</p>}
           {waiting > 0 && <p className="text-xs font-semibold text-primary">{waiting} maç sonuç bekliyor.</p>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setAdding((v) => !v)} aria-expanded={adding} className={ghost}>
-            {adding ? 'Maç eklemeyi kapat' : 'Maç ekle'}
+          <button type="button" onClick={() => setAdding(adding === 'feed' ? null : 'feed')} aria-expanded={adding === 'feed'} className={ghost}>
+            {adding === 'feed' ? 'Takvimi kapat' : 'Takvimden maç al'}
+          </button>
+          <button type="button" onClick={() => setAdding(adding === 'manual' ? null : 'manual')} aria-expanded={adding === 'manual'} className={ghost}>
+            {adding === 'manual' ? 'Elle eklemeyi kapat' : 'Elle maç ekle'}
           </button>
           <button type="button" onClick={onEdit} className={ghost}>
             Düzenle
@@ -554,7 +573,8 @@ function EventCard({ event, now, onEdit, onChanged, onOpenPicks }: { event: Goal
         </div>
       </div>
       <StatusLine status={status} />
-      {adding && <AddMatch eventId={event.id} onSaved={onChanged} />}
+      {adding === 'feed' && <GoalFixturePicker eventId={event.id} taken={taken} pins={pins} onSaved={onChanged} onPinsChanged={onChanged} />}
+      {adding === 'manual' && <AddMatch eventId={event.id} onSaved={onChanged} />}
       {event.matches.length > 0 && (
         <ul className="flex flex-col">
           {[...event.matches]
@@ -590,7 +610,7 @@ export function GoalAdmin() {
     )
   }
 
-  const { events, sites } = data.data
+  const { events, sites, pins } = data.data
   const now = Date.now()
   const shown = filter === 'all' ? events : events.filter((e) => e.category === filter)
   const count = (c: GoalCategory) => events.filter((e) => e.category === c).length
@@ -621,7 +641,7 @@ export function GoalAdmin() {
           {events.length === 0 ? 'Henüz gol başı ödül etkinliği yok. Bir etkinlik aç, gol başı ödülü belirle, sonra maçlarını ekle.' : 'Bu türde etkinlik yok.'}
         </p>
       ) : (
-        shown.map((e) => <EventCard key={e.id} event={e} now={now} onEdit={() => setEditing({ draft: draftOf(e), key: e.id })} onChanged={reload} onOpenPicks={setPicksFor} />)
+        shown.map((e) => <EventCard key={e.id} event={e} now={now} pins={pins} onEdit={() => setEditing({ draft: draftOf(e), key: e.id })} onChanged={reload} onOpenPicks={setPicksFor} />)
       )}
 
       {editing && <EventSheet key={editing.key} initial={editing.draft} sites={sites} onClose={() => setEditing(null)} onSaved={reload} />}

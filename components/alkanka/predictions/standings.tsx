@@ -3,11 +3,14 @@
 import { useState } from 'react'
 import { Crown, Gift } from 'lucide-react'
 import type { LeagueRow, LeagueScope, PaidPeriod } from '@/lib/predictions'
-import { prizeText, type PeriodKind, type Prize } from '@/lib/predictions-shared'
+import { prizeText, type Board, type PeriodKind, type Prize } from '@/lib/predictions-shared'
 import { cn } from '@/lib/utils'
 import { MemberRank } from '../kp/member-rank'
 
 export type PeriodView = { on: boolean; places: Prize[]; label: string }
+
+/** A special league with its own table. */
+export type BoardView = Board & { table: LeagueRow[] }
 
 const SCOPES: { id: LeagueScope; label: string }[] = [
   { id: 'week', label: 'Bu hafta' },
@@ -19,7 +22,7 @@ const SHOWN = 10
 
 const firstName = (name: string) => name.split(' ')[0] || name
 
-function PrizeList({ places, winners }: { places: Prize[]; winners?: PaidPeriod['winners'] }) {
+function PrizeList({ places, winners }: { places: Prize[]; winners?: { place: number; name: string }[] }) {
   return (
     <ol className="flex flex-col gap-1 text-sm">
       {places.map((p, i) => {
@@ -40,21 +43,25 @@ export function Standings({
   tables,
   periods,
   paid,
+  boards,
   meId,
 }: {
   tables: Record<LeagueScope, LeagueRow[]>
   periods: Record<PeriodKind, PeriodView>
   paid: Partial<Record<PeriodKind, PaidPeriod>>
+  boards: BoardView[]
   meId: string | null
 }) {
   const [scope, setScope] = useState<LeagueScope>('week')
+  const [boardId, setBoardId] = useState<number | null>(null)
   const [all, setAll] = useState(false)
-  const table = tables[scope]
+  const board = boards.find((b) => b.id === boardId) ?? null
+  const table = board ? board.table : tables[scope]
   const shown = all ? table.slice(0, 20) : table.slice(0, SHOWN)
   const myIndex = meId ? table.findIndex((r) => r.userId === meId) : -1
   const mineBelow = myIndex >= shown.length ? table[myIndex] : null
-  const period = scope === 'all' ? null : periods[scope]
-  const last = scope === 'all' ? undefined : paid[scope]
+  const period = board || scope === 'all' ? null : periods[scope]
+  const last = board || scope === 'all' ? undefined : paid[scope]
 
   return (
     <section aria-labelledby="lig-tablosu" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
@@ -63,6 +70,7 @@ export function Standings({
           Lig tablosu
         </h2>
         {period && <span className="text-xs text-muted-foreground">{period.label}</span>}
+        {board && <span className="text-xs text-muted-foreground">{board.open ? 'Devam ediyor' : 'Sona erdi'}</span>}
       </div>
       <div role="tablist" aria-label="Dönem" className="grid grid-cols-3 gap-1 rounded-lg bg-background p-1">
         {SCOPES.map((s) => (
@@ -70,14 +78,58 @@ export function Standings({
             key={s.id}
             type="button"
             role="tab"
-            aria-selected={scope === s.id}
-            onClick={() => setScope(s.id)}
-            className={cn('h-8 rounded-md text-xs font-bold transition-colors', scope === s.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
+            aria-selected={!board && scope === s.id}
+            onClick={() => {
+              setScope(s.id)
+              setBoardId(null)
+            }}
+            className={cn('h-8 rounded-md text-xs font-bold transition-colors', !board && scope === s.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
           >
             {s.label}
           </button>
         ))}
       </div>
+
+      {boards.length > 0 && (
+        <div role="group" aria-label="Özel ligler" className="flex flex-col gap-1.5">
+          <span className="text-xs font-semibold text-muted-foreground">Özel ligler</span>
+          <div className="flex flex-wrap gap-1.5">
+            {boards.map((b) => (
+              <button
+                key={b.id}
+                type="button"
+                aria-pressed={board?.id === b.id}
+                onClick={() => setBoardId(board?.id === b.id ? null : b.id)}
+                className={cn(
+                  'min-h-9 rounded-full border px-3 py-1 text-left text-xs font-semibold transition-colors',
+                  board?.id === b.id ? 'border-primary bg-primary/15 text-primary' : 'border-border text-foreground hover:border-primary hover:text-primary',
+                )}
+              >
+                {b.name}
+                {!b.open && <span className="font-normal text-muted-foreground"> · bitti</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {board && (
+        <div className="flex flex-col gap-2 rounded-lg bg-background p-3">
+          {board.places.length > 0 && (
+            <>
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+                <Gift className="size-3.5" aria-hidden="true" />
+                {board.name} ödülleri
+              </p>
+              <PrizeList places={board.places} winners={board.open ? undefined : board.winners} />
+            </>
+          )}
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {board.places.length > 0 ? (board.open ? `Lig bitince ilk ${board.places.length} sıraya dağıtılır. ` : 'Lig bitti, ödüller dağıtıldı. ') : board.open ? '' : 'Lig bitti. '}
+            {board.general ? 'Bu ligin maçları haftalık ve aylık tabloya da sayılır.' : 'Bu ligin puanları sadece bu tabloya yazılır.'}
+          </p>
+        </div>
+      )}
 
       {period?.on && (
         <div className="flex flex-col gap-2 rounded-lg bg-background p-3">
@@ -99,7 +151,7 @@ export function Standings({
         </ol>
       ) : (
         <p className="text-sm leading-relaxed text-muted-foreground">
-          {scope === 'all' ? 'İlk maçlar sonuçlanınca tablo burada oluşur.' : 'Bu dönemde henüz sonuçlanan maç yok. İlk doğru tahmin zirveye oturur.'}
+          {board ? 'Bu ligde henüz sonuçlanan maç yok. İlk doğru tahmin zirveye oturur.' : scope === 'all' ? 'İlk maçlar sonuçlanınca tablo burada oluşur.' : 'Bu dönemde henüz sonuçlanan maç yok. İlk doğru tahmin zirveye oturur.'}
         </p>
       )}
       {table.length > SHOWN && (

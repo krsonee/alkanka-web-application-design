@@ -22,6 +22,7 @@ import {
   resultError,
   resultNeeds,
   sportOf,
+  startingSet,
   voidedBy,
   type Answers,
   type LeagueSettings,
@@ -51,6 +52,10 @@ export function ensureLeague() {
       created_at timestamptz NOT NULL DEFAULT now(), resolved_at timestamptz, UNIQUE (user_id, source, ref))`)
     await rows(sql`CREATE TABLE IF NOT EXISTS league_periods (
       key text PRIMARY KEY, kind text NOT NULL, label text NOT NULL, winners jsonb NOT NULL DEFAULT '[]', paid_at timestamptz NOT NULL DEFAULT now())`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS league_boards (
+      id serial PRIMARY KEY, name text NOT NULL, general boolean NOT NULL DEFAULT false, places jsonb NOT NULL DEFAULT '[]',
+      status text NOT NULL DEFAULT 'open', winners jsonb NOT NULL DEFAULT '[]', created_at timestamptz NOT NULL DEFAULT now(), closed_at timestamptz)`)
+    await rows(sql`ALTER TABLE league_matches ADD COLUMN IF NOT EXISTS board_id int`)
   })().catch((error) => {
     ready = null
     throw error
@@ -67,12 +72,13 @@ export async function getLeagueSettings(): Promise<LeagueSettings> {
   return normalizeSettings(await getContent<Partial<LeagueSettings>>(LEAGUE_SETTINGS_KEY).catch(() => null))
 }
 
-export async function saveLeagueDefaults(input: unknown) {
+/** Saves the questions new matches of one sport open with. */
+export async function saveLeagueDefaults(input: unknown, sportInput: unknown = 'football') {
   const current = await getLeagueSettings()
-  // The saved defaults are the football ones; every other sport starts from its own built-in set.
-  const defaults = normalizeSet({ ...(input && typeof input === 'object' ? input : {}), sport: 'football' })
-  await checkSetPrize(defaults)
-  await setContent(LEAGUE_SETTINGS_KEY, { ...current, defaults })
+  const sport = parseSport(sportInput)
+  const set = normalizeSet({ ...(input && typeof input === 'object' ? input : {}), sport })
+  await checkSetPrize(set)
+  await setContent(LEAGUE_SETTINGS_KEY, sport === 'football' ? { ...current, defaults: set } : { ...current, sportDefaults: { ...current.sportDefaults, [sport]: set } })
 }
 
 export async function setLeagueAuto(on: boolean) {
@@ -81,7 +87,7 @@ export async function setLeagueAuto(on: boolean) {
 }
 
 /** Confirms a market product or a sponsor still exists and stores its current name with the prize. */
-async function checkPrize(prize: Prize): Promise<Prize> {
+export async function checkPrize(prize: Prize): Promise<Prize> {
   if (prize.kind === 'market') {
     const { listProducts } = await import('@/lib/market')
     const item = (await listProducts({ includeInactive: true })).find((p) => p.id === prize.ref)
@@ -144,6 +150,9 @@ export type LeagueMatch = {
   awayGoals: number | null
   settled: boolean
   picks: number
+  /** The special league the match is filed under; null when it belongs to the general league. */
+  boardId: number | null
+  boardName: string | null
   set: QuestionSet
   result: MatchResult | null
   myPick: MyPick | null
@@ -182,6 +191,7 @@ export async function listLeagueMatches(userId: string | null, opts: { admin?: b
   const admin = opts.admin ?? false
   const [r, crowdRows] = await Promise.all([
     rows(sql`SELECT m.*, (SELECT count(*) FROM league_picks p WHERE p.match_id = m.id) AS picks,
+        (SELECT b.name FROM league_boards b WHERE b.id = m.board_id) AS board_name,
         mp.user_id AS my_id, mp.home AS my_home, mp.away AS my_away, mp.answers AS my_answers, mp.points AS my_points,
         mp.outcome AS my_outcome, mp.kc AS my_kc, mp.kp AS my_kp, mp.bonus AS my_bonus
       FROM league_matches m
@@ -224,6 +234,8 @@ export async function listLeagueMatches(userId: string | null, opts: { admin?: b
       awayGoals: x.away_goals === null ? null : Number(x.away_goals),
       settled: Boolean(x.settled),
       picks: Number(x.picks),
+      boardId: x.board_name ? Number(x.board_id) : null,
+      boardName: x.board_name ? String(x.board_name) : null,
       set,
       result,
       myPick: answers
@@ -313,13 +325,26 @@ export type LeagueRow = { userId: string; name: string; points: number; exact: n
 
 export type LeagueScope = PeriodKind | 'all'
 
-async function standings(start: number | null, end: number | null, limit: number): Promise<LeagueRow[]> {
+/** Which matches a table counts: one special league's, or everything that feeds the general league. */
+const inTable = (boardId: number | null) =>
+  boardId === null ? sql`(m.board_id IS NULL OR NOT EXISTS (SELECT 1 FROM league_boards b WHERE b.id = m.board_id AND NOT b.general))` : sql`m.board_id = ${boardId}`
+
+/** The special league a match is filed under, checked to be open; null files it under the general league. */
+export async function openBoardId(v: unknown): Promise<number | null> {
+  if (v === null || v === undefined || v === '' || v === 0) return null
+  const id = Number(v)
+  const found = Number.isSafeInteger(id) && id > 0 ? await rows(sql`SELECT id FROM league_boards WHERE id = ${id} AND status = 'open'`) : []
+  if (!found.length) throw new Error('Seçilen lig bulunamadı ya da kapatılmış.')
+  return id
+}
+
+export async function standings(start: number | null, end: number | null, limit: number, boardId: number | null = null): Promise<LeagueRow[]> {
   const since = start === null ? sql`'-infinity'::timestamptz` : sql`${stamp(start)}::timestamptz`
   const until = end === null ? sql`'infinity'::timestamptz` : sql`${stamp(end)}::timestamptz`
   const r = await rows(sql`SELECT p.user_id, max(p.user_name) AS name, coalesce(sum(p.points), 0) AS points,
       count(*) FILTER (WHERE p.exact) AS exact, count(*) FILTER (WHERE p.points > 0) AS hits, count(*) AS picks
     FROM league_picks p JOIN league_matches m ON m.id = p.match_id
-    WHERE m.settled AND m.kickoff >= ${since} AND m.kickoff < ${until}
+    WHERE m.settled AND m.kickoff >= ${since} AND m.kickoff < ${until} AND ${inTable(boardId)}
     GROUP BY p.user_id
     ORDER BY points DESC, exact DESC, hits DESC, picks ASC, min(p.created_at) ASC, p.user_id ASC LIMIT ${limit}`)
   return r.map((x) => ({ userId: String(x.user_id), name: String(x.name), points: Number(x.points), exact: Number(x.exact), hits: Number(x.hits), picks: Number(x.picks) }))
@@ -334,7 +359,7 @@ export async function leagueTable(scope: LeagueScope, limit = 50): Promise<Leagu
 
 // --- Managing matches ----------------------------------------------------
 
-export async function addLeagueMatch(input: { league: string; home: string; away: string; kickoff: string; closesAt?: string; set?: unknown; sport?: string; bestOf?: number }) {
+export async function addLeagueMatch(input: { league: string; home: string; away: string; kickoff: string; closesAt?: string; set?: unknown; sport?: string; bestOf?: number; boardId?: unknown }) {
   await ensureLeague()
   const when = new Date(input.kickoff)
   if (Number.isNaN(when.getTime())) throw new Error('Geçerli bir tarih gir.')
@@ -352,12 +377,11 @@ export async function addLeagueMatch(input: { league: string; home: string; away
   // The sport chosen in the form wins over whatever the question set carries.
   const set = input.set
     ? normalizeSet({ ...(typeof input.set === 'object' ? input.set : {}), sport, bestOf: input.bestOf })
-    : sport === 'football'
-      ? (await getLeagueSettings()).defaults
-      : defaultSet(sport, input.bestOf)
+    : startingSet(await getLeagueSettings(), sport, input.bestOf)
   await checkSetPrize(set)
-  await rows(sql`INSERT INTO league_matches (league, home, away, kickoff, closes_at, markets)
-    VALUES (${input.league.trim().slice(0, 80) || SPORTS[sport].label}, ${input.home.trim().slice(0, 80)}, ${input.away.trim().slice(0, 80)}, ${when.toISOString()}, ${closes}, ${JSON.stringify(set)}::jsonb)`)
+  const boardId = await openBoardId(input.boardId)
+  await rows(sql`INSERT INTO league_matches (league, home, away, kickoff, closes_at, markets, board_id)
+    VALUES (${input.league.trim().slice(0, 80) || SPORTS[sport].label}, ${input.home.trim().slice(0, 80)}, ${input.away.trim().slice(0, 80)}, ${when.toISOString()}, ${closes}, ${JSON.stringify(set)}::jsonb, ${boardId})`)
 }
 
 /** Questions can only change while nobody has answered them. */
@@ -370,14 +394,15 @@ export async function updateLeagueMarkets(id: number, input: unknown) {
   if (!r.length) throw new Error('Bu maça tahmin yapılmış ya da maç sonuçlanmış; soruları artık değiştirilemez.')
 }
 
-export type FixtureInput = { extId: number; league: string; home: string; away: string; homeLogo: string; awayLogo: string; kickoff: string; sport?: string }
+export type FixtureInput = { extId: number; league: string; home: string; away: string; homeLogo: string; awayLogo: string; kickoff: string; sport?: string; set?: unknown }
 
 const safeLogo = (url: string) => (/^https:\/\/imagecache\.365scores\.com\//.test(url) ? url : null)
 
-/** Publishes fixtures picked from the calendar with the default questions; already-published games are skipped. */
-export async function importLeagueFixtures(list: FixtureInput[]) {
+/** Publishes fixtures picked from the calendar, each with its own questions or its sport's template; already-published games are skipped. */
+export async function importLeagueFixtures(list: FixtureInput[], board?: unknown) {
   await ensureLeague()
-  const football = JSON.stringify((await getLeagueSettings()).defaults)
+  const settings = await getLeagueSettings()
+  const boardId = await openBoardId(board)
   let added = 0
   for (const f of list.slice(0, 60)) {
     const when = new Date(f.kickoff)
@@ -385,10 +410,12 @@ export async function importLeagueFixtures(list: FixtureInput[]) {
     const sport = parseSport(f.sport)
     // Only sports the feed carries can be published from it: their results are read back by the same id.
     if (!SPORTS[sport].feed) continue
-    const set = sport === 'football' ? football : JSON.stringify(defaultSet(sport))
-    const r = await rows(sql`INSERT INTO league_matches (league, home, away, kickoff, home_logo, away_logo, ext_id, markets)
+    const own = f.set && typeof f.set === 'object' ? normalizeSet({ ...f.set, sport }) : null
+    if (own) await checkSetPrize(own)
+    const set = JSON.stringify(own ?? startingSet(settings, sport))
+    const r = await rows(sql`INSERT INTO league_matches (league, home, away, kickoff, home_logo, away_logo, ext_id, markets, board_id)
       VALUES (${f.league.slice(0, 80)}, ${f.home.slice(0, 80)}, ${f.away.slice(0, 80)}, ${when.toISOString()},
-        ${safeLogo(f.homeLogo)}, ${safeLogo(f.awayLogo)}, ${f.extId}, ${set}::jsonb)
+        ${safeLogo(f.homeLogo)}, ${safeLogo(f.awayLogo)}, ${f.extId}, ${set}::jsonb, ${boardId})
       ON CONFLICT (ext_id) WHERE ext_id IS NOT NULL DO NOTHING RETURNING id`)
     added += r.length
   }
@@ -557,7 +584,7 @@ async function settlePeriod(kind: PeriodKind, cfg: PeriodPrizes, now: number): P
   if (!cfg.on || !cfg.since || Date.parse(cfg.since) >= p.end || settledKeys.has(p.key)) return false
   const [state] = await rows<{ paid: string; open: string }>(sql`SELECT
     (SELECT count(*) FROM league_periods WHERE key = ${p.key}) AS paid,
-    (SELECT count(*) FROM league_matches WHERE NOT settled AND kickoff >= ${stamp(p.start)}::timestamptz AND kickoff < ${stamp(p.end)}::timestamptz) AS open`)
+    (SELECT count(*) FROM league_matches m WHERE NOT m.settled AND m.kickoff >= ${stamp(p.start)}::timestamptz AND m.kickoff < ${stamp(p.end)}::timestamptz AND ${inTable(null)}) AS open`)
   if (Number(state.paid) > 0) {
     settledKeys.add(p.key)
     return false

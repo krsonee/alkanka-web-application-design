@@ -33,7 +33,7 @@ const toAward = (r: AwardRow): Award => ({
   id: Number(r.id),
   userId: r.user_id,
   userName: r.user_name,
-  source: r.source === 'week' || r.source === 'month' ? r.source : 'match',
+  source: r.source === 'week' || r.source === 'month' || r.source === 'board' ? r.source : 'match',
   title: r.title,
   prize: { kind: r.kind, amount: Number(r.amount), ref: r.item_ref, name: r.item_name },
   status: r.status,
@@ -60,7 +60,7 @@ async function tell(userId: string, userName: string, title: string, body: strin
 export async function grantAward(input: {
   userId: string
   userName: string
-  source: 'match' | PeriodKind
+  source: 'match' | PeriodKind | 'board'
   ref: string
   place: number | null
   title: string

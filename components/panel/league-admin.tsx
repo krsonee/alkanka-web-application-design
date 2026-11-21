@@ -9,13 +9,18 @@ import {
   AWARD_STATUS_LABEL,
   MAX_LEAGUE_PLACES,
   PERIOD_LABEL,
+  SPORTS,
+  SPORT_IDS,
   prizeText,
+  startingSet,
   type Award,
   type AwardStatus,
+  type LeagueSettings,
   type PeriodKind,
   type PeriodPrizes,
   type Prize,
   type QuestionSet,
+  type Sport,
 } from '@/lib/predictions-shared'
 import { askReason } from '@/components/panel/confirm-dialog'
 import { usePanelAction } from '@/components/panel/flash'
@@ -26,27 +31,42 @@ import { FixturePicker } from './fixture-picker'
 import { PrizeField, QuestionSetEditor, ceilingLine, prizeProblem, questionLine, setProblem, type PrizeOptions } from './league-fields'
 import { AddMatchForm } from './league-add-match'
 import { MatchList } from './league-matches'
+import { BoardsDesk } from './league-boards'
 
-type Tab = 'maclar' | 'sorular' | 'oduller' | 'teslim'
+type Tab = 'maclar' | 'ligler' | 'sorular' | 'oduller' | 'teslim'
 
 const card = 'flex flex-col gap-3 rounded-xl border border-border bg-card p-4'
 const when = (iso: string) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })
 
-function DefaultQuestions({ initial, options, onSaved }: { initial: QuestionSet; options: PrizeOptions; onSaved: () => void }) {
+function DefaultQuestions({ settings, options, onSaved }: { settings: LeagueSettings; options: PrizeOptions; onSaved: () => void }) {
   const { pending, status, run } = usePanelAction()
-  const [draft, setDraft] = useState<QuestionSet>(initial)
+  const [sport, setSport] = useState<Sport>('football')
+  const [drafts, setDrafts] = useState<Partial<Record<Sport, QuestionSet>>>({})
+  const draft = drafts[sport] ?? startingSet(settings, sport)
+  const setDraft = (next: QuestionSet) => setDrafts((prev) => ({ ...prev, [sport]: next }))
   const problem = setProblem(draft)
+  const name = SPORTS[sport].label
+  const saved = sport === 'football' || Boolean(settings.sportDefaults[sport])
   return (
     <section aria-labelledby="varsayilan-sorular" className={card}>
       <div className="flex flex-col gap-1">
         <h3 id="varsayilan-sorular" className="font-display text-base font-bold text-foreground">
-          Varsayılan sorular
+          Soru şablonları
         </h3>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Takvimden yayınlanan ve elle eklenirken özel soru seçilmeyen her futbol maçı bu sorularla açılır. Diğer sporlar kendi hazır sorularıyla açılır (kazanan ve sporun ana sorusu: toplam sayı, set skoru ya da harita skoru). Burada yapılan değişiklik yayındaki maçları etkilemez; bir maçın sorularını, ona tahmin gelmeden önce &quot;Maçlar&quot; sekmesinden değiştirebilirsin.
+          Her sporun kendi şablonu var. Takvimden yayınlanan ya da elle eklenirken özel soru seçilmeyen maç, sporunun şablonuyla açılır. Takvimden maç seçerken her maça ayrı soru da belirleyebilirsin. Burada yapılan değişiklik yayındaki maçları
+          etkilemez; bir maçın sorularını, ona tahmin gelmeden önce &quot;Maçlar&quot; sekmesinden değiştirebilirsin.
         </p>
       </div>
-      <QuestionSetEditor value={draft} onChange={setDraft} options={options} />
+      <div role="tablist" aria-label="Şablonun sporu" className="flex w-fit max-w-full flex-wrap gap-1 rounded-lg border border-border bg-background p-1">
+        {SPORT_IDS.map((s) => (
+          <button key={s} type="button" role="tab" aria-selected={sport === s} onClick={() => setSport(s)} className={cn('h-9 rounded-md px-3 text-xs font-bold', sport === s ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
+            {SPORTS[s].label}
+          </button>
+        ))}
+      </div>
+      {!saved && <p className="text-xs leading-relaxed text-muted-foreground">{name} için henüz şablon kaydedilmedi; maçlar aşağıdaki hazır sorularla açılıyor. Soruları seçip kaydet.</p>}
+      <QuestionSetEditor key={sport} value={draft} onChange={setDraft} options={options} />
       {problem && (
         <p role="alert" className="text-xs font-medium text-destructive">
           {problem}
@@ -55,10 +75,10 @@ function DefaultQuestions({ initial, options, onSaved }: { initial: QuestionSet;
       <button
         type="button"
         disabled={pending || Boolean(problem)}
-        onClick={() => run(() => saveLeagueDefaultSet(draft), onSaved)}
+        onClick={() => run(() => saveLeagueDefaultSet(draft, sport), onSaved)}
         className="h-10 self-start rounded-lg bg-primary px-5 text-xs font-bold text-primary-foreground disabled:opacity-40"
       >
-        {pending ? 'Kaydediliyor...' : 'Varsayılan soruları kaydet'}
+        {pending ? 'Kaydediliyor...' : `${name} şablonunu kaydet`}
       </button>
       <StatusLine status={status} />
     </section>
@@ -304,15 +324,17 @@ function AwardsDesk({ awards, onChanged }: { awards: Award[]; onChanged: () => v
 }
 
 function Loaded({ matches, setup, refresh }: { matches: LeagueMatch[]; setup: LeagueSetup; refresh: () => void }) {
-  const [tab, setTab] = useUrlTab<Tab>(['maclar', 'sorular', 'oduller', 'teslim'], 'maclar', 'lig')
+  const [tab, setTab] = useUrlTab<Tab>(['maclar', 'ligler', 'sorular', 'oduller', 'teslim'], 'maclar', 'lig')
   const [adding, setAdding] = useState(false)
-  const { settings, products, sites, awards, paid } = setup
+  const { settings, boards, products, sites, awards, paid } = setup
+  const openBoards = boards.filter((b) => b.open).length
   const options: PrizeOptions = { products, sites }
   const waiting = awards.filter((a) => a.status === 'beklemede').length
   const tabs: [Tab, string][] = [
     ['maclar', `Maçlar (${matches.filter((m) => !m.settled).length})`],
+    ['ligler', `Özel ligler (${openBoards})`],
     ['sorular', 'Sorular ve puanlama'],
-    ['oduller', 'Lig ödülleri'],
+    ['oduller', 'Genel lig ödülleri'],
     ['teslim', `Ödül teslimi (${waiting})`],
   ]
   const periodLine = (kind: PeriodKind) => `${PERIOD_LABEL[kind]} ödül: ${settings[kind].on ? `açık, ilk ${settings[kind].places.length} sıra` : 'kapalı'}`
@@ -321,7 +343,7 @@ function Loaded({ matches, setup, refresh }: { matches: LeagueMatch[]; setup: Le
     <div className="flex flex-col gap-4">
       <dl className="grid gap-3 rounded-xl border border-border bg-card p-4 text-sm sm:grid-cols-3">
         <div className="flex flex-col gap-0.5">
-          <dt className="text-xs font-semibold text-muted-foreground">Yeni maçın soruları</dt>
+          <dt className="text-xs font-semibold text-muted-foreground">Yeni futbol maçının soruları</dt>
           <dd className="leading-relaxed text-foreground">{questionLine(settings.defaults)}</dd>
         </div>
         <div className="flex flex-col gap-0.5">
@@ -331,7 +353,7 @@ function Loaded({ matches, setup, refresh }: { matches: LeagueMatch[]; setup: Le
         <div className="flex flex-col gap-0.5">
           <dt className="text-xs font-semibold text-muted-foreground">Lig ödülleri ve puanlama</dt>
           <dd className="leading-relaxed text-foreground">
-            {periodLine('week')} · {periodLine('month')} · otomatik puanlama {settings.auto ? 'açık' : 'kapalı'}
+            {periodLine('week')} · {periodLine('month')} · {openBoards ? `${openBoards} özel lig açık` : 'özel lig yok'} · otomatik puanlama {settings.auto ? 'açık' : 'kapalı'}
           </dd>
         </div>
       </dl>
@@ -346,7 +368,7 @@ function Loaded({ matches, setup, refresh }: { matches: LeagueMatch[]; setup: Le
 
       {tab === 'maclar' && (
         <div className="flex flex-col gap-4">
-          <FixturePicker book={setup.book} onBookChanged={refresh} />
+          <FixturePicker book={setup.book} onBookChanged={refresh} settings={settings} options={options} boards={boards} />
           <div className="flex flex-col gap-2">
             <button
               type="button"
@@ -358,14 +380,15 @@ function Loaded({ matches, setup, refresh }: { matches: LeagueMatch[]; setup: Le
               Maçı elle ekle (e-spor ve takvimde olmayanlar)
               <ChevronDown className={cn('size-3.5 text-muted-foreground transition-transform', adding && 'rotate-180')} aria-hidden="true" />
             </button>
-            {adding && <AddMatchForm defaults={settings.defaults} options={options} book={setup.book} onBookChanged={refresh} />}
+            {adding && <AddMatchForm settings={settings} options={options} book={setup.book} onBookChanged={refresh} boards={boards} />}
           </div>
-          <MatchList matches={matches} options={options} />
+          <MatchList matches={matches} options={options} boards={boards} />
         </div>
       )}
+      {tab === 'ligler' && <BoardsDesk boards={boards} options={options} onChanged={refresh} />}
       {tab === 'sorular' && (
         <div className="flex flex-col gap-4">
-          <DefaultQuestions initial={settings.defaults} options={options} onSaved={refresh} />
+          <DefaultQuestions settings={settings} options={options} onSaved={refresh} />
           <AutoScoring on={settings.auto} onSaved={refresh} />
         </div>
       )}
