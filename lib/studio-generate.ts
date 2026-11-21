@@ -9,6 +9,8 @@ import type { ImageSize, StudioBrand, StudioKind, StudioTexts } from '@/lib/stud
 const MODEL = 'google/gemini-3.1-flash-image'
 
 type Input = {
+  /** Called once the model has returned a picture, which is the point the job costs money. */
+  onBilled?: () => void
   kind: StudioKind
   format: string
   category: string
@@ -157,6 +159,7 @@ export async function runGeneration(input: Input) {
   })
   const file = result.files.find((f) => f.mediaType?.startsWith('image/'))
   if (!file) throw new Error('Görsel üretilemedi, lütfen tekrar deneyin.')
+  input.onBilled?.()
   const raw = Buffer.from(file.uint8Array)
 
   if (input.kind === 'sticker') {

@@ -398,7 +398,7 @@ function PicksSheet({ matchId, onClose, onChanged }: { matchId: number; onClose:
         </p>
         {failed > 0 && (
           <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-foreground">
-            {failed} ödeme yazılamadı. Üyenin coin dökümünde bu maçın ödülü yoksa satırdaki &quot;Yeniden dene&quot; düğmesine bas; ödül zaten yazılmışsa basma, yoksa ikinci kez ödenir.
+            {failed} ödeme yazılamadı. Yazılamayan ödül üyeye yatmadı; site ziyaret edildikçe yaklaşık 10 dakikada bir kendiliğinden yeniden denenir. Beklemek istemezsen satırdaki &quot;Yeniden dene&quot; düğmesine bas.
           </p>
         )}
 
@@ -488,7 +488,11 @@ function PicksSheet({ matchId, onClose, onChanged }: { matchId: number; onClose:
                           type="button"
                           disabled={pending}
                           onClick={async () => {
-                            if (await askConfirm(`${p.userName} için ${goalAmount(p.reward ?? 0, 'KC')} yeniden yatırılsın mı? Önce üyenin coin dökümüne bak: bu maçın ödülü orada varsa ikinci kez ödenir.`)) run(() => retryGoalPay(matchId, p.userId, p.userName), refresh)
+                            // A row marked paid with a note was left half-done by the earlier payment code; only there can the coins already be on the account.
+                            const question = p.paid
+                              ? `${p.userName} için ${goalAmount(p.reward ?? 0, 'KC')} yeniden yatırılsın mı? Bu satır eski ödeme düzeninden yarım kalmış. Önce üyenin coin dökümüne bak: bu maçın ödülü orada varsa ikinci kez ödenir.`
+                              : `${p.userName} için ${goalAmount(p.reward ?? 0, 'KC')} şimdi yeniden denensin mi? Bu ödül üyeye yatmadı.`
+                            if (await askConfirm(question)) run(() => retryGoalPay(matchId, p.userId, p.userName), refresh)
                           }}
                           className={ghost}
                         >

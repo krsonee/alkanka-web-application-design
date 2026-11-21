@@ -1,5 +1,6 @@
 import type { ArenaGame } from './arena'
 import { roundLabel, type Bracket, type PointRow } from './bracket'
+import { hasOwn } from './has-own'
 
 export const TOURNAMENT_STATUSES = ['kayit', 'basladi', 'bitti', 'iptal'] as const
 export type TournamentStatus = (typeof TOURNAMENT_STATUSES)[number]
@@ -230,7 +231,7 @@ export const FINISH_LABEL: Record<FinishReason, string> = {
   panel: 'Panelden iptal edildi',
 }
 
-export const isFinishReason = (v: unknown): v is FinishReason => typeof v === 'string' && v in FINISH_LABEL
+export const isFinishReason = (v: unknown): v is FinishReason => typeof v === 'string' && hasOwn(FINISH_LABEL, v)
 
 /** Why a tournament was cancelled, in the words players read. */
 export const CANCEL_TEXT: Partial<Record<FinishReason, string>> = {

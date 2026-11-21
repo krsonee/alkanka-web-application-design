@@ -1,3 +1,5 @@
+import { hasOwn } from './has-own'
+
 export const PANEL_GROUPS = [
   {
     id: 'site',
@@ -149,7 +151,7 @@ export type FoldedRow = keyof typeof FOLDED
 
 /** The section a folded row lives in for this account; null when it still has its own row. */
 export function foldedInto(id: string, can: Can): PanelModule | null {
-  if (!(id in FOLDED)) return null
+  if (!hasOwn(FOLDED, id)) return null
   const row = id as FoldedRow
   return can(rowPermission(row)) && can(FOLDED[row].into) ? FOLDED[row].into : null
 }

@@ -273,8 +273,9 @@ export async function finishLeagueMatch(id: number, result: MatchResult) {
     const r = await settleLeagueMatch(Number(id), result)
     const paid = [r.kc ? `${r.kc.toLocaleString('tr-TR')} KC` : '', r.kp ? `${r.kp.toLocaleString('tr-TR')} KP` : '', r.gifts ? `${r.gifts} bonus ödülü` : ''].filter(Boolean).join(', ')
     const voided = r.voided.length ? ` İptal edilen soru: ${r.voided.map((v) => MARKETS[v].label).join(', ')}.` : ''
-    await logPanel('community', 'Maç sonucu girildi ve puanlandı', `Maç #${id}`, `${result.home}-${result.away} · ${r.picks} tahmin · ${r.winners} kazanan${paid ? ` · ${paid}` : ''}${voided}`)
-    return `${r.picks} tahmin puanlandı, ${r.winners} kişi kazandı${paid ? ` (${paid} dağıtıldı)` : ''}.${voided}`
+    const failed = r.failed ? ` ${r.failed} üyenin ödülü yazılamadı; bir sonraki maç sonuçlandırılırken kendiliğinden yeniden denenir.` : ''
+    await logPanel('community', 'Maç sonucu girildi ve puanlandı', `Maç #${id}`, `${result.home}-${result.away} · ${r.picks} tahmin · ${r.winners} kazanan${paid ? ` · ${paid}` : ''}${voided}${r.failed ? ` · ${r.failed} ödül yazılamadı` : ''}`)
+    return `${r.picks} tahmin puanlandı, ${r.winners} kişi kazandı${paid ? ` (${paid} ${r.failed ? 'kazanıldı' : 'dağıtıldı'})` : ''}.${voided}${failed}`
   })
 }
 

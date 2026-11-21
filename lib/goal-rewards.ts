@@ -1,6 +1,6 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
-import { credit } from '@/lib/member'
+import { creditClaimed } from '@/lib/member'
 import {
   checkGoalEvent,
   checkGoalScore,
@@ -303,13 +303,10 @@ export async function settleGoalMatch(matchId: number, homeGoals: unknown, awayG
   }
 }
 
-export const GOAL_PAY_INTERRUPTED = 'Ödeme yarıda kaldı. Üyenin coin dökümüne bak: ödül yazılmadıysa yeniden dene.'
-
 /**
- * Pays every KC reward still owed. Each pick is claimed before it is paid, so no pick is paid twice and a
- * run that stops halfway is finished by the next one. The claim carries a "yarıda kaldı" mark that is only
- * cleared once the coins are written: a payment cut off mid-way stays visible in the panel instead of
- * silently counting as paid.
+ * Pays every KC reward still owed. The "paid" mark and the coins are written in one transaction, so a pick
+ * is never marked without being paid and two runs at once cannot pay it twice. A payment that fails stays
+ * unpaid with its reason, where the panel shows it, and the next run tries it again.
  */
 export async function payGoalRewards() {
   await ensureGoal()
@@ -318,28 +315,35 @@ export async function payGoalRewards() {
     WHERE NOT p.paid AND p.reward > 0 AND m.status = 'settled' AND e.category = 'alkanka' ORDER BY p.match_id LIMIT 2000`)
   let paid = 0
   for (const p of owed) {
-    const claimed = await rows(sql`UPDATE goal_picks SET paid = true, paid_at = now(), pay_error = ${GOAL_PAY_INTERRUPTED}
-      WHERE match_id = ${p.match_id} AND user_id = ${p.user_id} AND NOT paid RETURNING user_id`)
-    if (!claimed.length) continue
+    const userId = String(p.user_id)
     try {
-      await credit(String(p.user_id), Number(p.reward), `Gol başı ödül (${p.home} - ${p.away})`.slice(0, 120))
-      await rows(sql`UPDATE goal_picks SET pay_error = NULL WHERE match_id = ${p.match_id} AND user_id = ${p.user_id}`)
-      paid++
+      const won = await creditClaimed(userId, Number(p.reward), `Gol başı ödül (${p.home} - ${p.away})`.slice(0, 120), async (client) => {
+        const claimed = await client.query(
+          `UPDATE goal_picks SET paid = true, paid_at = now(), pay_error = NULL WHERE match_id = $1 AND user_id = $2 AND NOT paid RETURNING user_id`,
+          [p.match_id, userId],
+        )
+        return Boolean(claimed.rowCount)
+      })
+      if (won) paid++
     } catch (error) {
-      console.error('[goal] ödül yazılamadı', p.match_id, p.user_id, error)
+      console.error('[goal] ödül yazılamadı', p.match_id, userId, error)
       await rows(sql`UPDATE goal_picks SET pay_error = ${String((error as Error)?.message ?? 'bilinmeyen hata').slice(0, 200)}
-        WHERE match_id = ${p.match_id} AND user_id = ${p.user_id}`).catch(() => {})
+        WHERE match_id = ${p.match_id} AND user_id = ${userId} AND NOT paid`).catch(() => {})
     }
   }
   return paid
 }
 
-/** Staff asks for a failed payment again. Only a pick marked as failed is released, so a paid one cannot be paid twice. */
+/**
+ * Staff asks for a payment that did not go through. Only a pick carrying a failure reason is touched: a pick
+ * left half-done by the earlier payment code (marked paid, with a reason) is released, a failed one is tried
+ * again. A pick being paid at this very moment has no reason on it, so it cannot be released from under that payment.
+ */
 export async function retryGoalPayment(matchId: number, userId: string) {
   await ensureGoal()
-  const released = await rows(sql`UPDATE goal_picks SET paid = false, pay_error = NULL
-    WHERE match_id = ${id(matchId, 'Maç')} AND user_id = ${String(userId)} AND paid AND pay_error IS NOT NULL RETURNING user_id`)
-  if (!released.length) throw new Error('Bu ödülde yarım kalan bir ödeme yok.')
+  const waiting = await rows(sql`UPDATE goal_picks SET paid = false, pay_error = NULL
+    WHERE match_id = ${id(matchId, 'Maç')} AND user_id = ${String(userId)} AND reward > 0 AND pay_error IS NOT NULL RETURNING user_id`)
+  if (!waiting.length) throw new Error('Bu ödülde yarım kalan bir ödeme yok.')
   return payGoalRewards()
 }
 

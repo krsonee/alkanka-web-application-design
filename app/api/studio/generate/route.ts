@@ -4,7 +4,7 @@ import { logPanel } from '@/lib/panel-log'
 import { rejectCrossSite } from '@/lib/same-origin'
 import { addJob, assetsByIds, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
 import { briefLabel, briefProblem, briefText, cleanBrief } from '@/lib/studio-brief'
-import { budgetBlock } from '@/lib/studio-budget'
+import { closeHold, holdBudget } from '@/lib/studio-budget'
 import { runGeneration } from '@/lib/studio-generate'
 import { applyOverlay, brushOf } from '@/lib/studio-overlay'
 import { cleanTexts, imageCost, STUDIO_CATEGORIES, STUDIO_FORMATS, toImageSize, type StudioTexts } from '@/lib/studio-types'
@@ -44,8 +44,9 @@ export async function POST(request: NextRequest) {
   if (problem) return NextResponse.json({ error: problem }, { status: 400 })
   // A revised sticker already carries its edge, so a second one is never drawn on top of it.
   const outline = kind === 'sticker' && !parent && body.outline !== false
-  const overCap = retext ? null : await budgetBlock(imageCost(size))
-  if (overCap) return NextResponse.json({ error: overCap }, { status: 409 })
+  const held = await holdBudget(retext ? 0 : imageCost(size))
+  if (held.error !== null) return NextResponse.json({ error: held.error }, { status: 409 })
+  const hold = held.hold
 
   try {
     if (retext && parent) {
@@ -74,6 +75,9 @@ export async function POST(request: NextRequest) {
     const references = mascot ? [mascot, ...assetRefs] : assetRefs
     const revisionOf = parent?.cleanPathname ? await readFile(parent.cleanPathname) : parent ? await readFile(parent.pathname) : null
     const result = await runGeneration({
+      onBilled: () => {
+        hold.billed = true
+      },
       kind,
       format,
       category,
@@ -106,10 +110,12 @@ export async function POST(request: NextRequest) {
       cost: imageCost(size),
       texts,
     })
+    await closeHold(hold, 'recorded')
     await logPanel('studio', 'Görsel üretildi', brand?.name || null, `Görsel #${job.id} · ${shown.slice(0, 200)}`)
     return NextResponse.json({ job: { ...job, brandName: brand?.name ?? '' } })
   } catch (error) {
     console.error('Studio generation failed:', error)
+    await closeHold(hold, 'failed', `Görsel kaydedilemedi (${kind}, ${size})`)
     const message = error instanceof Error ? error.message : ''
     const blocked = /safety|policy|blocked|refus/i.test(message)
     return NextResponse.json(

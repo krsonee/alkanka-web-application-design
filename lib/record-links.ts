@@ -1,3 +1,4 @@
+import { hasOwn } from '@/lib/has-own'
 import { slugify } from '@/lib/seo'
 
 /**
@@ -16,7 +17,7 @@ const CODE: Record<RecordKind, string> = { turnuva: 'turnuva', tahmin: 'mac', li
 /** Tournaments, league matches and special leagues are numbered; products, campaigns and bonuses carry a text id. */
 export const hasNumericId = (kind: RecordKind) => kind === 'turnuva' || kind === 'tahmin' || kind === 'lig'
 
-export const isRecordKind = (value: unknown): value is RecordKind => typeof value === 'string' && value in BASE
+export const isRecordKind = (value: unknown): value is RecordKind => typeof value === 'string' && hasOwn(BASE, value)
 
 /**
  * The record's own page on the site. A special league also wears its name (`/tahminler/lig/3-test-ligi`);
