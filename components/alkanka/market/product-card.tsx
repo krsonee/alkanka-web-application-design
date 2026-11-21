@@ -2,12 +2,12 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { Clock, Coins, Handshake, Zap } from 'lucide-react'
+import { CheckCircle2, Clock, Coins, Handshake, Target, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { MarketProduct } from '@/lib/market'
 import { productImage } from '@/lib/market-image'
 import { stockLevel } from '@/lib/market-stock'
-import { rewardText } from '@/lib/market-shared'
+import { dealShown, rewardText } from '@/lib/market-shared'
 import { DetailButton } from '../detail-modal'
 import { formatAC } from '../points-context'
 
@@ -17,12 +17,51 @@ export type BuyState =
   | { kind: 'limit' }
   | { kind: 'short'; short: number }
 
-/** Why a member can or cannot take a product right now; a guest is never told coins are short. */
-export function buyState(item: MarketProduct, left: number, used: number, points: number, signedIn: boolean): BuyState {
+/**
+ * Why a member can or cannot take a product right now; a guest is never told coins are short.
+ * `pay` is what this member is charged: the campaign price, or the task price once the task is done.
+ */
+export function buyState(item: MarketProduct, left: number, used: number, points: number, signedIn: boolean, pay = item.salePrice): BuyState {
   if (left <= 0) return { kind: 'out' }
   if (signedIn && used >= item.perUser) return { kind: 'limit' }
-  if (signedIn && points < item.price) return { kind: 'short', short: item.price - points }
+  if (signedIn && points < pay) return { kind: 'short', short: pay - points }
   return { kind: 'ok' }
+}
+
+export function SaleTag({ item, className }: { item: MarketProduct; className?: string }) {
+  if (!item.sale) return null
+  return (
+    <span className={cn('rounded bg-primary px-1.5 py-0.5 text-xs font-bold tracking-wider text-primary-foreground', className)}>
+      <span className="sr-only">{`${item.sale.name}: `}</span>
+      {`%${item.sale.pct} indirim`}
+    </span>
+  )
+}
+
+/** The cheaper price a finished task unlocks; links to the task until the member has done it. */
+export function DealLine({ item, taskDone, className }: { item: MarketProduct; taskDone: boolean; className?: string }) {
+  if (!dealShown(item, taskDone) || !item.dealTask) return null
+  const price = `${formatAC(item.dealPrice)} KC`
+  if (taskDone) {
+    return (
+      <p className={cn('flex items-start gap-1.5 rounded-lg bg-success/10 px-2 py-1.5 text-xs font-semibold leading-relaxed text-success', className)}>
+        <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 text-pretty">{`Görevi tamamladın, fiyatın ${price}`}</span>
+      </p>
+    )
+  }
+  return (
+    <Link
+      href={`/gorevler?gorev=${item.dealTaskId}`}
+      className={cn('flex items-start gap-1.5 rounded-lg border border-primary/40 px-2 py-1.5 text-xs leading-relaxed text-foreground hover:bg-primary/10', className)}
+    >
+      <Target className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden="true" />
+      <span className="min-w-0 text-pretty">
+        <b className="font-bold text-primary">{`Görevle ${price}`}</b>
+        {`: ${item.dealTask.title}`}
+      </span>
+    </Link>
+  )
 }
 
 export const buyLabel = (item: MarketProduct) => (item.deliveryMode === 'auto' ? 'Satın al' : 'Talep et')
@@ -86,12 +125,18 @@ export function StockMeter({ left, total, className }: { left: number; total: nu
   )
 }
 
-function Price({ value, className }: { value: number; className?: string }) {
+function Price({ value, was, className }: { value: number; was: number; className?: string }) {
   return (
-    <span className={cn('flex items-center gap-1.5', className)}>
+    <span className={cn('flex flex-wrap items-center gap-x-1.5', className)}>
       <Coins className="size-4 text-primary" aria-hidden="true" />
       <span className="font-display text-lg font-bold text-foreground tabular-nums">{formatAC(value)}</span>
       <span className="text-xs text-muted-foreground">KC</span>
+      {was > value && (
+        <s className="text-xs text-muted-foreground tabular-nums">
+          <span className="sr-only">Eski fiyat </span>
+          {formatAC(was)}
+        </s>
+      )}
     </span>
   )
 }
@@ -132,12 +177,15 @@ type CardProps = {
   used: number
   points: number
   signedIn: boolean
+  /** What this member is charged right now. */
+  pay: number
+  taskDone: boolean
   onBuy: () => void
   onDetail: () => void
 }
 
-export function ProductCard({ item, left, used, points, signedIn, onBuy, onDetail }: CardProps) {
-  const state = buyState(item, left, used, points, signedIn)
+export function ProductCard({ item, left, used, points, signedIn, pay, taskDone, onBuy, onDetail }: CardProps) {
+  const state = buyState(item, left, used, points, signedIn, pay)
   return (
     <li className="panel-gold flex flex-col overflow-hidden rounded-xl">
       <div className="relative aspect-[4/3] overflow-hidden bg-secondary">
@@ -148,8 +196,9 @@ export function ProductCard({ item, left, used, points, signedIn, onBuy, onDetai
           sizes="(min-width: 1536px) 20vw, (min-width: 768px) 30vw, 50vw"
           className={cn('object-cover', state.kind === 'out' && 'opacity-50 grayscale')}
         />
-        <div className="absolute inset-x-0 top-0 flex p-2">
+        <div className="absolute inset-x-0 top-0 flex flex-wrap items-start justify-between gap-1 p-2">
           <span className="rounded bg-background/85 px-1.5 py-0.5 text-xs font-bold tracking-wider text-foreground">{item.type}</span>
+          <SaleTag item={item} />
         </div>
         {item.kind === 'sponsor' && item.sponsorName && (
           <div className="absolute inset-x-0 bottom-0 flex p-2">
@@ -164,8 +213,9 @@ export function ProductCard({ item, left, used, points, signedIn, onBuy, onDetai
         </div>
         <StockMeter left={left} total={item.total} />
         <div className="mt-auto flex flex-col gap-2">
+          <DealLine item={item} taskDone={taskDone} />
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <Price value={item.price} />
+            <Price value={pay} was={item.price} />
             <LimitLine item={item} used={used} signedIn={signedIn} />
           </div>
           <BuyButton item={item} state={state} onBuy={onBuy} />
@@ -176,8 +226,8 @@ export function ProductCard({ item, left, used, points, signedIn, onBuy, onDetai
   )
 }
 
-export function FeaturedCard({ item, left, used, points, signedIn, onBuy, onDetail }: CardProps) {
-  const state = buyState(item, left, used, points, signedIn)
+export function FeaturedCard({ item, left, used, points, signedIn, pay, taskDone, onBuy, onDetail }: CardProps) {
+  const state = buyState(item, left, used, points, signedIn, pay)
   return (
     <li className="panel-gold flex flex-col overflow-hidden rounded-2xl @lg:flex-row">
       <div className="relative aspect-[16/9] shrink-0 overflow-hidden bg-secondary @lg:aspect-auto @lg:w-2/5">
@@ -196,14 +246,18 @@ export function FeaturedCard({ item, left, used, points, signedIn, onBuy, onDeta
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-3 p-4">
         <div className="flex flex-col items-start gap-1.5">
-          <span className="text-xs font-bold uppercase tracking-wider text-primary">{item.type}</span>
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-primary">{item.type}</span>
+            <SaleTag item={item} />
+          </span>
           <h3 className="font-display text-xl font-bold leading-tight text-foreground text-balance">{item.name}</h3>
           {item.description && <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground text-pretty">{item.description}</p>}
           <DeliveryLine item={item} className="max-w-full" />
         </div>
         <StockMeter left={left} total={item.total} />
+        <DealLine item={item} taskDone={taskDone} className="self-start" />
         <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-2">
-          <Price value={item.price} />
+          <Price value={pay} was={item.price} />
           <LimitLine item={item} used={used} signedIn={signedIn} />
           <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
             <DetailButton onClick={onDetail} label="Detay" />

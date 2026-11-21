@@ -27,28 +27,31 @@ export type TaskKind =
   | 'login_days'
   | 'app_login'
   | 'tournament_join'
+  | 'tournament_win'
   | 'profile'
   | 'secret_code'
   | 'bundle'
 
-export type KindParam = 'game' | 'site' | 'platform' | 'code' | null
+/** 'games' takes a game group only: a single game makes no sense for "different games played". */
+export type KindParam = 'game' | 'games' | 'site' | 'platform' | 'code' | null
 
-export type TaskCategory = 'genel' | 'sosyal' | 'sponsor' | 'zincir'
+export type TaskCategory = 'genel' | 'takvim' | 'sosyal' | 'sponsor' | 'zincir'
 
 export const TASK_CATEGORIES: { value: TaskCategory; label: string }[] = [
   { value: 'genel', label: 'Genel' },
+  { value: 'takvim', label: 'Takvim' },
   { value: 'sosyal', label: 'Sosyal & Telegram' },
   { value: 'sponsor', label: 'Sponsor' },
   { value: 'zincir', label: 'Zincir' },
 ]
 
-export const isCategory = (v: unknown): v is TaskCategory => v === 'genel' || v === 'sosyal' || v === 'sponsor' || v === 'zincir'
+export const isCategory = (v: unknown): v is TaskCategory => TASK_CATEGORIES.some((c) => c.value === v)
 
 export const TASK_KINDS: { value: TaskKind; label: string; param: KindParam; counted: boolean; hint: string }[] = [
   { value: 'manual', label: 'Serbest (tıkla / onaylı)', param: null, counted: false, hint: 'Üye butona basar. "Onay beklesin" açıksa sen onaylayınca puan yazılır.' },
   { value: 'game_play', label: 'Oyun oyna', param: 'game', counted: true, hint: 'Bitmiş masa/bot maçları sayılır. İade edilen maçlar sayılmaz.' },
   { value: 'game_win', label: 'Oyun kazan', param: 'game', counted: true, hint: 'Sadece kazanılan maçlar sayılır.' },
-  { value: 'games_distinct', label: 'Farklı oyun oyna', param: null, counted: true, hint: 'Dönem içinde oynanan farklı oyun sayısı.' },
+  { value: 'games_distinct', label: 'Farklı oyun oyna', param: 'games', counted: true, hint: 'Dönem içinde oynanan farklı oyun sayısı. Oyun grubu seçersen sadece o gruptaki oyunlar sayılır.' },
   { value: 'sponsor_visit', label: 'Sponsor siteye git', param: 'site', counted: true, hint: 'Üye sitedeki "Git" butonuyla (affiliate linkin) siteye gidince sayılır.' },
   { value: 'sponsor_link', label: 'Sponsor hesabı bağla', param: 'site', counted: true, hint: 'Üyenin sponsor hesabı panelde onaylanınca sayılır. Hedef 3 = 3 farklı sponsor.' },
   { value: 'invite', label: 'Arkadaş davet et', param: null, counted: true, hint: 'Davet linkiyle kayıt olan üyeler sayılır.' },
@@ -71,9 +74,10 @@ export const TASK_KINDS: { value: TaskKind; label: string; param: KindParam; cou
   { value: 'login_days', label: 'Giriş yapılan gün', param: null, counted: true, hint: 'Dönem içinde giriş ödülü alınan farklı gün sayısı.' },
   { value: 'app_login', label: 'Uygulamadan giriş', param: null, counted: true, hint: 'Ana ekrana eklenen Alkanka uygulamasından açılan farklı gün sayısı. Tarayıcıdan girişler sayılmaz.' },
   { value: 'tournament_join', label: 'Turnuvaya katıl', param: null, counted: true, hint: 'Kayıt olunan turnuvalar.' },
+  { value: 'tournament_win', label: 'Turnuva kazan', param: 'game', counted: true, hint: 'Şampiyon olarak bitirilen turnuvalar sayılır. Oyun seçersen sadece o oyunun turnuvaları sayılır. İptal edilen ya da şampiyonsuz kapanan turnuva sayılmaz.' },
   { value: 'profile', label: 'Profili tamamla', param: null, counted: false, hint: 'Avatar, kapak veya takım seçince tamamlanır.' },
   { value: 'secret_code', label: 'Gizli kod', param: 'code', counted: false, hint: 'Kodu Telegram kanalında paylaş; sitede doğru kodu giren ödülü alır. Kod üyelere gösterilmez.' },
-  { value: 'bundle', label: 'Hepsini bitir (süper görev)', param: null, counted: true, hint: 'Aynı dönemdeki diğer görevlerin hepsi bitince açılır. Günlükte ödül 1x-2x arası rastgeledir.' },
+  { value: 'bundle', label: 'Hepsini bitir (süper görev)', param: null, counted: true, hint: 'Şart eklemezsen aynı dönemdeki diğer görevlerin hepsi bitince açılır (günlükte ödül 1x-2x arası rastgeledir). Şart eklersen sadece o şartların hepsi tamamlanınca açılır.' },
 ]
 
 export const KIND_META = Object.fromEntries(TASK_KINDS.map((k) => [k.value, k])) as Record<TaskKind, (typeof TASK_KINDS)[number]>
@@ -97,12 +101,64 @@ export const TASK_GAMES: { value: string; label: string }[] = [
   { value: 'kafa-basketbolu', label: 'Kafa Basketbolu' },
 ]
 
+export const NINE_GAMES = 'dokuz-oyun'
+
+/** A named set of games a task can count together, so "the nine listed games" leaves Blackjack, Rulet and Papaz out. */
+export const TASK_GAME_GROUPS: { value: string; label: string; games: string[] }[] = [
+  {
+    value: NINE_GAMES,
+    label: 'Dokuz oyun (Tavla, Okey, 101 Okey, Batak, Pişti, Jakopoly, Bilardo, Kafa Topu, Kafa Basketbolu)',
+    games: ['tavla', 'okey', 'okey101', 'batak', 'pisti', 'monopoly', 'bilardo', 'kafa-topu', 'kafa-basketbolu'],
+  },
+]
+
+/** The games a task's game setting stands for; null counts every game. */
+export function taskGames(param: string | null): string[] | null {
+  if (!param) return null
+  return TASK_GAME_GROUPS.find((g) => g.value === param)?.games ?? [param]
+}
+
+export function gameParamOptions(type: KindParam) {
+  const groups = TASK_GAME_GROUPS.map((g) => ({ value: g.value, label: g.label }))
+  return type === 'games' ? groups : [...groups, ...TASK_GAMES]
+}
+
+export const isGameParam = (type: KindParam, value: string) => gameParamOptions(type).some((o) => o.value === value)
+
+export const gameParamLabel = (value: string) =>
+  value === NINE_GAMES ? 'Dokuz oyun' : (TASK_GAMES.find((g) => g.value === value)?.label ?? value)
+
+/**
+ * One condition of a super task that names its own conditions. `task` points at another task by id and
+ * holds once that task is completed; every other kind is counted the way a task of that kind is.
+ */
+export type TaskPart = { kind: TaskKind | 'task'; param: string | null; target: number }
+
+export const MAX_TASK_PARTS = 12
+export const MAX_TASK_TARGET = 100_000
+
+const NOT_A_PART: TaskKind[] = ['manual', 'bundle', 'secret_code', 'social_follow', 'social_like']
+
+export const PART_KINDS = TASK_KINDS.filter((k) => !NOT_A_PART.includes(k.value))
+
+export const isPartKind = (v: unknown): v is TaskPart['kind'] => v === 'task' || PART_KINDS.some((k) => k.value === v)
+
 export const TASK_PLATFORMS = [
   { value: 'instagram', label: 'Instagram' },
   { value: 'x', label: 'X' },
   { value: 'youtube', label: 'YouTube' },
   { value: 'twitch', label: 'Twitch' },
 ]
+
+/** "Oyun oyna · Tavla": what one condition of a super task asks for, without its number. */
+export function partLabel(part: TaskPart) {
+  if (part.kind === 'task') return 'Görev'
+  const meta = KIND_META[part.kind]
+  if (!part.param) return meta.label
+  if (meta.param === 'game' || meta.param === 'games') return `${meta.label} · ${gameParamLabel(part.param)}`
+  if (meta.param === 'platform') return `${meta.label} · ${TASK_PLATFORMS.find((x) => x.value === part.param)?.label ?? part.param}`
+  return meta.label
+}
 
 /** Social tasks the member does off-site and then asks us to check. */
 export const isSocialCheckKind = (kind: TaskKind) => kind === 'social_follow' || kind === 'social_like'
@@ -126,6 +182,7 @@ export function kindHref(kind: TaskKind, param: string | null): { href: string; 
     case 'trust_helpful':
       return { href: '/guven', external: false }
     case 'tournament_join':
+    case 'tournament_win':
       return { href: '/turnuvalar', external: false }
     case 'sponsor_visit':
       return param ? { href: `/git/${encodeURIComponent(param)}?src=gorev`, external: true } : { href: '/sponsorlar', external: false }

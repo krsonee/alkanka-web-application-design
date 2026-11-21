@@ -7,7 +7,7 @@ import { noteCoins } from '@/lib/wallet-ledger'
 import { stockWarning } from '@/lib/market-stock'
 import type { SponsorReminder } from '@/lib/sponsor-reminders'
 import { isAllowedImage } from '@/lib/site-registry'
-import { isRewardKind, rewardMeta, type DeliveryMode, type Reward } from '@/lib/market-shared'
+import { afterPct, bestSale, dealWins, isRewardKind, rewardMeta, type DeliveryMode, type Reward } from '@/lib/market-shared'
 
 export type MarketKind = 'alkanka' | 'sponsor'
 export type RequestStatus = 'beklemede' | 'onaylandi' | 'reddedildi'
@@ -36,6 +36,15 @@ export type MarketProduct = {
   deliveryMode: DeliveryMode
   reward: Reward | null
   featured: boolean
+  /** A member who finished this task pays `dealPrice` instead of the list price. Null means the product has no task price. */
+  dealTaskId: number | null
+  dealPrice: number
+  /** The linked task as it stands now; null when it was deleted, which switches the task price off. */
+  dealTask: { title: string; live: boolean } | null
+  /** The discount campaign the product is sold under right now. */
+  sale: { id: number; name: string; pct: number; endsAt: string } | null
+  /** The list price with the campaign taken off; equal to `price` when no campaign covers the product. */
+  salePrice: number
 }
 
 export type MarketRequest = {
@@ -104,7 +113,9 @@ function ensure() {
       ADD COLUMN IF NOT EXISTS reward_kind text,
       ADD COLUMN IF NOT EXISTS reward_amount int NOT NULL DEFAULT 0,
       ADD COLUMN IF NOT EXISTS reward_ref text,
-      ADD COLUMN IF NOT EXISTS featured boolean NOT NULL DEFAULT false`)
+      ADD COLUMN IF NOT EXISTS featured boolean NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS deal_task_id int,
+      ADD COLUMN IF NOT EXISTS deal_price int NOT NULL DEFAULT 0`)
     await rows(sql`ALTER TABLE market_requests ADD COLUMN IF NOT EXISTS needs_delivery boolean NOT NULL DEFAULT false`)
     // Products from before the delivery setting: the three the site already delivered keep doing so,
     // every other one goes to the staff queue instead of being marked delivered with nothing handed over.
@@ -125,6 +136,7 @@ type ItemRow = {
   description: string; delivery: string; rules: string[]; image: string; price: number; stock: number; total: number
   per_user: number; needs_username: boolean; active: boolean; sort: number
   delivery_mode: string | null; reward_kind: string | null; reward_amount: number; reward_ref: string | null; featured: boolean
+  deal_task_id: number | null; deal_price: number
 }
 
 function toProduct(r: ItemRow): MarketProduct {
@@ -133,6 +145,7 @@ function toProduct(r: ItemRow): MarketProduct {
     r.kind !== 'sponsor' && isRewardKind(r.reward_kind) && Number(r.reward_amount) > 0
       ? { kind: r.reward_kind, amount: Number(r.reward_amount), ref: r.reward_ref }
       : null
+  const hasDeal = Number(r.deal_task_id) > 0 && Number(r.deal_price) > 0 && Number(r.deal_price) < Number(r.price)
   return {
     id: r.id, kind: r.kind, sponsorId: r.sponsor_id, sponsorName: r.sponsor_name, sponsorSlug: null, type: r.type, name: r.name,
     description: r.description, delivery: r.delivery, rules: Array.isArray(r.rules) ? r.rules : [], image: r.image,
@@ -141,7 +154,54 @@ function toProduct(r: ItemRow): MarketProduct {
     deliveryMode: reward && r.delivery_mode === 'auto' ? 'auto' : 'manual',
     reward,
     featured: Boolean(r.featured),
+    dealTaskId: hasDeal ? Number(r.deal_task_id) : null,
+    dealPrice: hasDeal ? Number(r.deal_price) : 0,
+    dealTask: null,
+    sale: null,
+    salePrice: r.price,
   }
+}
+
+/**
+ * Fills in what a product costs right now: the running campaign and the state of its linked task.
+ * `strict` is for a purchase, where a price that cannot be read must stop the sale instead of
+ * quietly charging the list price.
+ */
+async function priced(items: MarketProduct[], strict = false): Promise<MarketProduct[]> {
+  if (!items.length) return items
+  const quiet = <T,>(fallback: T) => (e: unknown): T => {
+    if (strict) throw e
+    console.error('[market] fiyat bilgisi okunamadı', e)
+    return fallback
+  }
+  const { liveSales } = await import('@/lib/market-sales')
+  const sales = await liveSales().catch(quiet([] as Awaited<ReturnType<typeof liveSales>>))
+  const linked = items.some((i) => i.dealTaskId)
+  const tasks = new Map<number, { title: string; live: boolean }>()
+  if (linked) {
+    const { listTasks, isLiveTask } = await import('@/lib/tasks')
+    for (const t of await listTasks().catch(quiet([] as Awaited<ReturnType<typeof listTasks>>))) tasks.set(t.id, { title: t.title, live: isLiveTask(t) })
+  }
+  return items.map((item) => {
+    const sale = bestSale(sales, item)
+    return {
+      ...item,
+      sale: sale ? { id: sale.id, name: sale.name, pct: sale.pct, endsAt: sale.endsAt } : null,
+      salePrice: afterPct(item.price, sale?.pct ?? 0),
+      dealTask: item.dealTaskId ? (tasks.get(item.dealTaskId) ?? null) : null,
+    }
+  })
+}
+
+/** The linked tasks this member has finished, so the site can show the price they will actually pay. */
+export async function doneDealTasks(userId: string): Promise<number[]> {
+  await ensure()
+  const linked = await rows<{ id: number }>(sql`SELECT DISTINCT deal_task_id AS id FROM market_items
+    WHERE active AND deal_task_id IS NOT NULL AND deal_price > 0`)
+  if (!linked.length) return []
+  const { completedTaskIds } = await import('@/lib/tasks')
+  const done = new Set(await completedTaskIds(userId))
+  return linked.map((r) => Number(r.id)).filter((id) => done.has(id))
 }
 
 async function withSponsorSlugs(items: MarketProduct[]) {
@@ -160,12 +220,12 @@ export async function listProducts(opts: { includeInactive?: boolean } = {}): Pr
   const r = opts.includeInactive
     ? await rows<ItemRow>(sql`SELECT * FROM market_items ORDER BY sort, created_at`)
     : await rows<ItemRow>(sql`SELECT * FROM market_items WHERE active ORDER BY sort, created_at`)
-  const items = await withSponsorSlugs(r.map(toProduct))
+  const items = await priced(await withSponsorSlugs(r.map(toProduct)))
   if (opts.includeInactive) return items
   return items.filter((item) => item.kind !== 'sponsor' || item.sponsorSlug)
 }
 
-export type ProductInput = Omit<MarketProduct, 'id' | 'needsUsername' | 'sponsorSlug'> & { id: string | null; needsUsername: boolean }
+export type ProductInput = Omit<MarketProduct, 'id' | 'needsUsername' | 'sponsorSlug' | 'dealTask' | 'sale' | 'salePrice'> & { id: string | null; needsUsername: boolean }
 
 const MAX_PRICE = 10_000_000
 const MAX_STOCK = 100_000
@@ -213,22 +273,42 @@ export async function saveProduct(input: ProductInput) {
   const stock = Math.min(int(input.stock, 0, MAX_STOCK), total || MAX_STOCK)
   const price = int(input.price, 1, MAX_PRICE)
   const reward = kind === 'sponsor' || input.deliveryMode !== 'auto' ? null : await cleanReward(input.reward, price)
+  const deal = await cleanDeal(input, price, reward)
   // A new product goes to the end of the list; an edited one keeps the place it was dragged to.
   const sort = input.id ? int(input.sort, 0, 99_999) : null
   await rows(sql`INSERT INTO market_items (id, kind, sponsor_id, sponsor_name, type, name, description, delivery, rules, image, price, stock, total, per_user, needs_username, active, sort,
-      delivery_mode, reward_kind, reward_amount, reward_ref, featured)
+      delivery_mode, reward_kind, reward_amount, reward_ref, featured, deal_task_id, deal_price)
     VALUES (${id}, ${kind}, ${kind === 'sponsor' ? clean(input.sponsorId, 80) || null : null}, ${sponsorName}, ${clean(input.type, 30) || 'HEDİYE'}, ${name},
       ${clean(input.description, 600)}, ${clean(input.delivery, 300)}, ${JSON.stringify(rules)}::jsonb, ${image},
       ${price}, ${stock}, ${total}, ${int(input.perUser, 1, 100)}, ${Boolean(input.needsUsername) || kind === 'sponsor'},
       ${input.active !== false}, COALESCE(${sort}::int, (SELECT COALESCE(max(sort), -1) + 1 FROM market_items)),
-      ${reward ? 'auto' : 'manual'}, ${reward?.kind ?? null}, ${reward?.amount ?? 0}, ${reward?.ref ?? null}, ${Boolean(input.featured)})
+      ${reward ? 'auto' : 'manual'}, ${reward?.kind ?? null}, ${reward?.amount ?? 0}, ${reward?.ref ?? null}, ${Boolean(input.featured)},
+      ${deal.taskId}, ${deal.price})
     ON CONFLICT (id) DO UPDATE SET kind = EXCLUDED.kind, sponsor_id = EXCLUDED.sponsor_id, sponsor_name = EXCLUDED.sponsor_name,
       type = EXCLUDED.type, name = EXCLUDED.name, description = EXCLUDED.description, delivery = EXCLUDED.delivery, rules = EXCLUDED.rules,
       image = EXCLUDED.image, price = EXCLUDED.price, stock = EXCLUDED.stock, total = EXCLUDED.total, per_user = EXCLUDED.per_user,
       needs_username = EXCLUDED.needs_username, active = EXCLUDED.active, sort = EXCLUDED.sort,
       delivery_mode = EXCLUDED.delivery_mode, reward_kind = EXCLUDED.reward_kind, reward_amount = EXCLUDED.reward_amount,
-      reward_ref = EXCLUDED.reward_ref, featured = EXCLUDED.featured`)
+      reward_ref = EXCLUDED.reward_ref, featured = EXCLUDED.featured,
+      deal_task_id = EXCLUDED.deal_task_id, deal_price = EXCLUDED.deal_price`)
   return id
+}
+
+/** The task price of a product, checked so it is always a real discount tied to a task members can find. */
+async function cleanDeal(input: ProductInput, price: number, reward: Reward | null): Promise<{ taskId: number | null; price: number }> {
+  const taskId = Math.floor(Number(input.dealTaskId) || 0)
+  if (taskId < 1) return { taskId: null, price: 0 }
+  const { listTasks } = await import('@/lib/tasks')
+  const task = (await listTasks()).find((t) => t.id === taskId)
+  if (!task) throw new Error('Seçilen görev bulunamadı. Görevler ekranından kontrol et.')
+  if (task.archived) throw new Error(`"${task.title}" arşivde. Üyenin tamamlayabileceği bir görev seç.`)
+  const dealPrice = Math.floor(Number(input.dealPrice) || 0)
+  if (dealPrice < 1) throw new Error('Görevi tamamlayanın ödeyeceği fiyatı yaz.')
+  if (dealPrice >= price) throw new Error(`Görev fiyatı (${dealPrice.toLocaleString('tr-TR')} KC) normal fiyattan (${price.toLocaleString('tr-TR')} KC) düşük olmalı.`)
+  if (reward?.kind === 'kc' && dealPrice <= reward.amount) {
+    throw new Error(`Görev fiyatı (${dealPrice.toLocaleString('tr-TR')} KC) ürünün verdiği coinden (${reward.amount.toLocaleString('tr-TR')} KC) fazla olmalı; yoksa ürün bedava coin dağıtır.`)
+  }
+  return { taskId, price: dealPrice }
 }
 
 /** What an automatic product hands over, checked so a product can never be saved as automatic with nothing to give. */
@@ -270,16 +350,20 @@ export async function featureProduct(id: string, featured: boolean) {
   if (!r.length) throw new Error('Ürün bulunamadı.')
 }
 
-export async function requestProduct(member: Member, itemId: string, siteUsername: string | null) {
+/**
+ * `expected` is the price the member was shown. A campaign can end while the page is open; the purchase
+ * is refused rather than charging more than the screen said.
+ */
+export async function requestProduct(member: Member, itemId: string, siteUsername: string | null, expected: number | null = null) {
   const { withUserLock } = await import('@/lib/user-lock')
-  return withUserLock(`market:${member.id}`, () => requestProductLocked(member, itemId, siteUsername))
+  return withUserLock(`market:${member.id}`, () => requestProductLocked(member, itemId, siteUsername, expected))
 }
 
-async function requestProductLocked(member: Member, itemId: string, siteUsername: string | null) {
+async function requestProductLocked(member: Member, itemId: string, siteUsername: string | null, expected: number | null) {
   await ensure()
   const found = await rows<ItemRow>(sql`SELECT * FROM market_items WHERE id = ${itemId} AND active`)
   if (!found[0]) throw new Error('Ürün bulunamadı.')
-  const item = toProduct(found[0])
+  const [item] = await priced([toProduct(found[0])], true)
   const username = clean(siteUsername, 60)
   if (item.needsUsername && username.length < 2) throw new Error('Site kullanıcı adını yazmalısın.')
 
@@ -288,7 +372,13 @@ async function requestProductLocked(member: Member, itemId: string, siteUsername
   if (Number(used[0]?.c ?? 0) >= item.perUser) throw new Error(`Bu üründen en fazla ${item.perUser} adet alabilirsin.`)
   const { marketDiscountPct, discounted } = await import('@/lib/boosts')
   const pct = item.kind === 'sponsor' ? 0 : await marketDiscountPct(member.id).catch(() => 0)
-  const price = discounted(item.price, pct)
+  const viaTask = dealWins(item) && (await import('@/lib/tasks').then((m) => m.completedTaskIds(member.id))).includes(Number(item.dealTaskId))
+  let price = discounted(viaTask ? item.dealPrice : item.salePrice, pct)
+  // Whatever discounts stack up, a product that hands out coins always costs more than it gives.
+  if (item.deliveryMode === 'auto' && item.reward?.kind === 'kc') price = Math.min(item.price, Math.max(price, item.reward.amount + 1))
+  if (expected != null && Number.isFinite(expected) && price > expected) {
+    throw new Error(`Fiyat değişti: bu ürün şu an ${price.toLocaleString('tr-TR')} KC. Sayfayı yenileyip tekrar dene.`)
+  }
   await assertCanBuy(member.id, price)
   const { roleBlocks, badgeCount } = await import('@/lib/kanka-puan')
   if (await roleBlocks(member.id, 'market')) throw new Error('Bu rolle marketten alışveriş yapılamıyor.')
@@ -323,7 +413,7 @@ async function requestProductLocked(member: Member, itemId: string, siteUsername
   const { notifyApproval } = await import('@/lib/telegram-bots')
   await notifyApproval('market', {
     uye: member.name,
-    detay: `${item.name} (${price} KC${pct ? `, %${pct} indirimli` : ''})${username ? ` · Site kullanıcı adı: ${username}` : ''}`,
+    detay: `${item.name} (${price} KC${viaTask ? ', görev fiyatı' : item.sale ? `, ${item.sale.name} %${item.sale.pct}` : ''}${pct ? `, %${pct} indirimli` : ''})${username ? ` · Site kullanıcı adı: ${username}` : ''}`,
   }).catch(() => {})
   return { ...item, price, delivered }
 }

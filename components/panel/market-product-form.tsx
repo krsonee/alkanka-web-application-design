@@ -10,6 +10,9 @@ import { SideSheet } from '@/components/panel/side-sheet'
 
 export type SponsorOption = { id: string; name: string }
 export type BadgeOption = { id: string; name: string }
+export type TaskOption = { id: number; title: string; period: string; live: boolean }
+
+const PERIOD_NOTE: Record<string, string> = { daily: 'günlük', weekly: 'haftalık', monthly: 'aylık', once: 'tek seferlik', special: 'özel' }
 
 const field = 'h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary'
 
@@ -24,6 +27,7 @@ export function MarketProductForm({
   value,
   sponsors,
   badges,
+  tasks,
   pending,
   error,
   onSave,
@@ -32,6 +36,7 @@ export function MarketProductForm({
   value: ProductInput
   sponsors: SponsorOption[]
   badges: BadgeOption[]
+  tasks: TaskOption[]
   pending: boolean
   error: string | null
   onSave: (v: ProductInput) => void
@@ -44,6 +49,14 @@ export function MarketProductForm({
   const mode: DeliveryMode = sponsor ? 'manual' : v.deliveryMode
   const reward = v.reward ?? { kind: 'cark' as RewardKind, amount: 1, ref: null }
   const meta = rewardMeta(reward.kind)
+  const [dealOn, setDealOn] = useState(Boolean(value.dealTaskId))
+  const dealTask = tasks.find((t) => t.id === v.dealTaskId)
+  const dealBad = dealOn && Number(v.dealPrice) >= Number(v.price)
+
+  function setDeal(on: boolean) {
+    setDealOn(on)
+    if (on) setV((p) => ({ ...p, dealTaskId: p.dealTaskId ?? tasks[0]?.id ?? null, dealPrice: p.dealPrice || Math.max(1, Math.floor(Number(p.price) / 2)) }))
+  }
 
   function setKind(kind: MarketKind) {
     setV((p) => ({
@@ -88,7 +101,7 @@ export function MarketProductForm({
         data-no-guard
         onSubmit={(e) => {
           e.preventDefault()
-          onSave({ ...v, deliveryMode: mode, reward: mode === 'auto' ? reward : null })
+          onSave({ ...v, deliveryMode: mode, reward: mode === 'auto' ? reward : null, dealTaskId: dealOn ? v.dealTaskId : null, dealPrice: dealOn ? v.dealPrice : 0 })
         }}
         className="grid gap-4 md:grid-cols-2"
       >
@@ -157,6 +170,48 @@ export function MarketProductForm({
               <input type="number" inputMode="numeric" min={min} value={v[k]} onChange={(e) => set(k, Number(e.target.value))} className={field} />
             </Label>
           ))}
+        </div>
+
+        <Group>Görevle indirim</Group>
+        <div className="flex flex-col gap-3 text-sm text-foreground md:col-span-2">
+          <Check checked={dealOn} onChange={setDeal} text="Seçtiğim görevi tamamlayan üye bu ürünü daha ucuza alsın" />
+          {dealOn && (
+            <div className="grid gap-3 rounded-xl border border-primary/40 bg-primary/5 p-3 sm:grid-cols-2">
+              <Label text="Tamamlanacak görev">
+                <select required value={v.dealTaskId ?? ''} onChange={(e) => set('dealTaskId', Number(e.target.value) || null)} className={field}>
+                  <option value="">{tasks.length ? 'Seç' : 'Kayıtlı görev yok, önce Görevler ekranından ekle'}</option>
+                  {v.dealTaskId != null && !dealTask && <option value={v.dealTaskId}>Silinmiş ya da arşivlenmiş görev</option>}
+                  {tasks.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {`${t.title} (${PERIOD_NOTE[t.period] ?? t.period}${t.live ? '' : ', şu an yayında değil'})`}
+                    </option>
+                  ))}
+                </select>
+              </Label>
+              <Label text="Görevi tamamlayanın fiyatı (KC)">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  required
+                  min={1}
+                  max={Math.max(1, Number(v.price) - 1)}
+                  value={v.dealPrice}
+                  onChange={(e) => set('dealPrice', Number(e.target.value))}
+                  aria-invalid={dealBad}
+                  className={field}
+                />
+              </Label>
+              <p className={cn('text-xs leading-relaxed text-pretty sm:col-span-2', dealBad ? 'text-destructive' : 'text-muted-foreground')}>
+                {dealBad
+                  ? 'Görev fiyatı normal fiyattan düşük olmalı.'
+                  : `Üye bu ürünü ${Number(v.price).toLocaleString('tr-TR')} KC ödeyerek her zaman alabilir. Seçtiğin görevi tamamlamışsa ${Number(v.dealPrice).toLocaleString('tr-TR')} KC öder; fiyat kendiliğinden uygulanır, sana iş düşmez. Ürün markette "Görevli fırsatlar" sekmesinde de görünür.`}
+              </p>
+              <p className="text-xs leading-relaxed text-muted-foreground text-pretty sm:col-span-2">
+                Günlük görevde üyenin görevi o gün, haftalık görevde o hafta tamamlamış olması gerekir. Onay isteyen görevde indirim, görev onaylandıktan sonra açılır.
+                {dealTask && !dealTask.live ? ' Seçtiğin görev şu an yayında değil: üyeler görevi yapamadığı sürece indirim sitede gösterilmez.' : ''}
+              </p>
+            </div>
+          )}
         </div>
 
         <Group>Teslim</Group>

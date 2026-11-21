@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { Check, Coins, X } from 'lucide-react'
 import { requestMarketItem } from '@/app/actions/market'
 import type { MarketProduct } from '@/lib/market'
-import { rewardText } from '@/lib/market-shared'
+import { dealShown, rewardText } from '@/lib/market-shared'
 import { useEscape } from '@/lib/use-escape'
 import { formatAC } from '../points-context'
 
@@ -12,12 +13,17 @@ export type RequestResult = Awaited<ReturnType<typeof requestMarketItem>>
 
 export function RequestDialog({
   item,
+  pay,
+  taskDone,
   points,
   error,
   onClose,
   onDone,
 }: {
   item: MarketProduct
+  /** The price on screen; the server refuses the purchase if it would charge more than this. */
+  pay: number
+  taskDone: boolean
   points: number
   error: string | null
   onClose: () => void
@@ -26,12 +32,14 @@ export function RequestDialog({
   const [username, setUsername] = useState('')
   const [pending, startTransition] = useTransition()
   useEscape(true, onClose)
-  const short = item.price - points
+  const short = pay - points
   const auto = item.deliveryMode === 'auto' && item.reward
+  const viaTask = taskDone && dealShown(item, true) && pay === item.dealPrice
+  const taskOpen = !taskDone && dealShown(item, false) && item.dealTask
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
-    startTransition(async () => onDone(await requestMarketItem(item.id, item.needsUsername ? username : null)))
+    startTransition(async () => onDone(await requestMarketItem(item.id, item.needsUsername ? username : null, pay)))
   }
 
   return (
@@ -81,12 +89,33 @@ export function RequestDialog({
             : 'Coin şimdi düşer, talebin ekibin sırasına girer. Reddedilirse coinin iade edilir.'}
         </p>
 
-        <div className="flex items-center justify-between rounded-lg bg-secondary px-3 py-2 text-sm">
-          <span className="text-muted-foreground">Ödenecek</span>
-          <span className="flex items-center gap-1 font-display font-bold text-foreground tabular-nums">
-            <Coins className="size-4 text-primary" aria-hidden="true" />
-            {formatAC(item.price)} KC
-          </span>
+        <div className="flex flex-col gap-1.5 rounded-lg bg-secondary px-3 py-2 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-muted-foreground">Ödenecek</span>
+            <span className="flex items-center gap-1.5 font-display font-bold text-foreground tabular-nums">
+              <Coins className="size-4 text-primary" aria-hidden="true" />
+              {formatAC(pay)} KC
+              {pay < item.price && (
+                <s className="font-sans text-xs font-normal text-muted-foreground">
+                  <span className="sr-only">Eski fiyat </span>
+                  {formatAC(item.price)}
+                </s>
+              )}
+            </span>
+          </div>
+          {viaTask ? (
+            <p className="text-xs leading-relaxed text-success text-pretty">{`Görev fiyatı uygulandı: ${item.dealTask?.title ?? 'görev'} tamam.`}</p>
+          ) : (
+            item.sale && pay < item.price && <p className="text-xs leading-relaxed text-muted-foreground text-pretty">{`${item.sale.name}: %${item.sale.pct} indirim uygulandı.`}</p>
+          )}
+          {taskOpen && (
+            <p className="text-xs leading-relaxed text-muted-foreground text-pretty">
+              {`"${taskOpen.title}" görevini tamamlarsan bu ürünü ${formatAC(item.dealPrice)} KC'ye alırsın. `}
+              <Link href={`/gorevler?gorev=${item.dealTaskId}`} className="font-semibold text-primary underline-offset-2 hover:underline">
+                Göreve git
+              </Link>
+            </p>
+          )}
         </div>
 
         <p aria-live="polite" className="min-h-4 text-xs text-destructive">

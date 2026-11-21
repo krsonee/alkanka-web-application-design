@@ -32,6 +32,8 @@ export type PublicTask = {
   chainState?: 'done' | 'current' | 'locked' | null
   badge?: string | null
   cap?: number
+  /** A super task's own conditions with where the member stands on each. */
+  parts?: { label: string; progress: number; target: number; done: boolean }[]
 }
 
 type InviteRow = { userId: string; name: string; count: number }
@@ -48,7 +50,7 @@ const PERIOD_ORDER: TaskPeriod[] = ['daily', 'weekly', 'monthly', 'once']
 
 /** What the tabs, the categories and one task are called in the page's address. */
 const PERIOD_WORD: Record<TaskPeriod, string> = { daily: 'gunluk', weekly: 'haftalik', monthly: 'aylik', once: 'tek-seferlik' }
-const CATEGORY_WORD: Record<TaskCategory | 'hepsi', string> = { hepsi: 'hepsi', genel: 'genel', sosyal: 'sosyal', sponsor: 'sponsor', zincir: 'zincir' }
+const CATEGORY_WORD: Record<TaskCategory | 'hepsi', string> = { hepsi: 'hepsi', genel: 'genel', takvim: 'takvim', sosyal: 'sosyal', sponsor: 'sponsor', zincir: 'zincir' }
 const TASK_PARAM = 'gorev'
 
 const STREAK_RULES = [
@@ -409,7 +411,31 @@ export function Tasks({
                       <span className="text-[11px] font-bold tabular-nums text-muted-foreground">{task.progress}/{task.target}</span>
                     </span>
                   ) : null}
-                  {task.kind === 'bundle' && bundleOpen === task.id ? (
+                  {task.parts?.length && state === 'open' ? (
+                    <ul aria-label="Görevin şartları" className="flex flex-col gap-1 rounded-lg bg-secondary/60 p-2">
+                      {task.parts.map((part, index) => (
+                        <li key={index} className="flex items-center gap-2 text-xs">
+                          <span
+                            className={cn(
+                              'flex size-4 shrink-0 items-center justify-center rounded-full border',
+                              part.done ? 'border-primary bg-primary text-primary-foreground' : 'border-border',
+                            )}
+                            aria-hidden="true"
+                          >
+                            {part.done ? <Check className="size-3" /> : null}
+                          </span>
+                          <span className={cn('min-w-0 flex-1 truncate', part.done ? 'text-muted-foreground line-through' : 'text-foreground')}>{part.label}</span>
+                          <span className="sr-only">{part.done ? 'tamamlandı' : 'bekliyor'}</span>
+                          {part.target > 1 ? (
+                            <span className="shrink-0 font-bold tabular-nums text-muted-foreground">
+                              {part.progress.toLocaleString('tr-TR')}/{part.target.toLocaleString('tr-TR')}
+                            </span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {task.kind === 'bundle' && !task.parts?.length && bundleOpen === task.id ? (
                     <ul id={`bundle-${task.id}`} className="flex flex-col gap-1 rounded-lg bg-secondary/60 p-2">
                       {visibleTasks
                         .filter((t) => countsForBundle(task, t))
@@ -446,8 +472,8 @@ export function Tasks({
                       <Info className="size-3.5" aria-hidden="true" />
                       Nasıl yapılır?
                     </button>
-                    {task.kind === 'bundle' && state === 'open' ? (
-                      <button
+                  {task.kind === 'bundle' && !task.parts?.length && state === 'open' ? (
+                    <button
                         type="button"
                         onClick={() => setBundleOpen((id) => (id === task.id ? null : task.id))}
                         aria-expanded={bundleOpen === task.id}
@@ -464,7 +490,7 @@ export function Tasks({
                       </span>
                     ) : state === 'open' && (task.kind === 'secret_code' || task.kind === 'bundle') ? (
                       <button type="button" onClick={() => complete(task)} disabled={pending || (task.kind === 'bundle' && task.progress < task.target)} className={className}>
-                        {task.kind === 'secret_code' ? 'Kodu gönder' : task.period === 'daily' ? 'Sandığı aç' : 'Ödülü al'}
+                        {task.kind === 'secret_code' ? 'Kodu gönder' : task.period === 'daily' && !task.parts?.length ? 'Sandığı aç' : 'Ödülü al'}
                       </button>
                     ) : state === 'open' && isSocialCheckKind(task.kind) ? (
                       visited[task.id] || !task.link ? (

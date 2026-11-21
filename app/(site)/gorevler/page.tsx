@@ -6,7 +6,7 @@ import { MemberPerks } from '@/components/alkanka/kp/member-perks'
 import { getBirthday, getBoostConfig, shieldCount } from '@/lib/boosts'
 import { getMember } from '@/lib/member'
 import { getStreak, type StreakState } from '@/lib/checkin'
-import { bundleDetail, bundleTarget, completedTaskIds, inviteLeague, listPublicTasks, taskClaimMap, taskProgressMap, visibleTasksFor, type ClaimStatus } from '@/lib/tasks'
+import { bundleDetail, bundleTarget, completedTaskIds, inviteLeague, listPublicTasks, taskClaimMap, taskPartStates, taskProgressMap, visibleTasksFor, type ClaimStatus, type PartState, type ProgressMemo } from '@/lib/tasks'
 
 export const metadata = pageMeta('gorevler')
 export const dynamic = 'force-dynamic'
@@ -22,8 +22,11 @@ export default async function TasksPage() {
   ])
   const finished = new Set(done)
   const view = visibleTasksFor(member?.id ?? null, tasks, finished)
-  const [progress, league, perks] = await Promise.all([
-    member ? taskProgressMap(member.id, view.tasks).catch(() => ({} as Record<number, number>)) : Promise.resolve({} as Record<number, number>),
+  const withParts = view.tasks.filter((task) => task.parts.length && !finished.has(task.id))
+  const memo: ProgressMemo = new Map()
+  const [progress, partStates, league, perks] = await Promise.all([
+    member ? taskProgressMap(member.id, view.tasks, memo).catch(() => ({} as Record<number, number>)) : Promise.resolve({} as Record<number, number>),
+    Promise.all(withParts.map((task) => taskPartStates(member?.id ?? null, task, memo).catch(() => [] as PartState[]))),
     inviteLeague(10),
     member
       ? Promise.all([getBoostConfig(), shieldCount(member.id), getBirthday(member.id)])
@@ -31,6 +34,7 @@ export default async function TasksPage() {
           .catch(() => null)
       : Promise.resolve(null),
   ])
+  const partsOf = new Map(withParts.map((task, index) => [task.id, partStates[index]]))
   const shown = view.tasks.map((task) => ({
     id: task.id,
     title: task.title,
@@ -51,6 +55,7 @@ export default async function TasksPage() {
     chainState: view.chainState[task.id] ?? null,
     badge: task.badge,
     cap: task.cap,
+    parts: partsOf.get(task.id),
   }))
   return (
     <>
