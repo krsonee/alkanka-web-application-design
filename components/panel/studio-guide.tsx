@@ -213,7 +213,8 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
               <>Sticker şeffaf arka planla, Telegram ölçüsünde (512 px) çıkar; arkası damalı görünür, bu normaldir.</>,
               <>{b('Hareketli sticker')}: {b('Ne hareket etsin')} alanını yaz, {b('Hareketlisini de üret')} kutusunu işaretle ya da hazır stickerın altındaki {b('Hareketlendir')} düğmesine bas. Karakter gerçekten hareket eder; çıktı Telegram&apos;ın kabul ettiği 3 saniyelik, şeffaf video stickerdır. 1-2 dakika sürer ve ücretlidir.</>,
               <>{b('Sallanma · ücretsiz')} düğmesi stickerı olduğu gibi hafifçe sallar; yapay zeka çalışmaz.</>,
-              <>{b('İndir')} ile al. Telegram&apos;da @Stickers botuna gönderip paketine ekleyebilirsin.</>,
+              <>Hareketlendirirken karakterin çevresine çıkan fazlalıklar (yazı, şimşek, parıltı) kendiliğinden kesilir: stickerda sadece karakterin kendi şekli kalır. Bu yüzden büyük hareket isteme (zıplama, kayma); küçük hareketler en temiz sonucu verir.</>,
+              <>{b('İndir')} ile al. Telegram&apos;a eklemek için dosyayı sohbete atmak yetmez: @Stickers botunu aç, hareketli sticker için {b('/newvideo')} yaz (hazır paketine eklemek için {b('/addsticker')}), sonra indirdiğin dosyayı {b('dosya olarak')} gönder ve botun istediği emojiyi yolla.</>,
             ]}
           />
         </Block>

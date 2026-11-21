@@ -61,13 +61,36 @@ const KEY_GREEN = { r: 0, g: 255, b: 0 }
 export async function stickerGreenFrame(image: Buffer) {
   const { width, height } = STICKER_FRAME
   const art = await sharp(image)
-    .resize(Math.round(height * 0.8), Math.round(height * 0.8), { fit: 'contain', background: CLEAR })
+    .resize(Math.round(height * ART_SHARE), Math.round(height * ART_SHARE), { fit: 'contain', background: CLEAR })
     .png()
     .toBuffer()
   return sharp({ create: { width, height, channels: 3, background: KEY_GREEN } })
     .composite([{ input: art, gravity: 'centre' }])
     .png()
     .toBuffer()
+}
+
+/** Share of the frame height the sticker fills on the green frame. */
+const ART_SHARE = 0.8
+/** How far, in pixels of the finished sticker, the character may move outside its still shape. */
+const MOVE_ROOM = 14
+
+/**
+ * The part of the finished sticker the character may show in: its own still shape, grown by
+ * `MOVE_ROOM`, as a 512 px grey picture. The model sometimes paints words, sparks or a glow on the
+ * green; they are not green, so the key keeps them, and only this shape can cut them away.
+ */
+export async function stickerShape(image: Buffer) {
+  const inner = Math.round(SIZE * ART_SHARE)
+  const art = await sharp(image).ensureAlpha().resize(inner, inner, { fit: 'contain', background: CLEAR }).png().toBuffer()
+  const placed = await sharp({ create: { width: SIZE, height: SIZE, channels: 4, background: CLEAR } })
+    .composite([{ input: art, gravity: 'centre' }])
+    .png()
+    .toBuffer()
+  // Same growing trick as `outlineSticker`: blur, cut off low, then soften the new edge.
+  const blurred = await sharp(placed).extractChannel('alpha').blur(MOVE_ROOM / 1.5).png().toBuffer()
+  const hard = await sharp(blurred).threshold(18).png().toBuffer()
+  return sharp(hard).blur(4).extractChannel(0).png().toBuffer()
 }
 
 const hex = (n: number) => Math.round(n).toString(16).padStart(2, '0')
@@ -88,27 +111,39 @@ async function keyColour(ffmpeg: string, input: string, dir: string) {
 /**
  * Turns the model's green-screen clip into a Telegram video sticker: the middle square, the green
  * removed, 512 px, 30 fps, VP9 with transparency, under 256 KB. The first three seconds play at
- * double speed and then backwards, so the three-second loop has no jump.
+ * double speed and then backwards, so the three-second loop has no jump. `shape` (see
+ * `stickerShape`) limits the picture to where the character can be.
  */
-export async function clipToVideoSticker(video: Buffer) {
+export async function clipToVideoSticker(video: Buffer, shape: Buffer) {
   if (!ffmpegPath) throw new Error('Video dönüştürücü bulunamadı.')
   const dir = await mkdtemp(path.join(tmpdir(), 'tgm-'))
   try {
     const input = path.join(dir, 'in.mp4')
+    const mask = path.join(dir, 'shape.png')
     const out = path.join(dir, 'out.webm')
     await writeFile(input, video)
+    await writeFile(mask, shape)
     const key = await keyColour(ffmpegPath, input, dir)
-    const filter = [
+    const keyed = [
       `[0:v]trim=0:3,setpts=(PTS-STARTPTS)/2,fps=${FPS},crop=ih:ih:(iw-ih)/2:0`,
       `chromakey=${key}:0.16:0.07,despill=type=green:mix=0.7`,
-      `scale=${SIZE}:${SIZE}:flags=lanczos,split[fwd][src]`,
+      `scale=${SIZE}:${SIZE}:flags=lanczos,format=yuva420p,split[colour][keyed]`,
     ].join(',')
+    const filter = [
+      keyed,
+      '[keyed]alphaextract[seen]',
+      `[1:v]scale=${SIZE}:${SIZE},format=gray[shape]`,
+      '[seen][shape]blend=all_mode=multiply:shortest=1[alpha]',
+      '[colour][alpha]alphamerge,split[fwd][src]',
+      '[src]reverse[back]',
+      '[fwd][back]concat=n=2:v=1,format=yuva420p[out]',
+    ].join(';')
     for (const crf of [36, 44, 52, 60]) {
       await run(
         ffmpegPath,
         [
-          '-y', '-loglevel', 'error', '-i', input,
-          '-filter_complex', `${filter};[src]reverse[back];[fwd][back]concat=n=2:v=1,format=yuva420p[out]`,
+          '-y', '-loglevel', 'error', '-i', input, '-loop', '1', '-framerate', String(FPS), '-i', mask,
+          '-filter_complex', filter,
           '-map', '[out]', '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-b:v', '0', '-crf', String(crf),
           '-deadline', 'good', '-cpu-used', '4', '-an', '-t', '2.95', '-r', String(FPS), out,
         ],
