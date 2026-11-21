@@ -931,8 +931,43 @@ function JobCard({
             <Trash2 className="size-3.5" aria-hidden />
           </button>
         </div>
+        {job.kind === 'tgsticker' ? <TelegramHowTo /> : null}
       </figcaption>
     </figure>
+  )
+}
+
+/** A moving sticker is a .webm file; Telegram takes it only through the @Stickers bot. */
+function TelegramHowTo() {
+  return (
+    <details className="rounded-lg border border-border bg-secondary/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+      <summary className="cursor-pointer font-semibold text-foreground">{'Telegram\'a nasıl eklenir?'}</summary>
+      <ol className="mt-2 flex list-decimal flex-col gap-1 pl-4">
+        <li>
+          {'Telegram\'da '}
+          <a href="https://t.me/Stickers" target="_blank" rel="noreferrer" className="font-semibold text-foreground underline underline-offset-2">
+            @Stickers
+          </a>
+          {' botunu aç.'}
+        </li>
+        <li>
+          {'Yeni paket için '}
+          <code className="font-mono text-foreground">/newvideo</code>
+          {', hazır paketine eklemek için '}
+          <code className="font-mono text-foreground">/addsticker</code>
+          {' yaz.'}
+        </li>
+        <li>{'İndirdiğin .webm dosyasını bota gönder, ardından bu stickera uyan bir emoji yolla.'}</li>
+        <li>
+          {'Yeni pakette '}
+          <code className="font-mono text-foreground">/publish</code>
+          {' ile paketi yayınla; bot paketin linkini verir.'}
+        </li>
+      </ol>
+      <p className="mt-2">
+        {'Telegram\'ın sticker panelindeki + düğmesi (sticker düzenleyicisi) sadece fotoğraf alır; hareketli sticker oradan eklenmez.'}
+      </p>
+    </details>
   )
 }
 
