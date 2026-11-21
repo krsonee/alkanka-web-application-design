@@ -27,10 +27,12 @@ import {
   deleteBrandAction,
   deleteJobAction,
   extractBrandAction,
+  moreJobsAction,
   saveBrandAction,
   saveStudioCapAction,
   studioToSlideAction,
 } from '@/app/panel/studio-actions'
+import { ALL_KINDS, AreaBar, AreaHead, areaOf, areaTotal, inKindGroup, startArea, writeArea, type StudioArea } from '@/components/panel/studio-areas'
 import { BriefFields, MotionFields } from '@/components/panel/studio-brief-form'
 import { StudioGuide, StudioHint } from '@/components/panel/studio-guide'
 import { amountInput } from '@/lib/amount'
@@ -61,6 +63,7 @@ import {
   videoCost,
   type ImageSize,
   type MotionQuality,
+  type StudioAreaTotal,
   type StudioAsset,
   type StudioBrand,
   type StudioJob,
@@ -78,7 +81,11 @@ const PAID_MOTION: AnimateMode[] = ['aigif', 'video', 'tgmotion']
 type Props = {
   brands: StudioBrand[]
   assets: StudioAsset[]
+  /** The newest jobs of every brand, so each brand's area can be shown on its own. */
   jobs: StudioJob[]
+  totals: StudioAreaTotal[]
+  /** The brand area named in the address, if any. */
+  initialArea?: string
   spend: { total: number; month: number; count: number }
   budget: { cap: number | null; canEdit: boolean }
   /** The account may also open the Slider section, so a banner can be sent there. */
@@ -185,8 +192,15 @@ function BudgetMeter({ spend, budget }: Pick<Props, 'spend' | 'budget'>) {
   )
 }
 
-export function Studio({ brands, assets, jobs, spend, budget, canSlide }: Props) {
+export function Studio({ brands, assets, jobs, totals, initialArea, spend, budget, canSlide }: Props) {
   const [view, setView] = useState<StudioView>(brands.length ? 'create' : 'guide')
+  const [picked, setPicked] = useState<StudioArea>(() => startArea(initialArea, brands))
+  // A brand kit deleted while its area is open falls back to the first brand.
+  const area = picked === '' || brands.some((b) => b.id === picked) ? picked : (brands[0]?.id ?? '')
+  function pickArea(next: StudioArea) {
+    setPicked(next)
+    writeArea(next)
+  }
   const { left } = budgetState(spend.month, budget.cap)
   return (
     <div className="flex flex-col gap-6">
@@ -223,7 +237,7 @@ export function Studio({ brands, assets, jobs, spend, budget, canSlide }: Props)
         <StudioHint section={view} onOpenGuide={() => setView('guide')} />
       )}
       {view === 'create' ? (
-        <Creator brands={brands} assets={assets} jobs={jobs} left={left} canSlide={canSlide} />
+        <Creator brands={brands} assets={assets} jobs={jobs} totals={totals} area={area} onArea={pickArea} left={left} canSlide={canSlide} />
       ) : view === 'brands' ? (
         <BrandKits brands={brands} />
       ) : view === 'library' ? (
@@ -233,10 +247,28 @@ export function Studio({ brands, assets, jobs, spend, budget, canSlide }: Props)
   )
 }
 
-function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' | 'assets' | 'jobs' | 'canSlide'> & { left: number | null }) {
+function Creator({
+  brands,
+  assets,
+  jobs,
+  totals,
+  area: brandId,
+  onArea,
+  left,
+  canSlide,
+}: Pick<Props, 'brands' | 'assets' | 'jobs' | 'totals' | 'canSlide'> & {
+  /** The brand whose area is open; the form makes new work for it and the list shows only its jobs. */
+  area: StudioArea
+  onArea: (area: StudioArea) => void
+  left: number | null
+}) {
   const router = useRouter()
   const [flow, setFlow] = useState<StudioFlow>('banner')
-  const [brandId, setBrandId] = useState<number | ''>(brands[0]?.id ?? '')
+  const [kind, setKind] = useState<string>(ALL_KINDS)
+  // Older jobs fetched with "show more", and jobs deleted since the list was loaded.
+  const [older, setOlder] = useState<StudioJob[]>([])
+  const [gone, setGone] = useState<number[]>([])
+  const [loadingMore, startMore] = useTransition()
   const [formats, setFormats] = useState<string[]>(['1:1'])
   const [category, setCategory] = useState<string>(STUDIO_CATEGORIES[0])
   const [brief, setBrief] = useState<Brief>(EMPTY_BRIEF)
@@ -384,9 +416,33 @@ function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' 
     router.refresh()
   }
 
-  const shown = [...results, ...jobs.filter((j) => !results.some((r) => r.id === j.id))]
+  const byId = new Map<number, StudioJob>()
+  for (const job of [...results, ...jobs, ...older]) {
+    if (!byId.has(job.id) && !gone.includes(job.id) && areaOf(job, brands) === brandId) byId.set(job.id, job)
+  }
+  const mine = [...byId.values()].sort((a, b) => b.id - a.id)
+  const shown = mine.filter((job) => inKindGroup(job, kind))
+  const total = areaTotal(totals, brandId)
+  const areaName = brand?.name ?? 'Markasız'
+
+  function switchArea(next: StudioArea) {
+    setKind(ALL_KINDS)
+    onArea(next)
+  }
+
+  function loadMore() {
+    const last = mine[mine.length - 1]
+    if (!last) return
+    startMore(async () => {
+      const res = await moreJobsAction(brandId === '' ? null : brandId, last.id)
+      if (res.jobs) setOlder((list) => [...list, ...(res.jobs ?? [])])
+      else setError(res.message ?? 'Liste yüklenemedi.')
+    })
+  }
 
   return (
+    <div className="flex flex-col gap-6">
+    <AreaBar brands={brands} totals={totals} area={brandId} onPick={switchArea} />
     <div className="grid gap-6 lg:grid-cols-[420px_1fr]">
       <div className={cn(card, 'h-fit')}>
         <div className="grid grid-cols-2 gap-2">
@@ -416,7 +472,7 @@ function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' 
 
         <label className={label}>
           Marka (logo ve renkler bu kitten alınır)
-          <select value={brandId} onChange={(e) => setBrandId(e.target.value ? Number(e.target.value) : '')} className={input}>
+          <select value={brandId} onChange={(e) => switchArea(e.target.value ? Number(e.target.value) : '')} className={input}>
             <option value="">Markasız</option>
             {brands.map((b) => (
               <option key={b.id} value={b.id}>
@@ -619,6 +675,7 @@ function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' 
       </div>
 
       <div className="flex flex-col gap-4">
+        <AreaHead name={areaName} count={Math.max(total.count, mine.length)} cost={total.cost} jobs={mine} kind={kind} onKind={setKind} />
         {revising ? (
           <div className={card}>
             <div className="flex items-center gap-2">
@@ -722,9 +779,11 @@ function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' 
         {shown.length === 0 && running + videoRuns === 0 ? (
           <div className="flex min-h-80 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border p-8 text-center">
             <Sparkles className="size-8 text-primary" aria-hidden />
-            <p className="font-semibold text-foreground">Henüz üretim yok</p>
-            <p className="max-w-sm text-sm text-muted-foreground">
-              Soldan işi ve markayı seç, formu doldur ve üret. Logo yapay zekaya çizdirilmez, kitteki orijinal logo birebir basılır.
+            <p className="font-semibold text-foreground">{mine.length ? 'Bu türde üretim yok' : `${areaName} için henüz üretim yok`}</p>
+            <p className="max-w-sm text-pretty text-sm text-muted-foreground">
+              {mine.length
+                ? 'Yukarıdan başka bir tür seç ya da "Hepsi"ne dön.'
+                : 'Soldan işi seç, formu doldur ve üret; çıkan iş bu markanın alanında durur. Logo yapay zekaya çizdirilmez, kitteki orijinal logo birebir basılır.'}
             </p>
           </div>
         ) : null}
@@ -749,6 +808,7 @@ function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' 
               canSlide={canSlide}
               onRevise={() => openRevision(job)}
               onAnimate={() => setAnimating(job)}
+              onDeleted={() => setGone((ids) => [...ids, job.id])}
               motionOff={overCap(STICKER_MOTION_COST)}
               onTelegram={async (mode) => {
                 setError('')
@@ -758,7 +818,14 @@ function Creator({ brands, assets, jobs, left, canSlide }: Pick<Props, 'brands' 
             />
           ))}
         </div>
+        {mine.length < total.count ? (
+          <button type="button" onClick={loadMore} disabled={loadingMore} className={cn(ghostBtn, 'self-center')}>
+            {loadingMore ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : null}
+            {`Daha eski üretimleri göster (${total.count - mine.length})`}
+          </button>
+        ) : null}
       </div>
+    </div>
     </div>
   )
 }
@@ -814,6 +881,7 @@ function JobCard({
   onRevise,
   onAnimate,
   onTelegram,
+  onDeleted,
   motionOff,
   canSlide,
 }: {
@@ -821,6 +889,7 @@ function JobCard({
   canSlide: boolean
   onRevise: () => void
   onAnimate: () => void
+  onDeleted?: () => void
   onTelegram?: (mode: 'tgsticker' | 'tgmotion' | 'tgicon') => void
   /** The monthly cap has no room left for a model-animated sticker. */
   motionOff?: boolean
@@ -921,7 +990,8 @@ function JobCard({
                 (ok) =>
                   ok &&
                   start(async () => {
-                    await deleteJobAction(job.id)
+                    const res = await deleteJobAction(job.id)
+                    if (res.ok) onDeleted?.()
                     router.refresh()
                   }),
               )

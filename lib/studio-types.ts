@@ -60,6 +60,12 @@ export type StudioJob = {
   retextable: boolean
 }
 
+/** How many jobs of one brand are sent to the screen at a time. */
+export const STUDIO_PAGE = 36
+
+/** All jobs of one brand; `brandId` is null for jobs without a brand kit. */
+export type StudioAreaTotal = { brandId: number | null; count: number; cost: number }
+
 export const STUDIO_FORMATS = [
   { id: '1:1', label: 'Kare 1:1', hint: 'Gönderi' },
   { id: '9:16', label: 'Dikey 9:16', hint: 'Story / Reels' },

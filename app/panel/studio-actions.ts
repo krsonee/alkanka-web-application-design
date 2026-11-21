@@ -9,11 +9,11 @@ import { put } from '@vercel/blob'
 import { getContent, setContent } from '@/lib/content'
 import { CUSTOM_SLIDES_KEY, MAX_CUSTOM_SLIDES, readCustomSlides } from '@/lib/custom-slides'
 import { HIDDEN_KEY, readHidden } from '@/lib/hidden-shared'
-import { deleteAsset, deleteBrand, deleteJob, getJob, readFile, saveBrand } from '@/lib/studio'
+import { deleteAsset, deleteBrand, deleteJob, getJob, listBrandJobs, readFile, saveBrand } from '@/lib/studio'
 import { briefProblem, cleanBrief, type Brief, type Improved, type Motion, type StudioFlow } from '@/lib/studio-brief'
 import { saveStudioCap } from '@/lib/studio-budget'
 import { improveBrief } from '@/lib/studio-improve'
-import { STUDIO_CAP_RANGE, usd } from '@/lib/studio-types'
+import { STUDIO_CAP_RANGE, usd, type StudioJob } from '@/lib/studio-types'
 
 type Result = { ok?: boolean; message?: string; brand?: { name: string; domain: string; logo: string; colors: string[]; font: string } }
 
@@ -155,6 +155,14 @@ export async function improveBriefAction(flow: string, brief: Brief, motion: Mot
     console.error('[studio] istek geliştirilemedi', error)
     return { message: 'İstek geliştirilemedi. Yazdıkların duruyor; biraz sonra tekrar dene ya da bu haliyle üret.' }
   }
+}
+
+export async function moreJobsAction(brandId: number | null, beforeId: number): Promise<{ jobs?: StudioJob[]; message?: string }> {
+  if (!(await canPanel('studio'))) return EXPIRED
+  if (!Number.isSafeInteger(beforeId) || beforeId < 1 || (brandId != null && (!Number.isSafeInteger(brandId) || brandId < 1))) {
+    return { message: 'Liste yüklenemedi.' }
+  }
+  return { jobs: await listBrandJobs(brandId, beforeId) }
 }
 
 export async function deleteJobAction(id: number): Promise<Result> {

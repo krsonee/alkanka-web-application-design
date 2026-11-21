@@ -57,6 +57,7 @@ const SETTINGS: ({ title: string; words?: string; query?: string; anyOf?: PanelM
   { title: 'Hazır rehber yazıları', words: 'hazır yazı taslak ekle rehber blog bölüm', row: 'seo' },
   { title: 'Arama motoru doğrulaması', words: 'google bing yandex search console', row: 'seo' },
   { title: 'Stüdyo aylık tavanı', words: 'harcama bütçe limit', row: 'studio' },
+  { title: 'Stüdyo marka alanları', words: 'sponsor site ayrı sayfa üretimler arşiv liste tür süzgeç karışmasın', row: 'studio' },
   { title: 'Stüdyo görselini slider\'a ekle', words: 'banner slayt gönder aktar', row: 'studio' },
   { title: 'Stüdyo hazır tarifler ve isteği geliştir', words: 'form konu sahne karakter stil tarif şablon prompt talimat', row: 'studio' },
   { title: 'Stüdyo hareketli GIF ve video kalitesi', words: 'gerçek hareket ışık efekti standart yüksek 720p 1080p süre kamera', row: 'studio' },
