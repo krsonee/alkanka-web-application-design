@@ -9,7 +9,7 @@ import ffmpegPath from 'ffmpeg-static'
 import sharp from 'sharp'
 import { motionText, type Motion } from '@/lib/studio-brief'
 import { buildOverlay, type Brush } from '@/lib/studio-overlay'
-import { clipToVideoSticker, stickerGreenFrame, STICKER_FRAME } from '@/lib/studio-telegram'
+import { clipToVideoSticker, stickerGreenFrame, STICKER_FRAME, stickerShape } from '@/lib/studio-telegram'
 import { STICKER_CLIP_SECONDS, type MotionQuality } from '@/lib/studio-types'
 
 const run = promisify(execFile)
@@ -273,8 +273,10 @@ export async function makeMotionSticker(image: Buffer, motion: Motion, onBilled?
       text: [
         'Animate this sticker character in place, as a short, lively, looping reaction sticker.',
         motionText(motion, true),
-        'The background is a green screen: it MUST stay perfectly flat, solid pure green (#00FF00) in every frame, edge to edge. No shadows on the background, no floor, no gradients, no particles or effects outside the character, no new objects.',
-        'The character stays the same size in the middle of the frame and never leaves it. Keep any outline around the character. Any writing on the sticker stays unchanged and readable. Do not add text.',
+        'The background is a green screen: it MUST stay perfectly flat, solid pure green (#00FF00) in every frame, edge to edge. No shadows on the background, no floor, no gradients, no new objects.',
+        'Nothing may appear on the green: no words, letters, titles or banners, no copies of the writing on the sticker, no lightning, sparks, glow, smoke, confetti or particles. Only the sticker itself moves.',
+        'The sticker stays the same size, in the same place in the middle of the frame, and moves only slightly within its own outline: small gestures, blinking, breathing, a nod. No jumping, sliding or zooming. Keep the outline around it.',
+        'Any writing that is part of the sticker stays exactly where it is, unchanged and readable.',
       ].join('\n'),
     },
     resolution: `${STICKER_FRAME.width}x${STICKER_FRAME.height}`,
@@ -282,5 +284,5 @@ export async function makeMotionSticker(image: Buffer, motion: Motion, onBilled?
     generateAudio: false,
   })
   onBilled?.()
-  return clipToVideoSticker(Buffer.from(video.uint8Array))
+  return clipToVideoSticker(Buffer.from(video.uint8Array), await stickerShape(image))
 }
