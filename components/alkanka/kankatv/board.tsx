@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { ChevronDown, ChevronRight, ExternalLink, Flag, Percent, Radio, Search, Send, Trophy, Tv, Volume1, Volume2, VolumeX, X } from 'lucide-react'
+import { readAddress, useAddressChoice, writeAddress } from '@/components/alkanka/use-address-choice'
 import { cn } from '@/lib/utils'
 import { PageHero } from '../page-hero'
 import { MatchEngage, WatchBar, useTvEngage } from './engage'
@@ -250,7 +251,7 @@ function MatchesTab({
   liveChannel?: Channel
   onWatch: (slug: string) => void
 }) {
-  const [sport, setSport] = useState<SportSlug>('futbol')
+  const [sport, setSport] = useAddressChoice('spor', SPORT_WORD, 'futbol')
   const [day, setDay] = useState<DayOffset>(0)
   const [filter, setFilter] = useState<Filter>('all')
   const [query, setQuery] = useState('')
@@ -768,6 +769,12 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
 }
 
 /** A live Kanka streamer wins first; otherwise the group with the most playable live streams, on its most watched stream. */
+/** What the tabs, the sports and the chosen channel are called in the page's address. */
+const TAB_PARAM = 'sekme'
+const CHANNEL_PARAM = 'kanal'
+const TAB_WORD: Record<'matches' | 'channels', string> = { matches: 'maclar', channels: 'kanallar' }
+const SPORT_WORD: Record<SportSlug, string> = { futbol: 'futbol', basketbol: 'basketbol', voleybol: 'voleybol' }
+
 function pickStartChannel(channels: Channel[]) {
   const byViewers = (a: Channel, b: Channel) => (b.viewers ?? 0) - (a.viewers ?? 0)
   const liveMembers = channels.filter((c) => c.group === 'uye' && c.live)
@@ -789,11 +796,22 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
     refreshInterval: 120_000,
   })
   const { channel: docked } = useTvDock()
-  const [tab, setTab] = useState<'matches' | 'channels'>(() =>
-    docked || initialChannels.some((c) => c.live && c.embedUrl) ? 'channels' : 'matches',
-  )
-  const [pickedChannel, setChannel] = useState<string | null>(() => docked?.slug ?? null)
+  const [startTab] = useState<'matches' | 'channels'>(() => (docked || initialChannels.some((c) => c.live && c.embedUrl) ? 'channels' : 'matches'))
+  // The tab the page opens on depends on what is live, so it is always written to the address.
+  const [tab, setTab] = useAddressChoice(TAB_PARAM, TAB_WORD, startTab, true)
+  const [pickedChannel, setPickedChannel] = useState<string | null>(() => docked?.slug ?? null)
   const channel = pickedChannel ?? pickStartChannel(channels)
+  const setChannel = (slug: string) => {
+    setPickedChannel(slug)
+    writeAddress(CHANNEL_PARAM, slug)
+  }
+  // A channel's own link (?kanal=...) opens on that channel, unless the address asks for the other tab.
+  useEffect(() => {
+    const asked = readAddress(CHANNEL_PARAM)
+    if (!asked || !initialChannels.some((c) => c.slug === asked)) return
+    setPickedChannel(asked)
+    if (!readAddress(TAB_PARAM)) setTab('channels')
+  }, [])
 
   const watch = (slug: string) => {
     setChannel(slug)

@@ -10,6 +10,7 @@ import { DetailModal } from './detail-modal'
 import { JakoTip } from './jako'
 import { DailyGames } from './daily-games'
 import { formatAC, usePoints } from './points-context'
+import { readAddress, useAddressChoice, writeAddress } from './use-address-choice'
 
 export type PublicTask = {
   id: number
@@ -45,6 +46,11 @@ const PERIOD_RULE: Record<TaskPeriod, string> = {
 }
 const PERIOD_ORDER: TaskPeriod[] = ['daily', 'weekly', 'monthly', 'once']
 
+/** What the tabs, the categories and one task are called in the page's address. */
+const PERIOD_WORD: Record<TaskPeriod, string> = { daily: 'gunluk', weekly: 'haftalik', monthly: 'aylik', once: 'tek-seferlik' }
+const CATEGORY_WORD: Record<TaskCategory | 'hepsi', string> = { hepsi: 'hepsi', genel: 'genel', sosyal: 'sosyal', sponsor: 'sponsor', zincir: 'zincir' }
+const TASK_PARAM = 'gorev'
+
 const STREAK_RULES = [
   'Ödülü almak için her gün “Bugünü al” butonuna basman gerekir.',
   'Gün, Türkiye saatiyle 00:00’da yenilenir.',
@@ -75,7 +81,7 @@ export function Tasks({
   inviteLeague?: InviteRow[]
   meId?: string | null
 }) {
-  const [category, setCategory] = useState<TaskCategory | 'hepsi'>('hepsi')
+  const [category, setCategory] = useAddressChoice('kategori', CATEGORY_WORD, 'hepsi')
   const [codes, setCodes] = useState<Record<number, string>>({})
   const categories = TASK_CATEGORIES.filter((c) => rawTasks.some((t) => (t.category ?? 'genel') === c.value))
   const tasks = [...rawTasks]
@@ -92,7 +98,19 @@ export function Tasks({
   const [visited, setVisited] = useState<Record<number, boolean>>({})
   const [bundleOpen, setBundleOpen] = useState<number | null>(null)
   const [pending, start] = useTransition()
-  const [tab, setTab] = useState<TaskPeriod>('daily')
+  const [tab, setTab] = useAddressChoice('donem', PERIOD_WORD, 'daily')
+  const showDetail = (task: PublicTask | null) => {
+    setDetail(task)
+    writeAddress(TASK_PARAM, task ? String(task.id) : null)
+  }
+  // A task's own link (?gorev=12) opens its tab and its detail window. Only the address the page was opened with counts.
+  useEffect(() => {
+    const asked = Number(readAddress(TASK_PARAM))
+    const task = rawTasks.find((t) => t.id === asked)
+    if (!task) return
+    setDetail(task)
+    setTab(task.period)
+  }, [])
   const waiting = tasks.some((task) => statusOf(task, claims[task.id], Boolean(done[task.id])) === 'waiting')
 
   useEffect(() => {
@@ -422,7 +440,7 @@ export function Tasks({
                   <div className="mt-auto flex items-center justify-between gap-2 pt-1">
                     <button
                       type="button"
-                      onClick={() => setDetail(task)}
+                      onClick={() => showDetail(task)}
                       className="flex h-9 items-center gap-1.5 rounded-lg px-1 text-xs font-semibold text-muted-foreground transition-colors hover:text-primary"
                     >
                       <Info className="size-3.5" aria-hidden="true" />
@@ -504,7 +522,7 @@ export function Tasks({
         </article>
       ) : null}
       <DetailModal
-        onClose={() => setDetail(null)}
+        onClose={() => showDetail(null)}
         content={
           selected
             ? {

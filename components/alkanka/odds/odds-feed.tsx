@@ -1,15 +1,21 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import useSWR from 'swr'
 import { ArrowRight, ArrowUpRight, CalendarDays, Check, Clock, Send, X } from 'lucide-react'
 import { TeamLogo, splitMatch } from '@/components/alkanka/logo-context'
+import { readAddress, useAddressChoice, writeAddress } from '@/components/alkanka/use-address-choice'
 import { ODD_RESULT_LABELS, fillMinutes, oddsTagText, shiftDay, type OddsDayStats, type SpecialOdd } from '@/lib/special-odds-shared'
 import { cn } from '@/lib/utils'
 
 type DayData = { day: string; odds: SpecialOdd[]; stats: OddsDayStats }
 type Range = 'today' | 'yesterday' | 'date'
 type Filter = 'all' | 'open' | 'filled' | 'won' | 'lost'
+
+/** What the day and the status filter are called in the page's address. */
+const DAY_PARAM = 'gun'
+const YESTERDAY_WORD = 'dun'
+const FILTER_WORD: Record<Filter, string> = { all: 'tumu', open: 'acik', filled: 'doldu', won: 'kazandi', lost: 'kaybetti' }
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json() as Promise<DayData>)
 
@@ -179,9 +185,26 @@ function applyFilter(odds: SpecialOdd[], filter: Filter) {
 }
 
 export function OddsFeed({ initial, today, channelUrl }: { initial: DayData; today: string; channelUrl: string | null }) {
-  const [range, setRange] = useState<Range>('today')
-  const [picked, setPicked] = useState(shiftDay(today, -2))
-  const [filter, setFilter] = useState<Filter>('all')
+  const [range, setRangeState] = useState<Range>('today')
+  const [picked, setPickedState] = useState(shiftDay(today, -2))
+  const [filter, setFilter] = useAddressChoice('durum', FILTER_WORD, 'all')
+  // The day lives in the address too: nothing for today, `dun` for yesterday, the date itself for any other day.
+  useEffect(() => {
+    const asked = readAddress(DAY_PARAM)
+    if (asked === YESTERDAY_WORD) setRangeState('yesterday')
+    else if (asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) && asked < today) {
+      setPickedState(asked)
+      setRangeState('date')
+    }
+  }, [today])
+  const setRange = (next: Range) => {
+    setRangeState(next)
+    writeAddress(DAY_PARAM, next === 'today' ? null : next === 'yesterday' ? YESTERDAY_WORD : picked)
+  }
+  const setPicked = (next: string) => {
+    setPickedState(next)
+    writeAddress(DAY_PARAM, next)
+  }
   const day = range === 'today' ? today : range === 'yesterday' ? shiftDay(today, -1) : picked
   const isToday = day === today
 

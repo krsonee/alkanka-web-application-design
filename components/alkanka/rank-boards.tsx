@@ -10,6 +10,7 @@ import { MemberRank } from './kp/member-rank'
 import { jakoSrc } from './jako'
 import { AvatarFill } from './member-avatar'
 import { Marquee } from './home/marquee'
+import { useAddressChoice } from './use-address-choice'
 
 export type BoardPeriod = 'gun' | 'hafta' | 'ay'
 export type KpParts = { time: number; games: number; tasks: number; chat: number; league: number; referrals: number }
@@ -637,6 +638,10 @@ function BoardRow({ row, unit, isMe, tip, sticky, move }: { row: Row; unit: stri
 
 /* ---------- Main ---------- */
 
+/** What the periods and categories are called in the page's address. */
+const PERIOD_WORD: Record<BoardPeriod, string> = { gun: 'gunluk', hafta: 'haftalik', ay: 'aylik' }
+const CATEGORY_WORD: Record<Category, string> = { kp: 'genel', oyun: 'oyun', tahmin: 'tahmin', sohbet: 'sohbet', davet: 'davet' }
+
 export function RankBoards({
   kp,
   tips,
@@ -654,8 +659,9 @@ export function RankBoards({
   signedIn: boolean
   initial: BoardPeriod
 }) {
-  const [period, setPeriodState] = useState<BoardPeriod>(initial)
-  const [category, setCategory] = useState<Category>('kp')
+  // The period the page opens on changes with the day's data, so it is always written to the address.
+  const [period, setPeriodState] = useAddressChoice('donem', PERIOD_WORD, initial, true)
+  const [category, setCategory] = useAddressChoice('kategori', CATEGORY_WORD, 'kp')
   const [query, setQuery] = useState('')
   const [visible, setVisible] = useState(PAGE)
   const countdown = useCountdown(period)
