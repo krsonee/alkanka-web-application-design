@@ -243,6 +243,8 @@ const TOURNAMENT_COLUMNS: [string, string][] = [
   ['settings', 'jsonb'],
   ['finished_at', 'timestamptz'],
   ['finish_reason', 'text'],
+  // `winner` is the name shown on the site; the member behind it is kept so a win can be counted for that member.
+  ['winner_id', 'text'],
 ]
 
 /**
@@ -257,6 +259,9 @@ export async function closeOrphanTables() {
   )
   return r.rowCount ?? 0
 }
+
+/** For code outside this file that reads a column added after the table was first created. */
+export const tournamentColumnsReady = () => ensureColumns()
 
 let columnsReady: Promise<unknown> | null = null
 
@@ -804,9 +809,9 @@ async function finishTournament(client: PoolClient, row: Row, played: Bracket, r
     format === 'lig' ? (leagueStandings(bracket, order)[0]?.key ?? null) : format === 'puan' ? (top && top.points > 0 ? top.key : null) : bracketChampion(bracket)
   const who = champion ? entries.rows.find((x) => entryKey(x) === champion) : undefined
   const upd = await client.query(
-    `UPDATE tournaments SET status = 'bitti', winner = $2, bracket = $3::jsonb, finished_at = now(), finish_reason = $4
+    `UPDATE tournaments SET status = 'bitti', winner = $2, winner_id = $5, bracket = $3::jsonb, finished_at = now(), finish_reason = $4
      WHERE id = $1 AND status = 'basladi' RETURNING id`,
-    [row.id, champion ? String(who?.nickname ?? champion) : null, JSON.stringify(bracket), reason],
+    [row.id, champion ? String(who?.nickname ?? champion) : null, JSON.stringify(bracket), reason, who?.user_id ? String(who.user_id) : null],
   )
   if (!upd.rowCount) return null
   if (reason === 'sure') {

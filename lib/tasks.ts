@@ -2,8 +2,11 @@ import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { ensureKp } from '@/lib/kanka-puan'
 import { credit, getBalance } from '@/lib/member'
-import { isPeriod, periodFromKey, periodKey, periodStart, type TaskPeriod } from '@/lib/task-period'
-import { isAutoKind, isCategory, isTaskKind, KIND_META, TASK_GAMES, TASK_PLATFORMS, type TaskCategory, type TaskKind } from '@/lib/task-kinds'
+import { isPeriod, periodFromKey, periodKey, periodStart, trDay, type TaskPeriod } from '@/lib/task-period'
+import {
+  isAutoKind, isCategory, isGameParam, isPartKind, isTaskKind, KIND_META, MAX_TASK_PARTS, MAX_TASK_TARGET, partLabel, taskGames, TASK_PLATFORMS,
+  type TaskCategory, type TaskKind, type TaskPart,
+} from '@/lib/task-kinds'
 
 export type TaskRecord = {
   id: number
@@ -31,6 +34,10 @@ export type TaskRecord = {
   cap: number
   /** Put away by the panel: never shown to members and kept out of the panel's working list. */
   archived: boolean
+  /** Turkey dates (YYYY-MM-DD) the task is shown on; null shows it every day inside its window. */
+  days: string[] | null
+  /** A super task's own conditions; empty means "every other task of the period". */
+  parts: TaskPart[]
 }
 
 export const DAILY_PICKS = 5
@@ -57,6 +64,8 @@ export type TaskInput = {
   chainStep?: number
   badge?: string
   cap?: number
+  days?: string[] | null
+  parts?: TaskPart[]
 }
 
 function taskRef(id: number, period: TaskPeriod, key = periodKey(period)) {
@@ -118,6 +127,7 @@ export function ensureTasks() {
     await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS cap int NOT NULL DEFAULT 0`)
     await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS theme text`)
     await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS archived boolean NOT NULL DEFAULT false`)
+    await rows(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS days jsonb, ADD COLUMN IF NOT EXISTS parts jsonb`)
     await rows(sql`CREATE TABLE IF NOT EXISTS trust_helpful (
       user_id text NOT NULL, review_id int NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (user_id, review_id))`)
@@ -139,6 +149,34 @@ export function cleanLink(value: unknown): string | null {
   }
   if (url.protocol !== 'https:' || !link.startsWith('https://') || link.length > 300) throw new Error(LINK_ERROR)
   return link
+}
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/
+
+function readList(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value
+  if (typeof value !== 'string') return []
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function readDays(value: unknown): string[] | null {
+  const days = [...new Set(readList(value).map(String).filter((d) => DAY.test(d)))].sort()
+  return days.length ? days : null
+}
+
+function readParts(value: unknown): TaskPart[] {
+  return readList(value)
+    .map((raw) => {
+      const p = (raw ?? {}) as Partial<TaskPart>
+      return { kind: p.kind, param: p.param ? String(p.param).trim().slice(0, 60) : null, target: Math.max(1, Math.floor(Number(p.target) || 1)) }
+    })
+    .filter((p): p is TaskPart => isPartKind(p.kind))
+    .slice(0, MAX_TASK_PARTS)
 }
 
 function mapTask(row: Record<string, unknown>): TaskRecord {
@@ -165,7 +203,22 @@ function mapTask(row: Record<string, unknown>): TaskRecord {
     badge: row.badge ? String(row.badge) : null,
     cap: Math.max(0, Number(row.cap ?? 0) || 0),
     archived: Boolean(row.archived),
+    days: readDays(row.days),
+    parts: readParts(row.parts),
   }
+}
+
+let planSeeded = false
+
+/**
+ * The task calendar is written once, on the live site only: a preview shares the live database and
+ * must not be the one that puts a month of tasks in front of members.
+ */
+async function seedPlanOnce() {
+  if (planSeeded || process.env.VERCEL_ENV !== 'production') return
+  const { seedTaskPlan } = await import('@/lib/task-plan-seed')
+  await seedTaskPlan()
+  planSeeded = true
 }
 
 export async function listTasks(): Promise<TaskRecord[]> {
@@ -173,9 +226,18 @@ export async function listTasks(): Promise<TaskRecord[]> {
   await seedSocialTasks().catch((error) => console.error('[tasks] social seed', (error as Error).message))
   await seedAppTask().catch((error) => console.error('[tasks] app seed', (error as Error).message))
   await seedTaskPack().catch((error) => console.error('[tasks] pack seed', (error as Error).message))
+  await seedPlanOnce().catch((error) => console.error('[tasks] plan seed', (error as Error).message))
   const found = await rows(sql`SELECT id, title, detail, points, link, needs_approval, active, sort, period, starts_at, ends_at, kind, target, param,
-    category, pool, chain, chain_step, badge, cap, archived FROM tasks ORDER BY sort, id`)
+    category, pool, chain, chain_step, badge, cap, archived, days, parts FROM tasks ORDER BY sort, id`)
   return found.map(mapTask)
+}
+
+/** Whether a task is on the site at this moment: switched on, inside its window and, when it names days, on one of them. */
+export function isLiveTask(task: TaskRecord, now = Date.now()) {
+  if (!task.active || task.archived) return false
+  if (task.startsAt && Date.parse(task.startsAt) > now) return false
+  if (task.endsAt && Date.parse(task.endsAt) <= now) return false
+  return !task.days || task.days.includes(trDay(new Date(now)))
 }
 
 /** Archiving also takes the task off the site; taking it back out leaves it hidden until it is switched on again. */
@@ -191,8 +253,7 @@ export async function archiveTask(id: number, archived: boolean): Promise<string
 
 export async function listPublicTasks(): Promise<TaskRecord[]> {
   const now = Date.now()
-  const live = (await listTasks()).filter((task) =>
-    task.active && !task.archived && (!task.startsAt || Date.parse(task.startsAt) <= now) && (!task.endsAt || Date.parse(task.endsAt) > now))
+  const live = (await listTasks()).filter((task) => isLiveTask(task, now))
   if (!live.some((t) => t.kind === 'social_follow' && !t.link)) return live
   const official = await officialSocialLinks()
   return live.map((t) => (t.kind === 'social_follow' && !t.link && t.param ? { ...t, link: official[t.param] ?? null } : t))
@@ -218,8 +279,11 @@ export type ChainState = 'done' | 'current' | 'locked'
 export function visibleTasksFor(userId: string | null, tasks: TaskRecord[], doneIds: Set<number>) {
   const seed = userId ?? 'misafir'
   const out: TaskRecord[] = []
+  // A task that is always on already covers its kind for the period, so the rotation never hands out a second one of it.
+  const sameThing = (t: TaskRecord) => `${t.period}:${t.kind}:${t.param ?? ''}`
+  const fixed = new Set(tasks.filter((t) => !t.pool && !t.chain).map(sameThing))
   for (const period of ['daily', 'weekly'] as const) {
-    const pool = tasks.filter((t) => t.pool && t.period === period && !t.chain)
+    const pool = tasks.filter((t) => t.pool && t.period === period && !t.chain && !fixed.has(sameThing(t)))
     out.push(...pickPool(pool, `${seed}:${periodKey(period)}`, period === 'daily' ? DAILY_PICKS : WEEKLY_PICKS))
   }
   out.push(...tasks.filter((t) => !t.pool && !t.chain))
@@ -252,7 +316,34 @@ function bundleSiblings(task: TaskRecord, visible: TaskRecord[]) {
 }
 
 export function bundleTarget(task: TaskRecord, visible: TaskRecord[]) {
-  return Math.max(1, bundleSiblings(task, visible).length)
+  return task.parts.length || Math.max(1, bundleSiblings(task, visible).length)
+}
+
+export type PartState = { label: string; progress: number; target: number; done: boolean }
+
+/** Where a member stands on each condition of a super task that names its own; empty for every other task. */
+export async function taskPartStates(userId: string | null, task: TaskRecord, memo?: ProgressMemo): Promise<PartState[]> {
+  if (task.kind !== 'bundle' || !task.parts.length) return []
+  const refs = task.parts.filter((p) => p.kind === 'task').map((p) => Number(p.param)).filter((id) => Number.isInteger(id) && id > 0)
+  const [named, done] = await Promise.all([
+    refs.length
+      ? rows<{ id: number; title: string }>(sql`SELECT id, title FROM tasks
+          WHERE id IN (SELECT (jsonb_array_elements_text(${JSON.stringify(refs)}::jsonb))::int)`).catch(() => [])
+      : Promise.resolve([]),
+    userId && refs.length ? completedTaskIds(userId).catch(() => [] as number[]) : Promise.resolve([] as number[]),
+  ])
+  return Promise.all(
+    task.parts.map(async (part) => {
+      if (part.kind === 'task') {
+        const id = Number(part.param)
+        const finished = done.includes(id)
+        return { label: named.find((t) => Number(t.id) === id)?.title ?? 'Görev', progress: finished ? 1 : 0, target: 1, done: finished }
+      }
+      const counted = userId ? await taskProgress(userId, { ...task, kind: part.kind, param: part.param, target: part.target, parts: [] }, memo).catch(() => 0) : 0
+      const progress = Math.min(counted, part.target)
+      return { label: partLabel(part), progress, target: part.target, done: progress >= part.target }
+    }),
+  )
 }
 
 /** The task count written in a super task's text follows the member's real target, not the seeded number. */
@@ -374,7 +465,7 @@ function cleanDate(value: unknown, label: string): string | null {
 }
 
 export async function saveTask(input: TaskInput): Promise<number> {
-  const title = clip(input.title, 80)
+  const title = clip(input.title, 120)
   if (!title) throw new Error('Görev adı gerekli.')
   const detail = clip(input.detail, 160)
   const points = Number(input.points)
@@ -392,10 +483,10 @@ export async function saveTask(input: TaskInput): Promise<number> {
   const kind = input.kind
   const meta = KIND_META[kind]
   const target = meta.counted ? Number(input.target) : 1
-  if (!Number.isInteger(target) || target < 1 || target > 1000) throw new Error('Hedef sayı 1 ile 1000 arasında olmalı.')
+  if (!Number.isInteger(target) || target < 1 || target > MAX_TASK_TARGET) throw new Error(`Hedef sayı 1 ile ${MAX_TASK_TARGET.toLocaleString('tr-TR')} arasında olmalı.`)
   const rawParam = clip(input.param, 60)
   const param = !meta.param || !rawParam ? null : rawParam
-  if (param && meta.param === 'game' && !TASK_GAMES.some((g) => g.value === param)) throw new Error('Oyun geçersiz.')
+  if (param && (meta.param === 'game' || meta.param === 'games') && !isGameParam(meta.param, param)) throw new Error('Oyun geçersiz.')
   if (param && meta.param === 'platform' && !TASK_PLATFORMS.some((g) => g.value === param)) throw new Error('Platform geçersiz.')
   if ((kind === 'social_follow' || kind === 'social_like') && !param) throw new Error('Sosyal görev için platform seç.')
   if (kind === 'social_like') {
@@ -424,6 +515,13 @@ export async function saveTask(input: TaskInput): Promise<number> {
   const cap = input.cap === undefined ? null : Math.max(0, Math.min(100000, Math.trunc(Number(input.cap) || 0)))
   const keepChain = chain === undefined
   const keepBadge = badge === undefined
+  const keepDays = input.days === undefined
+  const days = keepDays ? null : readDays(input.days)
+  if (days && days.length > 400) throw new Error('Bir göreve en fazla 400 gün seçilebilir.')
+  const daysJson = days ? JSON.stringify(days) : null
+  const keepParts = input.parts === undefined
+  const parts = keepParts ? [] : await cleanParts(input.parts ?? [], kind, editingId)
+  const partsJson = parts.length ? JSON.stringify(parts) : null
   if (input.id != null && input.id !== 0) {
     const id = Number(input.id)
     if (!Number.isInteger(id) || id < 1) throw new Error('Görev bulunamadı.')
@@ -434,15 +532,42 @@ export async function saveTask(input: TaskInput): Promise<number> {
       chain = CASE WHEN ${keepChain}::boolean THEN chain ELSE ${chain ?? null}::text END,
       chain_step = COALESCE(${chainStep}::int, chain_step),
       badge = CASE WHEN ${keepBadge}::boolean THEN badge ELSE ${badge ?? null}::text END,
-      cap = COALESCE(${cap}::int, cap)
+      cap = COALESCE(${cap}::int, cap),
+      days = CASE WHEN ${keepDays}::boolean THEN days ELSE ${daysJson}::jsonb END,
+      parts = CASE WHEN ${keepParts}::boolean THEN parts ELSE ${partsJson}::jsonb END
       WHERE id = ${id} RETURNING id`)
     if (!updated.length) throw new Error('Görev bulunamadı.')
     return id
   }
-  const inserted = await rows<{ id: number }>(sql`INSERT INTO tasks (title, detail, points, link, needs_approval, active, sort, period, starts_at, ends_at, kind, target, param, category, pool, chain, chain_step, badge, cap)
+  const inserted = await rows<{ id: number }>(sql`INSERT INTO tasks (title, detail, points, link, needs_approval, active, sort, period, starts_at, ends_at, kind, target, param, category, pool, chain, chain_step, badge, cap, days, parts)
     VALUES (${title}, ${detail}, ${points}, ${link}, ${approval}, ${active}, ${sort}, ${period}, ${startsAt}, ${endsAt}, ${kind}, ${target}, ${param},
-      ${category ?? 'genel'}, ${pool ?? false}, ${chain ?? null}, ${chainStep ?? 0}, ${badge ?? null}, ${cap ?? 0}) RETURNING id`)
+      ${category ?? 'genel'}, ${pool ?? false}, ${chain ?? null}, ${chainStep ?? 0}, ${badge ?? null}, ${cap ?? 0}, ${daysJson}::jsonb, ${partsJson}::jsonb) RETURNING id`)
   return Number(inserted[0]?.id)
+}
+
+/** A super task's conditions as the panel sent them, checked one by one so a condition that can never hold is not saved. */
+async function cleanParts(input: TaskPart[], kind: TaskKind, selfId: number): Promise<TaskPart[]> {
+  if (kind !== 'bundle' || !Array.isArray(input) || !input.length) return []
+  if (input.length > MAX_TASK_PARTS) throw new Error(`Bir süper göreve en fazla ${MAX_TASK_PARTS} şart eklenebilir.`)
+  const parts = readParts(input)
+  if (parts.length !== input.length) throw new Error('Şartlardan birinin türü geçersiz.')
+  for (const part of parts) {
+    if (part.kind === 'task') {
+      const id = Number(part.param)
+      if (!Number.isInteger(id) || id < 1 || id === selfId) throw new Error('Şart olarak başka bir görev seçmelisin.')
+      const found = await rows(sql`SELECT 1 FROM tasks WHERE id = ${id} AND kind <> 'bundle'`)
+      if (!found.length) throw new Error('Şart olarak seçilen görev bulunamadı. Süper görev başka bir süper göreve bağlanamaz.')
+      part.target = 1
+      continue
+    }
+    const meta = KIND_META[part.kind]
+    if (!meta.counted) part.target = 1
+    if (part.target > MAX_TASK_TARGET) throw new Error(`Şart hedefi en fazla ${MAX_TASK_TARGET.toLocaleString('tr-TR')} olabilir.`)
+    if (!meta.param || meta.param === 'code') part.param = null
+    if (part.param && (meta.param === 'game' || meta.param === 'games') && !isGameParam(meta.param, part.param)) throw new Error('Şarttaki oyun geçersiz.')
+    if (part.param && meta.param === 'platform' && !TASK_PLATFORMS.some((g) => g.value === part.param)) throw new Error('Şarttaki platform geçersiz.')
+  }
+  return parts
 }
 
 /** Writes one kp_events row and, only then, the visible coin balance. A repeat inserts nothing. */
@@ -537,23 +662,45 @@ export async function rejectClaim(claimId: number, note = ''): Promise<void> {
 }
 
 /** Counts what the member actually did in the task's current period, straight from the source tables. */
-export async function taskProgress(userId: string, task: TaskRecord): Promise<number> {
+/**
+ * Counts already made while one page is being put together. Many tasks ask the same question with a
+ * different number ("30 / 90 / 180 login days"), and the answer does not depend on the number.
+ */
+export type ProgressMemo = Map<string, Promise<number>>
+
+const COUNTED_PER_TASK: TaskKind[] = ['bundle', 'social_follow', 'social_like', 'secret_code']
+
+export async function taskProgress(userId: string, task: TaskRecord, memo?: ProgressMemo): Promise<number> {
   if (task.kind === 'manual') return 0
   const start = periodStart(task.period)
   const floor = task.startsAt ? Date.parse(task.startsAt) : 0
   const since = new Date(Math.max(start?.getTime() ?? 0, floor)).toISOString()
+  if (!memo || COUNTED_PER_TASK.includes(task.kind)) return countProgress(userId, task, since, memo)
+  const key = `${task.kind}|${task.param ?? ''}|${since}`
+  let counted = memo.get(key)
+  if (!counted) {
+    counted = countProgress(userId, task, since)
+    memo.set(key, counted)
+  }
+  return counted
+}
+
+async function countProgress(userId: string, task: TaskRecord, since: string, memo?: ProgressMemo): Promise<number> {
   const p = task.param
   const count = async (query: ReturnType<typeof sql>) => Number((await rows<{ n: string }>(query).catch(() => []))[0]?.n ?? 0)
+  const gameList = KIND_META[task.kind].param === 'game' || KIND_META[task.kind].param === 'games' ? taskGames(p) : null
+  const games = gameList ? JSON.stringify(gameList) : null
   switch (task.kind) {
     case 'game_play':
     case 'game_win': {
       const win = task.kind === 'game_win'
       const arena = await count(sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND created_at >= ${since}
         AND mode NOT IN ('odul', 'harcama', 'admin') AND result <> 'refund'
-        AND (${win}::boolean IS FALSE OR result = 'win') AND (${p}::text IS NULL OR game = ${p})`)
+        AND (${win}::boolean IS FALSE OR result = 'win')
+        AND (${games}::text IS NULL OR game IN (SELECT jsonb_array_elements_text(${games}::jsonb)))`)
       // Çember / Kara Delik / Survival rounds only reach game_history as prize rows, so count joined rounds directly.
       const events = await count(sql`SELECT count(*) AS n FROM cember_rounds WHERE slot >= ${since} AND slot <= now()
-        AND (${p}::text IS NULL OR game = ${p})
+        AND (${games}::text IS NULL OR game IN (SELECT jsonb_array_elements_text(${games}::jsonb)))
         AND participants @> jsonb_build_array(jsonb_build_object('id', ${userId}::text))
         AND (${win}::boolean IS FALSE OR winner_id = ${userId}
           OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(winner_indexes) w WHERE participants -> (w::int) ->> 'id' = ${userId}))`)
@@ -587,7 +734,8 @@ export async function taskProgress(userId: string, task: TaskRecord): Promise<nu
       return count(sql`SELECT count(*) AS n FROM tv_predictions WHERE user_id = ${userId} AND status = 'won' AND settled_at >= ${since}`)
     case 'games_distinct':
       return count(sql`SELECT count(DISTINCT game) AS n FROM game_history WHERE user_id = ${userId} AND created_at >= ${since}
-        AND mode NOT IN ('odul', 'harcama', 'admin') AND result <> 'refund' AND game <> 'cember'`)
+        AND mode NOT IN ('odul', 'harcama', 'admin') AND result <> 'refund' AND game <> 'cember' AND game <> 'turnuva'
+        AND (${games}::text IS NULL OR game IN (SELECT jsonb_array_elements_text(${games}::jsonb)))`)
     case 'invite_active':
       return count(sql`SELECT count(*) AS n FROM referrals r WHERE r.referrer_id = ${userId} AND r.created_at >= ${since}
         AND EXISTS (SELECT 1 FROM game_history g WHERE g.user_id = r.referred_id AND g.mode NOT IN ('odul', 'harcama', 'admin'))`)
@@ -617,11 +765,22 @@ export async function taskProgress(userId: string, task: TaskRecord): Promise<nu
       return count(sql`SELECT count(*) AS n FROM app_opens WHERE user_id = ${userId} AND day >= (${since}::timestamptz AT TIME ZONE 'Europe/Istanbul')::date`)
     case 'tournament_join':
       return count(sql`SELECT count(*) AS n FROM tournament_entries WHERE user_id = ${userId} AND created_at >= ${since}`)
+    case 'tournament_win': {
+      const { tournamentColumnsReady } = await import('@/lib/tournaments')
+      await tournamentColumnsReady().catch(() => {})
+      // A tournament closed before the champion's id was kept is matched by the name it was won under.
+      return count(sql`SELECT count(*) AS n FROM tournaments t WHERE t.status = 'bitti' AND t.finished_at >= ${since}
+        AND (${games}::text IS NULL OR t.game IN (SELECT jsonb_array_elements_text(${games}::jsonb)))
+        AND (t.winner_id = ${userId} OR (t.winner_id IS NULL AND t.winner IS NOT NULL AND EXISTS (
+          SELECT 1 FROM tournament_entries e WHERE e.tournament_id = t.id AND e.user_id = ${userId} AND e.nickname = t.winner)))`)
+    }
     case 'profile':
       return count(sql`SELECT count(*) AS n FROM member_look WHERE user_id = ${userId} AND (avatar_id IS NOT NULL OR cover_id IS NOT NULL OR team IS NOT NULL)`)
+    case 'manual':
     case 'secret_code':
       return 0
     case 'bundle': {
+      if (task.parts.length) return (await taskPartStates(userId, task, memo)).filter((part) => part.done).length
       const view = await memberView(userId)
       const siblings = bundleSiblings(task, view.tasks)
       return siblings.filter((t) => view.done.has(t.id)).length
@@ -629,9 +788,9 @@ export async function taskProgress(userId: string, task: TaskRecord): Promise<nu
   }
 }
 
-export async function taskProgressMap(userId: string, tasks: TaskRecord[]): Promise<Record<number, number>> {
+export async function taskProgressMap(userId: string, tasks: TaskRecord[], memo: ProgressMemo = new Map()): Promise<Record<number, number>> {
   const auto = tasks.filter((t) => t.kind !== 'manual' && t.kind !== 'secret_code')
-  const values = await Promise.all(auto.map((t) => taskProgress(userId, t).catch(() => 0)))
+  const values = await Promise.all(auto.map((t) => taskProgress(userId, t, memo).catch(() => 0)))
   return Object.fromEntries(auto.map((t, i) => [t.id, Math.min(values[i], t.kind === 'bundle' ? Infinity : t.target)]))
 }
 

@@ -38,7 +38,7 @@ export async function completeTaskAction(taskId: number, code?: string): Promise
     } else if (task.kind === 'bundle') {
       const progress = await taskProgress(member.id, task)
       const target = bundleTarget(task, gate.visible)
-      if (progress < target) return { ok: false, error: `Önce diğer görevleri bitir: ${progress}/${target}.` }
+      if (progress < target) return { ok: false, error: task.parts.length ? `Şartların hepsi tamamlanmadı: ${progress}/${target}.` : `Önce diğer görevleri bitir: ${progress}/${target}.` }
     } else if (task.kind === 'social_follow' || task.kind === 'social_like') {
       if (await hitRateLimit(`social-check:${member.id}`, 6, 60)) return { ok: false, error: RATE_LIMIT_MESSAGE }
       const { checkSocialTask } = await import('@/lib/social-verify')
