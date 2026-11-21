@@ -1,7 +1,7 @@
 'use client'
 
 import { Plus, X } from 'lucide-react'
-import { GOAL_MAX_RULES, GOAL_RULE_KINDS, goalRuleText, isGoalRuleKind, type GoalRule, type GoalRuleMode } from '@/lib/goal-rewards-shared'
+import { GOAL_MAX_RULES, GOAL_RULE_KINDS, goalRuleHasGame, goalRuleText, isGoalRuleKind, type GoalRule, type GoalRuleMode } from '@/lib/goal-rewards-shared'
 import { TASK_GAMES } from '@/lib/task-kinds'
 import { cn } from '@/lib/utils'
 
@@ -14,6 +14,7 @@ const PRESETS: { label: string; rule: GoalRule }[] = [
   { label: 'Herhangi bir oyunda 1 saat', rule: { kind: 'minutes', game: '', amount: 60 } },
   { label: 'Herhangi bir oyunda 3 maç', rule: { kind: 'play', game: '', amount: 3 } },
   { label: 'Herhangi bir oyunda 1 galibiyet', rule: { kind: 'win', game: '', amount: 1 } },
+  { label: 'Görevlerden 1 görev', rule: { kind: 'task', game: '', amount: 1 } },
 ]
 
 const kindOf = (id: GoalRule['kind']) => GOAL_RULE_KINDS.find((k) => k.id === id) ?? GOAL_RULE_KINDS[0]
@@ -21,7 +22,7 @@ const same = (a: GoalRule, b: GoalRule) => a.kind === b.kind && a.game === b.gam
 
 /**
  * What a member has to do on the match day before an Alkanka event pays its reward.
- * Staff picks from what the site can actually count: matches played, matches won, minutes spent in a game.
+ * Staff picks from what the site can actually count: matches played, matches won, minutes spent in a game, tasks finished.
  */
 export function GoalRulesEditor({ rules, mode, onChange }: { rules: GoalRule[]; mode: GoalRuleMode; onChange: (rules: GoalRule[], mode: GoalRuleMode) => void }) {
   const full = rules.length >= GOAL_MAX_RULES
@@ -31,10 +32,16 @@ export function GoalRulesEditor({ rules, mode, onChange }: { rules: GoalRule[]; 
 
   return (
     <fieldset className="flex flex-col gap-3 rounded-lg border border-border p-3">
-      <legend className="px-1 text-xs font-bold text-foreground">Ödül şartı (isteğe bağlı)</legend>
+      <legend className="px-1 text-xs font-bold text-foreground">Ödül şartı (en az bir tane)</legend>
       <p className={hint}>
-        Şart eklersen üye ödülü ancak maçın oynandığı gün (Türkiye saatiyle 00:00 - 23:59) şartı tamamlarsa alır; tamamlayınca ödül kendiliğinden yatar, gün biterse verilmez. Şart eklemezsen ödül maç sonuçlanınca hemen yatar.
+        Üye takım seçmez: maça katılır ve maçtaki her gol ödül kazandırır. Ödülü alabilmesi için maçın oynandığı gün (Türkiye saatiyle 00:00 - 23:59) Alkanka&apos;da buradaki şartı tamamlaması gerekir. Şartı sistem kendisi sayar; tamamlanınca ödül
+        kendiliğinden yatar, gün biterse verilmez.
       </p>
+      {rules.length === 0 && (
+        <p role="alert" className="text-xs font-medium text-destructive">
+          Henüz şart yok. Şart eklenmeden etkinlik kaydedilmez.
+        </p>
+      )}
 
       {rules.map((r, i) => {
         const kind = kindOf(r.kind)
@@ -44,7 +51,11 @@ export function GoalRulesEditor({ rules, mode, onChange }: { rules: GoalRule[]; 
             <div className="grid gap-2 sm:grid-cols-[1fr_1fr_6rem_auto]">
               <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
                 Ne yapmalı
-                <select value={r.kind} onChange={(e) => isGoalRuleKind(e.target.value) && set(i, { kind: e.target.value, amount: kindOf(e.target.value).id === 'minutes' ? 30 : 1 })} className={field}>
+                <select
+                  value={r.kind}
+                  onChange={(e) => isGoalRuleKind(e.target.value) && set(i, { kind: e.target.value, game: goalRuleHasGame(e.target.value) ? r.game : '', amount: e.target.value === 'minutes' ? 30 : 1 })}
+                  className={field}
+                >
                   {GOAL_RULE_KINDS.map((k) => (
                     <option key={k.id} value={k.id}>
                       {k.label}
@@ -53,15 +64,21 @@ export function GoalRulesEditor({ rules, mode, onChange }: { rules: GoalRule[]; 
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
-                Hangi oyunda
-                <select value={r.game} onChange={(e) => set(i, { game: e.target.value })} className={field}>
-                  <option value="">Herhangi bir oyun</option>
-                  {TASK_GAMES.map((g) => (
-                    <option key={g.value} value={g.value}>
-                      {g.label}
-                    </option>
-                  ))}
-                </select>
+                {goalRuleHasGame(r.kind) ? 'Hangi oyunda' : 'Nerede'}
+                {goalRuleHasGame(r.kind) ? (
+                  <select value={r.game} onChange={(e) => set(i, { game: e.target.value })} className={field}>
+                    <option value="">Herhangi bir oyun</option>
+                    {TASK_GAMES.map((g) => (
+                      <option key={g.value} value={g.value}>
+                        {g.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <select value="" disabled className={cn(field, 'opacity-60')}>
+                    <option value="">Görevler sayfası</option>
+                  </select>
+                )}
               </label>
               <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
                 <span className="capitalize">{kind.unit}</span>

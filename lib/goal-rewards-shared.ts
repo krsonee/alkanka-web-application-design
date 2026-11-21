@@ -11,7 +11,10 @@ export const GOAL_NAME = 'Gol Yağmuru'
 
 export type GoalCategory = 'alkanka' | 'sponsor'
 export type GoalSide = 'home' | 'away'
-/** What a pick counts: one team's goals, or every goal of the match (sponsor events). */
+/**
+ * What an entry counts. Nobody picks a team any more: every entry counts all goals of the match.
+ * Entries saved while Alkanka events still asked for a team keep that team and are paid as promised.
+ */
 export type GoalPickSide = GoalSide | 'all'
 export type GoalStatus = 'open' | 'settled' | 'void'
 /**
@@ -21,7 +24,7 @@ export type GoalStatus = 'open' | 'settled' | 'void'
 export type GoalApproval = 'pending' | 'approved' | 'rejected'
 
 export const GOAL_CATEGORIES: { id: GoalCategory; label: string; hint: string }[] = [
-  { id: 'alkanka', label: 'Alkanka etkinlikleri', hint: 'Takımını seç, attığı her gol KC olarak hesabına yatsın.' },
+  { id: 'alkanka', label: 'Alkanka etkinlikleri', hint: "Maça katıl, maç günü Alkanka'daki şartı tamamla; maçtaki her gol KC olarak hesabına yatsın." },
   { id: 'sponsor', label: 'Sponsor etkinlikleri', hint: 'Sponsorda bahsini al, kupon numaranı gir; maçtaki her gol ödül kazandırır.' },
 ]
 
@@ -35,8 +38,8 @@ export const GOAL_REPEAT_AT = 3
 
 // --- Conditions of an Alkanka event ---------------------------------------
 
-export type GoalRuleKind = 'play' | 'win' | 'minutes'
-/** `game` is empty for "any game". */
+export type GoalRuleKind = 'play' | 'win' | 'minutes' | 'task'
+/** `game` is empty for "any game", and always empty for a condition that is not about a game. */
 export type GoalRule = { kind: GoalRuleKind; game: string; amount: number }
 export type GoalRuleMode = 'all' | 'any'
 
@@ -44,12 +47,19 @@ export const GOAL_RULE_KINDS: { id: GoalRuleKind; label: string; unit: string; m
   { id: 'play', label: 'Oyun oyna', unit: 'maç', min: 1, max: 50, hint: 'Maç günü bitirilen masa ve bot maçları sayılır. İade edilen maç sayılmaz.' },
   { id: 'win', label: 'Oyun kazan', unit: 'galibiyet', min: 1, max: 50, hint: 'Maç günü kazanılan maçlar sayılır.' },
   { id: 'minutes', label: 'Oyunda vakit geçir', unit: 'dakika', min: 5, max: 600, hint: 'Oyun sayfası açık ve ekrandayken geçen her dakika sayılır. 60 dakika = 1 saat.' },
+  { id: 'task', label: 'Görev tamamla', unit: 'görev', min: 1, max: 20, hint: 'Maç günü Görevler sayfasında tamamlanıp ödülü alınan görevler sayılır. Onayı elle verilen görev, onay gün bitmeden verilirse sayılır.' },
 ]
+
+/** A condition about tasks has no game to choose. */
+export const goalRuleHasGame = (kind: GoalRuleKind) => kind !== 'task'
+
+/** What a member reads on an Alkanka event that was left without a condition. */
+export const GOAL_NO_RULE = 'Bu etkinliğin şartı henüz belirlenmedi; katılım şart eklenince açılır.'
 
 const RULE_KIND = new Map(GOAL_RULE_KINDS.map((k) => [k.id, k]))
 const GAME_LABEL = new Map(TASK_GAMES.map((g) => [g.value, g.label]))
 
-export const isGoalRuleKind = (v: unknown): v is GoalRuleKind => v === 'play' || v === 'win' || v === 'minutes'
+export const isGoalRuleKind = (v: unknown): v is GoalRuleKind => v === 'play' || v === 'win' || v === 'minutes' || v === 'task'
 
 export function goalMinutesText(minutes: number) {
   const h = Math.floor(minutes / 60)
@@ -59,6 +69,7 @@ export function goalMinutesText(minutes: number) {
 
 /** One condition as the member reads it. */
 export function goalRuleText(r: GoalRule) {
+  if (r.kind === 'task') return `Görevler sayfasından en az ${r.amount} görev tamamla`
   const where = r.game ? `${GAME_LABEL.get(r.game) ?? r.game} oyununda` : 'Herhangi bir oyunda'
   if (r.kind === 'minutes') return `${where} en az ${goalMinutesText(r.amount)} vakit geçir`
   return `${where} en az ${r.amount} maç ${r.kind === 'win' ? 'kazan' : 'oyna'}`
@@ -77,7 +88,7 @@ export function cleanGoalRules(input: unknown): GoalRule[] {
     const x = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
     const kind = RULE_KIND.get(x.kind as GoalRuleKind)
     const amount = Number(x.amount)
-    const game = typeof x.game === 'string' && GAME_LABEL.has(x.game) ? x.game : ''
+    const game = kind && goalRuleHasGame(kind.id) && typeof x.game === 'string' && GAME_LABEL.has(x.game) ? x.game : ''
     if (!kind || !Number.isInteger(amount) || amount < kind.min || amount > kind.max) continue
     if (out.some((r) => r.kind === kind.id && r.game === game)) continue
     out.push({ kind: kind.id, game, amount })
@@ -111,9 +122,9 @@ export type GoalEventInput = {
   needDeposit: boolean
   /** Sponsor: lowest odds the pre-match bet may have; 0 when there is no limit. */
   minOdds: number
-  /** Alkanka: KC taken when the pick is saved; 0 when joining is free. */
+  /** Alkanka: KC taken when the member joins a match; 0 when joining is free. */
   entryFee: number
-  /** Alkanka: what the member has to do on the match day before the reward is paid. */
+  /** Alkanka: what the member has to do on the match day before the reward is paid. At least one is required. */
   rules: GoalRule[]
   ruleMode: GoalRuleMode
   terms: string
@@ -210,7 +221,6 @@ export type GoalFlagRow = {
 export type GoalFlagAction = 'warn' | 'block' | 'open'
 
 export const isGoalCategory = (v: unknown): v is GoalCategory => v === 'alkanka' || v === 'sponsor'
-export const isGoalSide = (v: unknown): v is GoalSide => v === 'home' || v === 'away'
 export const isGoalApproval = (v: unknown): v is GoalApproval => v === 'pending' || v === 'approved' || v === 'rejected'
 export const isGoalFlagAction = (v: unknown): v is GoalFlagAction => v === 'warn' || v === 'block' || v === 'open'
 
@@ -283,7 +293,11 @@ export function checkGoalEvent(input: unknown): { ok: true; value: GoalEventInpu
   if (asked.length > GOAL_MAX_RULES) return { ok: false, error: `En fazla ${GOAL_MAX_RULES} şart eklenebilir.` }
   const rules = cleanGoalRules(asked)
   if (rules.length !== asked.length) {
-    return { ok: false, error: 'Şartlardan biri eksik ya da aynı şart iki kez eklenmiş. Maç sayısı 1-50, süre 5-600 dakika arasında olmalı.' }
+    return { ok: false, error: 'Şartlardan biri eksik ya da aynı şart iki kez eklenmiş. Maç sayısı 1-50, süre 5-600 dakika, görev sayısı 1-20 arasında olmalı.' }
+  }
+  // Without a condition every goal would pay whoever pressed a button; the event is about doing something on Alkanka.
+  if (!sponsor && rules.length === 0) {
+    return { ok: false, error: "En az bir şart ekle: üye ödülü, maç günü Alkanka'da bu şartı tamamlayınca alır. Şartı sistem kendisi kontrol eder." }
   }
   const ruleMode: GoalRuleMode = raw.ruleMode === 'any' && rules.length > 1 ? 'any' : 'all'
 
@@ -345,15 +359,15 @@ export function goalRuleLines(e: RuleSource): string[] {
     out.push(`Taraf seçmen gerekmez: maçta atılan her gol ${reward} kazandırır.`)
     out.push('Şartlara uymayan talep geçersiz sayılır. Geçersiz talep tekrarlanırsa önce uyarı verilir, sonra sponsor etkinliklerine katılımın kapatılır.')
   } else {
-    out.push('Maç başlamadan takımını seç. Seçim bir kez yapılır, kaydettikten sonra değişmez.')
-    out.push(`Seçtiğin takımın attığı her gol ${reward} kazandırır. Uzatmaya giden maçta 90 dakikanın skoru sayılır.`)
-    if (e.entryFee > 0) out.push(`Katılım ${goalAmount(e.entryFee, GOAL_KC_UNIT)}: seçimini kaydederken bakiyenden düşer. Maç iptal edilirse geri yatar; takımın gol atamazsa geri verilmez.`)
+    out.push('Maç başlamadan maçın kartındaki "Maça katıl" düğmesine bas. Takım seçmen gerekmez; katılım maç başlayınca kapanır.')
+    out.push(`Maçta atılan her gol ${reward} kazandırır, hangi takım atarsa atsın. Uzatmaya giden maçta 90 dakikanın skoru sayılır.`)
+    if (e.entryFee > 0) out.push(`Katılım ${goalAmount(e.entryFee, GOAL_KC_UNIT)}: katılırken bakiyenden düşer. Maç iptal edilirse geri yatar; maçta gol olmazsa ya da şartı tamamlamazsan geri verilmez.`)
     if (e.rules.length > 0) {
       const which = e.rules.length === 1 ? 'şu şartı' : e.ruleMode === 'any' ? 'şu şartlardan birini' : 'şu şartların hepsini'
-      out.push(`Ödülü alabilmek için maçın oynandığı gün (Türkiye saatiyle 00:00 - 23:59) ${which} tamamla: ${e.rules.map(goalRuleText).join('; ')}.`)
-      out.push('Şart tamamlanınca ödül kendiliğinden yatar. Gün bitene kadar tamamlanmazsa o maçın ödülü verilmez.')
+      out.push(`Ödülü alabilmek için maçın oynandığı gün (Türkiye saatiyle 00:00 - 23:59) Alkanka'da ${which} tamamla: ${e.rules.map(goalRuleText).join('; ')}.`)
+      out.push('Şartı sistem kendisi sayar; bir şey göndermen gerekmez. Tamamlanınca ödül kendiliğinden yatar. Gün bitene kadar tamamlanmazsa o maçın ödülü verilmez.')
     } else {
-      out.push('Ödül, maç sonuçlanınca kendiliğinden hesabına yatar.')
+      out.push(GOAL_NO_RULE)
     }
   }
   if (e.terms) out.push(e.terms)
@@ -403,7 +417,9 @@ export function goalPickTotals(picks: GoalPickRow[], sponsor: boolean) {
   }
 }
 
-export const goalSideName = (side: GoalPickSide, m: Pick<GoalMatch, 'home' | 'away'>) => (side === 'home' ? m.home : side === 'away' ? m.away : 'Maçın bütün golleri')
+/** Which goals an entry counts; only entries from before sides were dropped name a team. */
+export const goalSideName = (side: GoalPickSide, m: Pick<GoalMatch, 'home' | 'away'>) =>
+  side === 'home' ? `Sadece ${m.home} (eski seçim)` : side === 'away' ? `Sadece ${m.away} (eski seçim)` : 'Maçın bütün golleri'
 
 function cell(value: string | number | null) {
   let out = value === null ? '' : String(value)
@@ -416,7 +432,7 @@ function cell(value: string | number | null) {
 export function goalPicksCsv(match: Pick<GoalMatch, 'home' | 'away' | 'status'>, unit: string, sponsor: boolean, picks: GoalPickRow[]) {
   const head = [
     'Üye',
-    ...(sponsor ? ['Sponsordaki kullanıcı adı', 'Kupon numarası', 'Talep', 'Geçersizlik nedeni', 'Üye etiketi'] : ['Seçtiği takım', 'Katılım ücreti (KC)']),
+    ...(sponsor ? ['Sponsordaki kullanıcı adı', 'Kupon numarası', 'Talep', 'Geçersizlik nedeni', 'Üye etiketi'] : ['Sayılan goller', 'Katılım ücreti (KC)']),
     'Gol',
     `Ödül (${unit})`,
     sponsor ? 'Teslim' : 'Ödeme',

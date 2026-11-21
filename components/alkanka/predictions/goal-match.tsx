@@ -2,10 +2,11 @@
 
 import { useId, useState } from 'react'
 import { Check, CircleDashed, Ticket } from 'lucide-react'
-import { pickGoalSideAction, submitGoalCouponAction } from '@/app/actions/community'
+import { joinGoalMatchAction, submitGoalCouponAction } from '@/app/actions/community'
 import { usePoints } from '@/components/alkanka/points-context'
 import {
   GOAL_KC_UNIT,
+  GOAL_NO_RULE,
   checkCoupon,
   goalAmount,
   goalReward,
@@ -15,7 +16,6 @@ import {
   goalStatusLabel,
   type GoalEventView,
   type GoalMatch,
-  type GoalSide,
 } from '@/lib/goal-rewards-shared'
 import { TR_TZ, trDay } from '@/lib/tr-time'
 import { cn } from '@/lib/utils'
@@ -38,7 +38,8 @@ function Crest({ name, src }: { name: string; src: string | null }) {
   )
 }
 
-function MatchHead({ m, now, open }: { m: GoalMatch; now: number; open: boolean }) {
+/** `label` replaces the usual status where it would mislead: a match nobody can join yet is not "open". */
+function MatchHead({ m, now, open, label }: { m: GoalMatch; now: number; open: boolean; label?: string }) {
   return (
     <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
       <span
@@ -47,7 +48,7 @@ function MatchHead({ m, now, open }: { m: GoalMatch; now: number; open: boolean 
           m.status === 'void' ? 'bg-destructive/15 text-destructive' : open ? 'bg-primary/15 text-primary' : m.status === 'settled' ? 'bg-secondary text-foreground' : 'bg-secondary text-foreground/80',
         )}
       >
-        {goalStatusLabel(m, now)}
+        {label ?? goalStatusLabel(m, now)}
       </span>
       <time dateTime={m.kickoff} className="font-semibold text-foreground">
         {when.format(new Date(m.kickoff))}
@@ -65,20 +66,26 @@ function OutcomeLine({ outcome }: { outcome: Outcome }) {
   )
 }
 
-// --- Alkanka: back a team --------------------------------------------------
+// --- Alkanka: join the match, meet the condition ---------------------------
 
-/** How the member's team pick turned out, in one sentence. */
-function teamOutcome(event: GoalEventView, m: GoalMatch): Outcome | null {
+/**
+ * How the member's entry turned out, in one sentence. Entries saved while these events still asked
+ * for a team keep naming it, because they are paid for that team's goals.
+ */
+function entryOutcome(event: GoalEventView, m: GoalMatch): Outcome | null {
   const pick = m.myPick
   if (!pick) return null
-  const team = pick.side === 'home' ? m.home : m.away
+  const team = pick.side === 'home' ? m.home : pick.side === 'away' ? m.away : null
+  const each = goalAmount(m.perGoal, event.unit)
   if (m.status === 'void') {
     const fee = pick.fee > 0 ? (pick.feeRefunded ? ` ${goalAmount(pick.fee, GOAL_KC_UNIT)} katılım ücretin geri yatırıldı.` : ` ${goalAmount(pick.fee, GOAL_KC_UNIT)} katılım ücretin birazdan geri yatar.`) : ''
-    return { text: `Seçimin ${team} idi. Maç iptal edildi, ödül verilmez.${fee}`, tone: 'plain' }
+    return { text: `Maç iptal edildi, ödül verilmez.${fee}`, tone: 'plain' }
   }
-  if (m.status !== 'settled' || pick.reward === null) return { text: `Seçimin: ${team}. Attığı her gol ${goalAmount(m.perGoal, event.unit)} kazandırır.`, tone: 'plain' }
-  if (pick.reward === 0) return { text: `${team} gol atamadı, bu maçtan ödül çıkmadı.`, tone: 'plain' }
-  const earned = `${team} ${pick.goals} gol attı: ${goalAmount(pick.reward, event.unit)}`
+  if (m.status !== 'settled' || pick.reward === null) {
+    return { text: team ? `Seçimin: ${team}. Attığı her gol ${each} kazandırır.` : `Maça katıldın. Maçta atılan her gol ${each} kazandırır.`, tone: 'plain' }
+  }
+  if (pick.reward === 0) return { text: team ? `${team} gol atamadı, bu maçtan ödül çıkmadı.` : 'Maçta gol olmadı, bu maçtan ödül çıkmadı.', tone: 'plain' }
+  const earned = `${team ? `${team} ${pick.goals} gol attı` : `Maçta ${pick.goals} gol oldu`}: ${goalAmount(pick.reward, event.unit)}`
   if (pick.paid) return { text: `${earned} hesabına yatırıldı.`, tone: 'good' }
   if (pick.approval === 'rejected') return { text: `${earned} kazanılacaktı, ancak etkinliğin şartı maç günü tamamlanmadığı için verilmedi.`, tone: 'bad' }
   if (event.rules.length > 0 && pick.approval === 'pending') return { text: `${earned} kazandın. Aşağıdaki şartı gün bitmeden tamamladığında hesabına yatar.`, tone: 'good' }
@@ -126,82 +133,75 @@ function Conditions({ event, m, now }: { event: GoalEventView; m: GoalMatch; now
   )
 }
 
-function SideButton({ side, m, chosen, locked, onChoose }: { side: GoalSide; m: GoalMatch; chosen: boolean; locked: boolean; onChoose: () => void }) {
-  const home = side === 'home'
-  const name = home ? m.home : m.away
-  const goals = home ? m.homeGoals : m.awayGoals
-  const picks = home ? m.homePicks : m.awayPicks
+/** What the event asks for, shown before joining so nobody pays a fee for a condition they did not read. */
+function RuleList({ event, m }: { event: GoalEventView; m: GoalMatch }) {
+  const many = event.rules.length > 1
   return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={chosen}
-      disabled={locked}
-      onClick={onChoose}
-      className={cn(
-        'flex min-h-14 min-w-0 items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors',
-        chosen ? 'border-primary bg-primary/10' : 'border-border bg-background',
-        !locked && !chosen && 'hover:border-primary/60',
-        locked && !chosen && 'opacity-70',
-      )}
-    >
-      <Crest name={name} src={home ? m.homeLogo : m.awayLogo} />
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm font-semibold text-foreground">{name}</span>
-        <span className="text-xs text-muted-foreground">{fmt(picks)} seçim</span>
-      </span>
-      {goals !== null && <span className="font-display text-xl font-bold tabular-nums text-foreground">{goals}</span>}
-      {chosen && goals === null && <Check className="size-4 shrink-0 text-primary" aria-hidden="true" />}
-    </button>
+    <div className="flex flex-col gap-2 rounded-lg border border-border bg-background px-3 py-2.5">
+      <p className="text-xs font-bold text-foreground">
+        Ödül için {dayName.format(new Date(m.kickoff))} günü Alkanka&apos;da {many ? (event.ruleMode === 'any' ? 'bunlardan birini yap' : 'bunların hepsini yap') : 'bunu yap'}
+      </p>
+      <ul className="flex flex-col gap-1.5">
+        {event.rules.map((r) => (
+          <li key={`${r.kind}-${r.game}`} className="flex items-start gap-1.5 text-xs leading-relaxed text-foreground">
+            <CircleDashed className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden="true" />
+            {goalRuleText(r)}
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs leading-relaxed text-muted-foreground">Sistem kendisi sayar, bir şey göndermen gerekmez. Gün Türkiye saatiyle 00:00 - 23:59 arasıdır.</p>
+    </div>
   )
 }
 
-export function TeamMatchCard({ event, m, now }: { event: GoalEventView; m: GoalMatch; now: number }) {
+export function JoinMatchCard({ event, m, now }: { event: GoalEventView; m: GoalMatch; now: number }) {
   const { pending, status, run } = useAction()
   const { setBalance, refresh } = usePoints()
-  const [side, setSide] = useState<GoalSide | null>(null)
-  const open = m.status === 'open' && Date.parse(m.kickoff) > now && !m.myPick
-  const result = teamOutcome(event, m)
-  const team = side === 'home' ? m.home : side === 'away' ? m.away : null
+  const running = m.status === 'open' && Date.parse(m.kickoff) > now
+  const open = running && !m.myPick
+  const ready = event.rules.length > 0
+  const result = entryOutcome(event, m)
   const fee = event.entryFee
 
   return (
     <article className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 @2xl:p-4">
-      <MatchHead m={m} now={now} open={open} />
+      <MatchHead m={m} now={now} open={open && ready} label={open && !ready ? 'Şart bekleniyor' : undefined} />
 
-      <div role="radiogroup" aria-label={`${m.home} - ${m.away}: takımını seç`} className="grid gap-2 @md:grid-cols-2">
-        {(['home', 'away'] as const).map((s) => (
-          <SideButton key={s} side={s} m={m} chosen={(m.myPick?.side ?? side) === s} locked={!open || pending} onChoose={() => setSide(s)} />
-        ))}
+      <div className="flex flex-col gap-2 rounded-lg border border-border bg-background px-3 py-2.5">
+        <TeamLine name={m.home} logo={m.homeLogo} goals={m.homeGoals} />
+        <TeamLine name={m.away} logo={m.awayLogo} goals={m.awayGoals} />
       </div>
-      {open && !side && <p className="text-xs text-muted-foreground">Katılmak için takımını seç.</p>}
+      <p className="text-xs text-muted-foreground">
+        Her gol <b className="text-primary">{goalAmount(m.perGoal, event.unit)}</b> · {fmt(m.picks)} katılım
+      </p>
 
-      {open && side && (
+      {open && ready && (
         <div className="flex flex-col gap-3 rounded-lg bg-secondary/60 p-3">
+          <RuleList event={event} m={m} />
           <p className="text-xs leading-relaxed text-foreground">
-            <b>{team}</b> seçersen attığı her gol <b className="text-primary">{goalAmount(m.perGoal, event.unit)}</b> kazandırır; örneğin 3 gol atarsa {goalAmount(goalReward(m.perGoal, 3), event.unit)}.
+            Takım seçmek yok: maçta atılan her gol <b className="text-primary">{goalAmount(m.perGoal, event.unit)}</b> kazandırır; örneğin maç 3 golle biterse {goalAmount(goalReward(m.perGoal, 3), event.unit)}.
             {fee > 0 && (
               <>
                 {' '}
-                Kaydettiğinde <b>{goalAmount(fee, GOAL_KC_UNIT)}</b> katılım ücreti bakiyenden düşer.
+                Katıldığında <b>{goalAmount(fee, GOAL_KC_UNIT)}</b> katılım ücreti bakiyenden düşer; şartı tamamlamazsan geri verilmez.
               </>
-            )}{' '}
-            Seçim bir kez yapılır, kaydettikten sonra değişmez.
+            )}
           </p>
           <button
             type="button"
             disabled={pending}
-            onClick={() => run(() => pickGoalSideAction(m.id, side), (r) => (r.balance === undefined ? refresh() : setBalance(r.balance)))}
+            onClick={() => run(() => joinGoalMatchAction(m.id), (r) => (r.balance === undefined ? refresh() : setBalance(r.balance)))}
             className="h-11 self-start rounded-lg bg-primary px-6 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
           >
-            {pending ? 'Kaydediliyor...' : fee > 0 ? `${team} seçimini kaydet (${goalAmount(fee, GOAL_KC_UNIT)})` : `${team} seçimini kaydet`}
+            {pending ? 'Kaydediliyor...' : fee > 0 ? `Maça katıl (${goalAmount(fee, GOAL_KC_UNIT)})` : 'Maça katıl'}
           </button>
         </div>
       )}
+      {open && !ready && <p className="text-xs leading-relaxed text-muted-foreground">{GOAL_NO_RULE}</p>}
 
       {result && <OutcomeLine outcome={result} />}
       <Conditions event={event} m={m} now={now} />
-      {!result && !open && m.status === 'open' && <p className="text-xs text-muted-foreground">Seçimler maç başlarken kapandı. Sonuç girilince ödüller dağıtılır.</p>}
+      {!result && !running && m.status === 'open' && <p className="text-xs text-muted-foreground">Katılım maç başlarken kapandı. Sonuç girilince ödüller dağıtılır.</p>}
       <StatusLine status={status} />
     </article>
   )

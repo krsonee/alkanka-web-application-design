@@ -20,7 +20,7 @@ import {
 import { TR_ZONE_NOTE } from '@/lib/tr-time'
 import { cn } from '@/lib/utils'
 import { StatusLine, useAction } from '../community/use-action'
-import { CouponMatchCard, TeamMatchCard } from './goal-match'
+import { CouponMatchCard, JoinMatchCard } from './goal-match'
 import { segmentCount, segmentItem, segmentTray } from './ui'
 
 /** What the two event kinds are called in the page's address. */
@@ -28,9 +28,9 @@ const CATEGORY_WORD: Record<GoalCategory, string> = { alkanka: 'alkanka', sponso
 
 const STEPS: Record<GoalCategory, { title: string; line: string }[]> = {
   alkanka: [
-    { title: 'Takımını seç', line: 'Maç başlamadan iki takımdan birini seç.' },
-    { title: 'Maçı bekle', line: 'Takımın ne kadar çok gol atarsa ödülün o kadar büyür.' },
-    { title: 'Ödülünü al', line: 'Maç sonuçlanınca KC kendiliğinden hesabına yatar.' },
+    { title: 'Maça katıl', line: 'Maç başlamadan "Maça katıl" düğmesine bas. Takım seçmek yok.' },
+    { title: 'Şartı tamamla', line: "Maç günü Alkanka'da istenen şeyi yap; sistem kendisi sayar." },
+    { title: 'Ödülünü al', line: 'Maçtaki her gol KC kazandırır, kendiliğinden hesabına yatar.' },
   ],
   sponsor: [
     { title: 'Hesabını bağla', line: 'Sponsordaki kullanıcı adını bir kez yaz.' },
@@ -158,7 +158,7 @@ function EventBlock({ event, now, me }: { event: GoalEventView; now: number; me:
       </div>
       <div className="grid items-start gap-3 @4xl:grid-cols-2">
         {ordered(event.matches, now).map((m) =>
-          sponsor ? <CouponMatchCard key={m.id} event={event} m={m} now={now} account={usable} blocked={blocked} /> : <TeamMatchCard key={m.id} event={event} m={m} now={now} />,
+          sponsor ? <CouponMatchCard key={m.id} event={event} m={m} now={now} account={usable} blocked={blocked} /> : <JoinMatchCard key={m.id} event={event} m={m} now={now} />,
         )}
       </div>
     </section>

@@ -79,6 +79,18 @@ export async function ruleDoneFor(userIds: string[], rules: GoalRule[], day: str
       )
       continue
     }
+    if (rule.kind === 'task') {
+      // Tasks the member finished and was credited for on that day; a claim still waiting for staff does not count yet.
+      const { ensureTasks } = await import('@/lib/tasks')
+      await ensureTasks()
+      put(
+        await rows(sql`SELECT user_id, count(*) AS n FROM task_claims
+          WHERE user_id IN (SELECT jsonb_array_elements_text(${list}::jsonb)) AND status = 'onaylandi' AND created_at >= ${start} AND created_at < ${end}
+          GROUP BY user_id`),
+        index,
+      )
+      continue
+    }
     // Finished table and bot matches only: prizes, fees, staff entries and refunded matches are not games played.
     put(
       await rows(sql`SELECT user_id, count(*) AS n FROM game_history

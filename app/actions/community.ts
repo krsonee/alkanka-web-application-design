@@ -125,12 +125,12 @@ async function sponsorGate() {
   if ((await getSponsorAccess()).state !== 'open') throw new Error('Sponsor etkinliğine katılmak için önce sponsorlar sayfasında 18 yaş onayını ver.')
 }
 
-/** Alkanka events: the member backs a team; a joining fee, when there is one, leaves the wallet with the pick. */
-export async function pickGoalSideAction(matchId: number, side: string): Promise<ActionResult> {
+/** Alkanka events: the member joins the match; a joining fee, when there is one, leaves the wallet with the entry. */
+export async function joinGoalMatchAction(matchId: number): Promise<ActionResult> {
   const result = await run(async (m) => {
-    const { pickGoalSide } = await import('@/lib/goal-rewards')
-    const { fee } = await pickGoalSide(m, Number(matchId), side)
-    return fee > 0 ? `Seçimin kaydedildi, ${fee.toLocaleString('tr-TR')} KC katılım ücreti bakiyenden düştü.` : 'Seçimin kaydedildi.'
+    const { joinGoalMatch } = await import('@/lib/goal-rewards')
+    const { fee } = await joinGoalMatch(m, Number(matchId))
+    return fee > 0 ? `Maça katıldın, ${fee.toLocaleString('tr-TR')} KC katılım ücreti bakiyenden düştü.` : 'Maça katıldın. Şartı maç günü tamamlamayı unutma.'
   }, '/tahminler')
   if (!result.ok) return result
   const member = await getMember()

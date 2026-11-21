@@ -5,6 +5,7 @@ import { creditClaimed, debitClaimed } from '@/lib/member'
 import { trDay, trDayBounds } from '@/lib/tr-time'
 import {
   GOAL_NAME,
+  GOAL_NO_RULE,
   GOAL_RULE_MISSED,
   checkCoupon,
   checkGoalEvent,
@@ -13,7 +14,6 @@ import {
   goalAmount,
   goalRulesMet,
   isGoalApproval,
-  isGoalSide,
   type GoalApproval,
   type GoalCategory,
   type GoalEvent,
@@ -392,35 +392,37 @@ async function mayJoin(userId: string) {
 }
 
 /**
- * Alkanka events: the member backs one team. A joining fee, when the event has one, leaves the wallet in the
- * same transaction that writes the pick, so nobody joins without paying and nobody pays without joining.
+ * Alkanka events: the member joins the match and every goal of it counts; nobody picks a team. The reward
+ * waits until the member has met the event's condition on the match day, which the site counts by itself.
+ * A joining fee, when the event has one, leaves the wallet in the same transaction that writes the entry,
+ * so nobody joins without paying and nobody pays without joining.
  */
-export async function pickGoalSide(user: { id: string; name: string }, matchId: number, side: unknown) {
+export async function joinGoalMatch(user: { id: string; name: string }, matchId: number) {
   await ensureGoal()
   const key = id(matchId, 'Maç')
   const [m] = await rows(sql`SELECT e.category, e.entry_fee, e.rules, m.home, m.away FROM goal_matches m JOIN goal_events e ON e.id = m.event_id
     WHERE m.id = ${key} AND m.status = 'open' AND m.kickoff > now() AND e.active`)
   if (!m) throw new Error(CLOSED)
-  if (m.category === 'sponsor') throw new Error('Sponsor etkinliğinde takım seçilmez; bahsini al ve kupon numaranı gir.')
-  if (!isGoalSide(side)) throw new Error('Bir takım seç.')
+  if (m.category === 'sponsor') throw new Error('Sponsor etkinliğine kuponla katılırsın: bahsini al ve kupon numaranı gir.')
+  // An event saved before conditions became required: paying every goal for a button press is not the deal.
+  if (rulesOf(m.rules).length === 0) throw new Error(GOAL_NO_RULE)
   await mayJoin(user.id)
   const fee = Number(m.entry_fee) || 0
-  // A pick in an event with conditions waits until the member has met them on the match day.
-  const approval: GoalApproval = rulesOf(m.rules).length ? 'pending' : 'approved'
-  // The open-and-not-started check is repeated inside the insert: a pick must never land after kickoff,
+  const approval: GoalApproval = 'pending'
+  // The open-and-not-started check is repeated inside the insert: an entry must never land after kickoff,
   // and the fee taken is the one the member was shown.
   const outcome = await debitClaimed(user.id, fee, `${GOAL_NAME} katılımı (${m.home} - ${m.away})`.slice(0, 120), async (client) => {
     const saved = await client.query(
       `INSERT INTO goal_picks (match_id, user_id, user_name, side, approval, fee)
-       SELECT m.id, $2::text, $3::text, $4::text, $5::text, $6::int FROM goal_matches m JOIN goal_events e ON e.id = m.event_id
-       WHERE m.id = $1::int AND m.status = 'open' AND m.kickoff > now() AND e.active AND e.category = 'alkanka' AND e.entry_fee = $6::int
+       SELECT m.id, $2::text, $3::text, 'all', $4::text, $5::int FROM goal_matches m JOIN goal_events e ON e.id = m.event_id
+       WHERE m.id = $1::int AND m.status = 'open' AND m.kickoff > now() AND e.active AND e.category = 'alkanka' AND e.entry_fee = $5::int
        ON CONFLICT (match_id, user_id) DO NOTHING RETURNING match_id`,
-      [key, user.id, user.name.slice(0, 40), side, approval, fee],
+      [key, user.id, user.name.slice(0, 40), approval, fee],
     )
     return Boolean(saved.rowCount)
   })
   if (outcome === 'short') throw new Error(`Katılım için ${goalAmount(fee, 'KC')} gerekiyor, bakiyen yetmiyor.`)
-  if (outcome === 'taken') throw new Error('Seçim kaydedilemedi: bu maç için zaten bir takım seçtin ya da katılım az önce kapandı. Sayfayı yenile.')
+  if (outcome === 'taken') throw new Error('Katılım kaydedilemedi: bu maça zaten katıldın ya da katılım az önce kapandı. Sayfayı yenile.')
   return { fee }
 }
 
@@ -435,7 +437,7 @@ export async function submitGoalCoupon(user: { id: string; name: string }, match
   const [m] = await rows(sql`SELECT e.category, e.site_id, e.site_name, e.site_slug FROM goal_matches m JOIN goal_events e ON e.id = m.event_id
     WHERE m.id = ${key} AND m.status = 'open' AND m.kickoff > now() AND e.active`)
   if (!m) throw new Error(`${CLOSED} Kupon numarası maç başlayana kadar girilir.`)
-  if (m.category !== 'sponsor') throw new Error('Bu etkinlikte kupon girilmez; takımını seç.')
+  if (m.category !== 'sponsor') throw new Error('Bu etkinlikte kupon girilmez; maça "Maça katıl" düğmesiyle katılırsın.')
   const coupon = checkCoupon(rawCoupon)
   if (!coupon.ok) throw new Error(coupon.error)
   await mayJoin(user.id)
@@ -494,7 +496,8 @@ export async function settleGoalMatch(matchId: number, homeGoals: unknown, awayG
   const done = await rows(sql`UPDATE goal_matches SET status = 'settled', home_goals = ${score.home}, away_goals = ${score.away}, settled_at = now()
     WHERE id = ${key} AND status = 'open' RETURNING per_goal`)
   if (!done.length) throw new Error('Maç zaten sonuçlandırılmış.')
-  // A team pick counts that team's goals; a sponsor coupon counts every goal of the match.
+  // Every entry counts all goals of the match. Only entries from before sides were dropped still carry a team,
+  // and those are paid for that team's goals, as the member was promised.
   const scored = await rows(sql`UPDATE goal_picks p SET
       goals = CASE p.side WHEN 'home' THEN ${score.home}::int WHEN 'away' THEN ${score.away}::int ELSE ${score.home + score.away}::int END,
       reward = ${Number(done[0].per_goal)}::int * CASE p.side WHEN 'home' THEN ${score.home}::int WHEN 'away' THEN ${score.away}::int ELSE ${score.home + score.away}::int END

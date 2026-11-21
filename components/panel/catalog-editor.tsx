@@ -589,7 +589,7 @@ const PREDICTION_KINDS = [
   {
     id: 'goal',
     label: 'Gol başı ödül',
-    about: `Üye bir takım seçer; maç sonuçlanınca o takımın attığı her gol için ayarladığın ödülü kazanır (gol başı 10 KC, 5 gol, 50 KC). Alkanka etkinliğinde ödül KC olarak kendiliğinden yatar; sponsor etkinliğinde ödülü sponsor verir, şartı sen onaylar ve teslimi sen işaretlersin. Tahmin liginden ayrıdır: lig puanına yazılmaz.`,
+    about: `Üye takım seçmez: maça katılır ve maçta atılan her gol için ayarladığın ödülü kazanır (gol başı 10 KC, 5 gol, 50 KC). Alkanka etkinliğinde üye ödülü, maç günü Alkanka'da senin belirlediğin şartı (oyun oyna, oyun kazan, oyunda vakit geçir, görev tamamla) tamamlayınca alır; şartı sistem kendisi sayar ve KC kendiliğinden yatar. Sponsor etkinliğinde üye kupon numarasını girer, ödülü sponsor verir, kuponu sen onaylar ve teslimi sen işaretlersin. Tahmin liginden ayrıdır: lig puanına yazılmaz.`,
   },
 ] as const
 

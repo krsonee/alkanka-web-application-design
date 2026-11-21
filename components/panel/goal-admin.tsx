@@ -76,7 +76,8 @@ const blank = (category: GoalCategory): Draft => {
     needDeposit: sponsor,
     minOdds: sponsor ? '1,80' : '',
     entryFee: '0',
-    rules: [],
+    // An Alkanka event cannot be saved without a condition, so the form starts with the lightest one.
+    rules: sponsor ? [] : [{ kind: 'play', game: '', amount: 1 }],
     ruleMode: 'all',
     terms: '',
     active: true,
@@ -117,7 +118,7 @@ function EventSheet({ initial, sites, onClose, onSaved }: { initial: Draft; site
     Number.isInteger(perGoal) && perGoal > 0
       ? sponsor
         ? `Örnek: maç 3-2 biterse (5 gol) kuponu geçerli her üye ${goalAmount(goalReward(perGoal, 5), d.unit || 'ödül')} hak eder.`
-        : `Örnek: üyenin seçtiği takım 3 gol atarsa üye ${goalAmount(goalReward(perGoal, 3), 'KC')} kazanır.`
+        : `Örnek: maç 3-2 biterse (5 gol) şartı tamamlayan her üye ${goalAmount(goalReward(perGoal, 5), 'KC')} kazanır.`
       : ''
   const siteName = sites.find((s) => s.id === d.siteId)?.name ?? null
   // The rule box exactly as the member will read it, from what is typed so far.
@@ -168,7 +169,7 @@ function EventSheet({ initial, sites, onClose, onSaved }: { initial: Draft; site
                 className={cn('flex flex-col gap-1 rounded-lg border p-3 text-left', d.category === c.id ? 'border-primary bg-primary/10' : 'border-border hover:bg-secondary')}
               >
                 <span className="text-sm font-bold text-foreground">{c.id === 'alkanka' ? 'Alkanka' : 'Sponsor'}</span>
-                <span className={hint}>{c.id === 'alkanka' ? 'Ödül KC. Maç sonuçlanınca kendiliğinden yatar.' : 'Ödülü sponsor verir (freebet, freespin). Şartı sen onaylarsın, teslimi sen işaretlersin.'}</span>
+                <span className={hint}>{c.id === 'alkanka' ? "Ödül KC. Üye maça katılır, maç günü Alkanka'daki şartı tamamlar; sistem kontrol eder, ödül kendiliğinden yatar." : 'Ödülü sponsor verir (freebet, freespin). Şartı sen onaylarsın, teslimi sen işaretlersin.'}</span>
               </button>
             ))}
           </div>
@@ -208,7 +209,7 @@ function EventSheet({ initial, sites, onClose, onSaved }: { initial: Draft; site
           </label>
         </div>
         {example && <p className={hint}>{example}</p>}
-        {d.id && <p className={hint}>Gol başı ödülü değiştirirsen sadece henüz kimsenin seçim yapmadığı maçlar yeni rakama geçer. Seçim yapılmış maçlar üyeye söz verilen eski rakamla ödenir.</p>}
+        {d.id && <p className={hint}>Gol başı ödülü değiştirirsen sadece henüz kimsenin katılmadığı maçlar yeni rakama geçer. Katılım olan maçlar üyeye söz verilen eski rakamla ödenir.</p>}
 
         {sponsor && (
           <fieldset className="flex flex-col gap-3 rounded-lg border border-border p-3">
@@ -249,7 +250,7 @@ function EventSheet({ initial, sites, onClose, onSaved }: { initial: Draft; site
               Katılım ücreti (KC)
               <input inputMode="numeric" value={d.entryFee} onChange={(e) => setD({ ...d, entryFee: e.target.value.replace(/\D/g, '').slice(0, 6) })} className={field} />
               <span className={hint}>
-                Ücretsizse 0 yaz. Ücret, üye takımını kaydederken bakiyesinden düşer; maç iptal edilirse kendiliğinden geri yatar. En fazla {GOAL_MAX_FEE.toLocaleString('tr-TR')} KC.
+                Ücretsizse 0 yaz. Ücret, üye maça katılırken bakiyesinden düşer; maç iptal edilirse kendiliğinden geri yatar. En fazla {GOAL_MAX_FEE.toLocaleString('tr-TR')} KC.
                 {d.id ? ' Ücreti değiştirirsen sonraki katılımlar yeni ücreti öder; daha önce katılanlar etkilenmez.' : ''}
               </span>
             </label>
@@ -278,7 +279,7 @@ function EventSheet({ initial, sites, onClose, onSaved }: { initial: Draft; site
           <input type="checkbox" checked={d.active} onChange={(e) => setD({ ...d, active: e.target.checked })} className="mt-0.5 size-4 accent-primary" />
           <span className="flex flex-col gap-0.5">
             Sitede yayında
-            <span className={hint}>Kapatırsan etkinlik siteden kalkar ve yeni seçim alınmaz; kayıtları ve katılımcı listesi panelde durur.</span>
+            <span className={hint}>Kapatırsan etkinlik siteden kalkar ve yeni katılım alınmaz; kayıtları ve katılımcı listesi panelde durur.</span>
           </span>
         </label>
       </div>
@@ -325,7 +326,7 @@ function AddMatch({ eventId, onSaved }: { eventId: number; onSaved: () => void }
       </div>
       {past && (
         <p role="alert" className="text-xs font-medium text-destructive">
-          Maç saati geçmişte. Seçimler maç başlarken kapanır; ileri bir saat gir.
+          Maç saati geçmişte. Katılım maç başlarken kapanır; ileri bir saat gir.
         </p>
       )}
       <div className="flex flex-wrap items-center gap-3">
@@ -355,8 +356,8 @@ function MatchRow({ event, m, now, onChanged, onOpenPicks }: { event: GoalEventV
     const pay = sponsor
       ? `${picks} talep hesaplanır; hepsi geçerli sayılırsa toplam ${goalAmount(owed, event.unit)} hak edilir (kuponu sen kontrol eder, teslimi sen işaretlersin).`
       : event.rules.length > 0
-        ? `${picks} seçim hesaplanır, toplam ${goalAmount(owed, 'KC')} kazanılır; ödül, etkinliğin şartını maç günü tamamlayan üyelere yatar.`
-        : `${picks} seçim hesaplanır ve toplam ${goalAmount(owed, 'KC')} üyelere hemen yatırılır.`
+        ? `${picks} katılım hesaplanır, toplam ${goalAmount(owed, 'KC')} kazanılır; ödül, etkinliğin şartını maç günü tamamlayan üyelere yatar.`
+        : `${picks} katılım hesaplanır ve toplam ${goalAmount(owed, 'KC')} üyelere hemen yatırılır.`
     if (!(await askConfirm(`${m.home} ${score.home} - ${score.away} ${m.away} olarak sonuçlandırılsın mı? ${pay} Sonuç bir kez girilir, sonradan değiştirilemez.`))) return
     run(() => finishGoalMatch(m.id, score.home, score.away), onChanged)
   }
@@ -376,7 +377,13 @@ function MatchRow({ event, m, now, onChanged, onOpenPicks }: { event: GoalEventV
             {m.extId === null ? '' : ' · takvim maçı, sonucu kendiliğinden gelir'}
           </p>
           <p className="text-xs text-muted-foreground">
-            {picks === 0 ? (sponsor ? 'Henüz kupon girilmedi.' : 'Henüz seçim yok.') : sponsor ? `${picks} kupon talebi` : `${m.home}: ${m.homePicks} seçim · ${m.away}: ${m.awayPicks} seçim`}
+            {picks === 0
+              ? sponsor
+                ? 'Henüz kupon girilmedi.'
+                : 'Henüz katılan yok.'
+              : sponsor
+                ? `${picks} kupon talebi`
+                : `${picks} katılım${m.homePicks + m.awayPicks > 0 ? ` (${m.homePicks + m.awayPicks} tanesi eski takım seçimi: ${m.home} ${m.homePicks}, ${m.away} ${m.awayPicks})` : ''}`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -492,7 +499,7 @@ function PicksSheet({ matchId, onClose, onChanged }: { matchId: number; onClose:
     <SideSheet title={`${match.home} - ${match.away}`} eyebrow={`${event.title} · katılımcılar`} onClose={onClose} size="xl" guard="marked">
       <div className="flex flex-col gap-4">
         <p className="text-xs leading-relaxed text-muted-foreground">
-          {picks.length} {sponsor ? 'talep' : 'seçim'} · {goalStatusLabel(match, Date.now())}
+          {picks.length} {sponsor ? 'talep' : 'katılım'} · {goalStatusLabel(match, Date.now())}
           {match.status === 'settled'
             ? ` · ${match.homeGoals} - ${match.awayGoals} · ${sponsor ? 'verilecek' : 'kazanılan'} ${goalAmount(totals.owed, event.unit)}, ${sponsor ? 'teslim edilen' : 'ödenen'} ${goalAmount(totals.done, event.unit)}${totals.refused ? `, ${sponsor ? 'geçersiz talep olduğu' : 'şart tamamlanmadığı'} için verilmeyen ${goalAmount(totals.refused, event.unit)}` : ''}`
             : ''}
@@ -500,8 +507,8 @@ function PicksSheet({ matchId, onClose, onChanged }: { matchId: number; onClose:
           {sponsor
             ? '. Her talepte üyenin bağlı sponsor kullanıcı adı ve kupon numarası yazar. Kuponu sponsorda kontrol et: şartlara uyuyorsa "Kupon geçerli", uymuyorsa nedenini seçip "Geçersiz say". Ödülü sponsor tanımlayınca "Teslim edildi" olarak işaretle.'
             : event.rules.length > 0
-              ? '. Ödül, üye etkinliğin şartını maç günü tamamlayınca kendiliğinden yatar; gün bitene kadar tamamlamayanınki verilmez.'
-              : '. Alkanka ödülleri sonuç girilince kendiliğinden yatar.'}
+              ? '. Üye takım seçmez, maçın bütün golleri sayılır. Ödül, üye etkinliğin şartını maç günü tamamlayınca kendiliğinden yatar; şartı sistem sayar, gün bitene kadar tamamlamayanınki verilmez.'
+              : '. Bu etkinlikte şart yok: şart zorunlu olmadan önce açılmış. Var olan katılımların ödülü sonuç girilince yatar; yeni katılım, etkinliğe şart eklenene kadar kapalıdır.'}
         </p>
         {failed > 0 && (
           <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-foreground">
@@ -592,7 +599,7 @@ function PicksSheet({ matchId, onClose, onChanged }: { matchId: number; onClose:
                 {sponsor && <th scope="col" className="p-2 font-semibold">Sponsordaki adı</th>}
                 {sponsor && <th scope="col" className="p-2 font-semibold">Kupon no</th>}
                 {sponsor && <th scope="col" className="p-2 font-semibold">Talep</th>}
-                {!sponsor && <th scope="col" className="p-2 font-semibold">Takım</th>}
+                {!sponsor && <th scope="col" className="p-2 font-semibold">Sayılan goller</th>}
                 {!sponsor && paidEntry && <th scope="col" className="p-2 text-right font-semibold">Ücret</th>}
                 <th scope="col" className="p-2 text-right font-semibold">Gol</th>
                 <th scope="col" className="p-2 text-right font-semibold">Ödül</th>
@@ -665,7 +672,7 @@ function PicksSheet({ matchId, onClose, onChanged }: { matchId: number; onClose:
               {shown.length === 0 && (
                 <tr>
                   <td colSpan={sponsor ? 8 : paidEntry ? 6 : 5} className="p-4 text-center text-muted-foreground">
-                    {picks.length === 0 ? (sponsor ? 'Bu maça henüz kupon girilmedi.' : 'Bu maça henüz seçim yapılmadı.') : 'Aramaya uyan katılımcı yok.'}
+                    {picks.length === 0 ? (sponsor ? 'Bu maça henüz kupon girilmedi.' : 'Bu maça henüz katılan olmadı.') : 'Aramaya uyan katılımcı yok.'}
                   </td>
                 </tr>
               )}
@@ -700,7 +707,7 @@ function EventCard({
   const joined = event.matches.reduce((s, m) => s + m.picks, 0)
   const setup = sponsor
     ? ['kuponla katılım', event.needDeposit ? 'maç günü yatırım' : '', event.minOdds ? `en düşük oran ${oddsText(event.minOdds)}` : '', event.minBet ? `en az ${event.minBet}` : '', event.viaLink ? 'Alkanka linkiyle üyelik' : ''].filter(Boolean)
-    : [event.entryFee > 0 ? `katılım ${goalAmount(event.entryFee, 'KC')}` : 'ücretsiz', event.rules.length ? `${event.rules.length} ödül şartı (${event.rules.length > 1 && event.ruleMode === 'any' ? 'biri yeterli' : 'hepsi'})` : 'şartsız']
+    : [event.entryFee > 0 ? `katılım ${goalAmount(event.entryFee, 'KC')}` : 'ücretsiz', event.rules.length ? `${event.rules.length} ödül şartı (${event.rules.length > 1 && event.ruleMode === 'any' ? 'biri yeterli' : 'hepsi'})` : 'ŞART YOK: katılım kapalı, düzenleyip şart ekle']
   const waiting = event.matches.filter((m) => m.status === 'open' && Date.parse(m.kickoff) <= now).length
   return (
     <section aria-label={event.title} data-find={`goal-${event.id}`} className={card}>
