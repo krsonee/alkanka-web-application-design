@@ -1,3 +1,5 @@
+import { hasOwn } from './has-own'
+
 export type TaskKind =
   | 'manual'
   | 'game_play'
@@ -76,7 +78,7 @@ export const TASK_KINDS: { value: TaskKind; label: string; param: KindParam; cou
 
 export const KIND_META = Object.fromEntries(TASK_KINDS.map((k) => [k.value, k])) as Record<TaskKind, (typeof TASK_KINDS)[number]>
 
-export const isTaskKind = (v: unknown): v is TaskKind => typeof v === 'string' && v in KIND_META
+export const isTaskKind = (v: unknown): v is TaskKind => typeof v === 'string' && hasOwn(KIND_META, v)
 
 export const isAutoKind = (kind: TaskKind) => kind !== 'manual'
 

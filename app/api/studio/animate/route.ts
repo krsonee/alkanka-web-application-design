@@ -5,7 +5,7 @@ import { rejectCrossSite } from '@/lib/same-origin'
 import { addJob, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
 import { makeGif, makeMotionSticker, makeVideo, videoToGif } from '@/lib/studio-animate'
 import { cleanMotion, motionLabel } from '@/lib/studio-brief'
-import { budgetBlock } from '@/lib/studio-budget'
+import { closeHold, holdBudget } from '@/lib/studio-budget'
 import { brushOf } from '@/lib/studio-overlay'
 import { makeStickerIcon, makeVideoSticker } from '@/lib/studio-telegram'
 import { GIF_DURATIONS, gifCost, STICKER_MOTION_COST, toMotionQuality, VIDEO_DURATIONS, videoCost } from '@/lib/studio-types'
@@ -57,17 +57,21 @@ export async function POST(request: NextRequest) {
         : mode === 'tgmotion'
           ? STICKER_MOTION_COST
           : 0
-  const overCap = await budgetBlock(paid)
-  if (overCap) return NextResponse.json({ error: overCap }, { status: 409 })
+  const held = await holdBudget(paid)
+  if (held.error !== null) return NextResponse.json({ error: held.error }, { status: 409 })
+  const hold = held.hold
+  const onBilled = () => {
+    hold.billed = true
+  }
 
   try {
     const image = await readFile(source.pathname)
     // With the text-free original at hand, the model animates that and the logo and copy are printed
     // on the finished clip. Older jobs without it are animated as they are.
     const clip = async (seconds: number, sound: boolean) => {
-      if (!source.cleanPathname) return makeVideo({ image, format: source.format, motion, duration: seconds, audio: sound, hd, brush: null })
+      if (!source.cleanPathname) return makeVideo({ image, format: source.format, motion, duration: seconds, audio: sound, hd, brush: null, onBilled })
       const [clean, brand] = await Promise.all([readFile(source.cleanPathname), source.brandId ? getBrand(source.brandId) : null])
-      return makeVideo({ image: clean, format: source.format, motion, duration: seconds, audio: sound, hd, brush: brushOf(brand, source.texts) })
+      return makeVideo({ image: clean, format: source.format, motion, duration: seconds, audio: sound, hd, brush: brushOf(brand, source.texts), onBilled })
     }
     const asked = motionLabel(motion)
     const made = async (): Promise<{ data: Buffer; contentType: string; ext: string; folder: string; label: string }> => {
@@ -84,7 +88,7 @@ export async function POST(request: NextRequest) {
         return { data, contentType: 'video/webm', ext: 'webm', folder: 'stickers', label: `Telegram hareketli sticker (sallanma) · ${kb(data)}` }
       }
       if (mode === 'tgmotion') {
-        const data = await makeMotionSticker(image, motion)
+        const data = await makeMotionSticker(image, motion, onBilled)
         const about = `Telegram hareketli sticker · ${kb(data)}`
         return { data, contentType: 'video/webm', ext: 'webm', folder: 'stickers', label: asked ? `${asked} · ${about}` : about }
       }
@@ -108,10 +112,12 @@ export async function POST(request: NextRequest) {
       parentId: source.id,
       cost: paid,
     })
+    await closeHold(hold, 'recorded')
     await logPanel('studio', 'Hareketli içerik üretildi', source.brandName || null, `Üretim #${job.id} · ${result.label.slice(0, 200)}`)
     return NextResponse.json({ job: { ...job, brandName: source.brandName } })
   } catch (error) {
     console.error('Studio animation failed:', error)
+    await closeHold(hold, 'failed', `Hareketli içerik kaydedilemedi (kaynak #${source.id}, ${mode})`)
     const message = error instanceof Error ? error.message : ''
     const blocked = /safety|policy|blocked|refus/i.test(message)
     return NextResponse.json(

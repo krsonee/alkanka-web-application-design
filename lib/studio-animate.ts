@@ -218,7 +218,10 @@ export async function makeVideo({
   audio,
   hd,
   brush,
+  onBilled,
 }: {
+  /** Called once the model has returned the clip, which is the point the job costs money. */
+  onBilled?: () => void
   /** The text-free, logo-free picture when `brush` is set; otherwise the finished banner. */
   image: Buffer
   format: string
@@ -252,6 +255,7 @@ export async function makeVideo({
     duration,
     generateAudio: audio,
   })
+  onBilled?.()
   const clip = Buffer.from(video.uint8Array)
   const overlay = brush ? await buildOverlay(art.width, art.height, brush) : null
   return padded || overlay ? finishClip(clip, { width, height }, padded ? art : null, overlay) : clip
@@ -261,7 +265,7 @@ export async function makeVideo({
  * A Telegram video sticker whose character really moves: the cut-out sticker is animated on a green
  * screen by the video model, and the green is removed again afterwards.
  */
-export async function makeMotionSticker(image: Buffer, motion: Motion) {
+export async function makeMotionSticker(image: Buffer, motion: Motion, onBilled?: () => void) {
   const { video } = await generateVideo({
     model: VIDEO_MODEL,
     prompt: {
@@ -277,5 +281,6 @@ export async function makeMotionSticker(image: Buffer, motion: Motion) {
     duration: STICKER_CLIP_SECONDS,
     generateAudio: false,
   })
+  onBilled?.()
   return clipToVideoSticker(Buffer.from(video.uint8Array))
 }

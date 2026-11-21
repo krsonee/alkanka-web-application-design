@@ -648,15 +648,24 @@ export async function listOddsDeals(limit = 30): Promise<OddsDeal[]> {
 
 export async function setOddsResult(dealId: number, result: 'won' | 'lost' | null) {
   await ensureSuiteTables()
-  const before = await rows<{ result: string | null; brand: string; title: string; link: string }>(
-    sql`SELECT result, brand, title, link FROM deals WHERE id = ${dealId} AND kind = 'oran'`,
+  const stamp = result ? new Date().toISOString() : null
+  if (result !== 'won') {
+    const done = await rows(sql`UPDATE deals SET result = ${result}, result_at = ${stamp} WHERE id = ${dealId} AND kind = 'oran' RETURNING id`)
+    if (!done.length) throw new Error('Özel oran bulunamadı')
+    return { posted: 0 }
+  }
+  // Only the request that actually turns the deal into a win announces it, however many arrive together.
+  const [deal] = await rows<{ brand: string; title: string; link: string }>(
+    sql`UPDATE deals SET result = 'won', result_at = ${stamp} WHERE id = ${dealId} AND kind = 'oran' AND result IS DISTINCT FROM 'won' RETURNING brand, title, link`,
   )
-  if (!before.length) throw new Error('Özel oran bulunamadı')
-  await rows(sql`UPDATE deals SET result = ${result}, result_at = ${result ? new Date().toISOString() : null} WHERE id = ${dealId}`)
-  if (result !== 'won' || before[0].result === 'won') return { posted: 0 }
+  if (!deal) {
+    const known = await rows(sql`SELECT 1 FROM deals WHERE id = ${dealId} AND kind = 'oran'`)
+    if (!known.length) throw new Error('Özel oran bulunamadı')
+    return { posted: 0 }
+  }
 
   const suite = await getBotSuite()
-  const text = fill(suite.odds.winText, { marka: before[0].brand, baslik: before[0].title, link: before[0].link })
+  const text = fill(suite.odds.winText, { marka: deal.brand, baslik: deal.title, link: deal.link })
   const targets = await dropAutoFed(await targetsFor(suite.odds.targetIds, true))
   let posted = 0
   const failures: string[] = []

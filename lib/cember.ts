@@ -2,6 +2,7 @@ import 'server-only'
 import { randomInt } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
 import { ARENA_META, type ArenaGame } from '@/lib/arena'
+import { hasOwn } from '@/lib/has-own'
 import { runSim, mulberry, STEP } from '@/lib/cember-sim'
 import { runKD, KD_STEP } from '@/lib/karadelik-sim'
 import { runSV, SV_STEP, SV_TEAM_NAMES } from '@/lib/survival-sim'
@@ -96,7 +97,7 @@ export function normalizeConfig(raw: Partial<CemberConfig> | null | undefined, f
   const c = { ...DEFAULT_CEMBER, ...(raw ?? {}) }
   const hours = [...new Set((Array.isArray(c.hours) ? c.hours : []).map((h) => clampInt(h, 0, 23, 0)))].sort((a, b) => a - b)
   const conditions: CemberCondition[] = (Array.isArray(c.conditions) ? c.conditions : [])
-    .filter((x) => x && x.kind in CONDITION_KINDS)
+    .filter((x) => x && hasOwn(CONDITION_KINDS, x.kind))
     .slice(0, 12)
     .map((x, i) => ({
       id: String(x.id || `c${i}`).slice(0, 20),

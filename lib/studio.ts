@@ -4,7 +4,7 @@ import { rows, sql } from '@/lib/db'
 import { cleanTexts, type StudioAsset, type StudioBrand, type StudioJob, type StudioTexts } from '@/lib/studio-types'
 
 let ready: Promise<unknown> | null = null
-function ensureTables() {
+export function ensureTables() {
   ready ??= (async () => {
     await rows(sql`CREATE TABLE IF NOT EXISTS studio_brands (
       id serial PRIMARY KEY, name text NOT NULL, domain text NOT NULL DEFAULT '', logo text NOT NULL DEFAULT '',
@@ -19,6 +19,10 @@ function ensureTables() {
     await rows(sql`ALTER TABLE studio_jobs ADD COLUMN IF NOT EXISTS clean text NOT NULL DEFAULT ''`)
     await rows(sql`ALTER TABLE studio_brands ADD COLUMN IF NOT EXISTS mascot text NOT NULL DEFAULT ''`)
     await rows(sql`ALTER TABLE studio_jobs ADD COLUMN IF NOT EXISTS texts text NOT NULL DEFAULT ''`)
+    // Cost set aside while a paid job runs; `kept` rows are jobs the model was paid for that failed afterwards.
+    await rows(sql`CREATE TABLE IF NOT EXISTS studio_holds (
+      id bigserial PRIMARY KEY, cost numeric NOT NULL, kept boolean NOT NULL DEFAULT false, note text NOT NULL DEFAULT '',
+      created_at timestamptz NOT NULL DEFAULT now())`)
   })().catch((error) => {
     ready = null
     throw error
@@ -169,11 +173,15 @@ export async function deleteJob(id: number) {
   await rows(sql`DELETE FROM studio_jobs WHERE id = ${id}`)
 }
 
+/** Money paid for finished jobs, plus jobs the model was paid for but that failed before they could be saved. */
 export async function studioSpend() {
   await ensureTables()
   const r = await rows<{ total: string; month: string; count: string }>(sql`SELECT
-    COALESCE(SUM(cost), 0) AS total, COALESCE(SUM(cost) FILTER (WHERE created_at > date_trunc('month', now())), 0) AS month,
-    COUNT(*) AS count FROM studio_jobs`)
+    j.total + h.total AS total, j.month + h.month AS month, j.count
+    FROM (SELECT COALESCE(SUM(cost), 0) AS total, COALESCE(SUM(cost) FILTER (WHERE created_at > date_trunc('month', now())), 0) AS month,
+            COUNT(*) AS count FROM studio_jobs) j,
+         (SELECT COALESCE(SUM(cost), 0) AS total, COALESCE(SUM(cost) FILTER (WHERE created_at > date_trunc('month', now())), 0) AS month
+            FROM studio_holds WHERE kept) h`)
   return { total: Number(r[0].total), month: Number(r[0].month), count: Number(r[0].count) }
 }
 

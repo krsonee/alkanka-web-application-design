@@ -1,6 +1,6 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
-import { credit } from '@/lib/member'
+import { creditClaimed } from '@/lib/member'
 import { ensureCommunity } from '@/lib/community'
 import { getContent, setContent } from '@/lib/content'
 import {
@@ -449,7 +449,8 @@ function cleanResult(input: Partial<MatchResult>): MatchResult {
   }
 }
 
-export type SettleSummary = { picks: number; winners: number; kc: number; kp: number; gifts: number; voided: MarketId[] }
+/** `failed`: picks of this match whose reward could not be written; they stay owed and the next settlement pays them. */
+export type SettleSummary = { picks: number; winners: number; kc: number; kp: number; gifts: number; voided: MarketId[]; failed: number }
 
 /**
  * Records the final result once, scores every pick and pays what it earned.
@@ -486,7 +487,9 @@ export async function settleLeagueMatch(id: number, input: Partial<MatchResult>)
       FROM jsonb_to_recordset(${JSON.stringify(graded)}::jsonb) AS x(user_id text, points int, exact boolean, outcome jsonb, kc int, kp int, bonus boolean, owed boolean)
       WHERE p.match_id = ${id} AND p.user_id = x.user_id`)
   }
-  await payLeagueMatches()
+  // The result is recorded either way; whatever could not be paid is counted, never reported as paid.
+  await payLeagueMatches().catch((e) => console.error('[league] ödeme', e))
+  const [left] = await rows<{ n: string }>(sql`SELECT count(*) AS n FROM league_picks WHERE match_id = ${id} AND NOT paid`)
   return {
     picks: graded.length,
     winners: graded.filter((g) => g.points > 0 || g.owed).length,
@@ -494,12 +497,13 @@ export async function settleLeagueMatch(id: number, input: Partial<MatchResult>)
     kp: graded.reduce((s, g) => s + g.kp, 0),
     gifts: gift ? graded.filter((g) => g.bonus).length : 0,
     voided,
+    failed: Number(left?.n ?? 0),
   }
 }
 
 /**
- * Pays every scored pick that is still owed. Each pick is claimed before it is paid, so a run that
- * stops halfway is finished by the next one and nobody is paid twice.
+ * Pays every scored pick that is still owed. The "paid" mark, the coins and the points are written in one
+ * transaction: a pick whose payment fails stays owed and is paid by the next run, and nobody is paid twice.
  */
 export async function payLeagueMatches() {
   await ensureLeague()
@@ -511,21 +515,26 @@ export async function payLeagueMatches() {
   await ensureKp()
   let paid = 0
   for (const p of owed) {
-    const claimed = await rows(sql`UPDATE league_picks SET paid = true WHERE match_id = ${p.match_id} AND user_id = ${p.user_id} AND NOT paid RETURNING user_id`)
-    if (!claimed.length) continue
     const userId = String(p.user_id)
     const match = `${p.home} - ${p.away}`
     try {
-      if (Number(p.kc) > 0) await credit(userId, Number(p.kc), `Tahmin ödülü (${match})`)
-      if (Number(p.kp) > 0) {
-        await rows(sql`INSERT INTO kp_events (user_id, source, points, ref, note)
-          VALUES (${userId}, 'tahmin', ${Number(p.kp)}, ${`mac:${p.match_id}`}, ${`Tahmin ödülü (${match})`.slice(0, 120)}) ON CONFLICT DO NOTHING`)
-      }
+      // The bonus prize is recorded once per member and match however often this runs, so it goes first.
       const prize = setOf(p.markets).bonus?.prize
       if (p.bonus && prize && (prize.kind === 'market' || prize.kind === 'cash')) {
         await grantAward({ userId, userName: String(p.user_name), source: 'match', ref: `mac:${p.match_id}`, place: null, title: `Bütün soruları bildin: ${match}`, prize })
       }
-      paid++
+      const won = await creditClaimed(userId, Number(p.kc), `Tahmin ödülü (${match})`, async (client) => {
+        const claimed = await client.query(`UPDATE league_picks SET paid = true WHERE match_id = $1 AND user_id = $2 AND NOT paid RETURNING user_id`, [p.match_id, userId])
+        if (!claimed.rowCount) return false
+        if (Number(p.kp) > 0) {
+          await client.query(
+            `INSERT INTO kp_events (user_id, source, points, ref, note) VALUES ($1, 'tahmin', $2, $3, $4) ON CONFLICT DO NOTHING`,
+            [userId, Number(p.kp), `mac:${p.match_id}`, `Tahmin ödülü (${match})`.slice(0, 120)],
+          )
+        }
+        return true
+      })
+      if (won) paid++
     } catch (error) {
       console.error('[league] ödül yazılamadı', p.match_id, userId, error)
     }
@@ -643,6 +652,8 @@ export async function leagueTick() {
   const now = Date.now()
   if (now < nextLook) return
   nextLook = now + LOOK_EVERY_MS
+  // A reward that could not be written when its match was settled is tried again here.
+  await payLeagueMatches().catch((e) => console.error('[league] ödeme', e))
   const s = await getLeagueSettings()
   if (!s.auto && !s.week.on && !s.month.on) return
   if (s.auto) {

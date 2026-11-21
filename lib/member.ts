@@ -1,10 +1,11 @@
 import 'server-only'
 import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
-import { rows, sql } from '@/lib/db'
+import type { PoolClient } from 'pg'
+import { pool, rows, sql } from '@/lib/db'
 import { getSignupBonus } from '@/lib/site-texts'
 import { isBanned } from '@/lib/members-admin'
-import { applyCoins, noteCoins } from '@/lib/wallet-ledger'
+import { applyCoins, ensureLedger, noteCoins } from '@/lib/wallet-ledger'
 
 export const SIGNUP_BONUS = 250
 
@@ -51,6 +52,41 @@ export async function credit(userId: string, amount: number, why?: string) {
   if (!Number.isInteger(amount) || amount <= 0) return
   await getBalance(userId)
   await applyCoins(userId, amount, why)
+}
+
+/**
+ * Pays a reward exactly once. `claim` marks the reward as paid inside the transaction and reports whether
+ * this call won it; the coins are committed together with that mark or not at all. A reward is therefore
+ * never marked without being paid, and two runs at once cannot pay it twice: the second one waits on the
+ * row and then finds it taken. Returns false when another run already paid it; throws when nothing was written.
+ */
+export async function creditClaimed(
+  userId: string,
+  amount: number,
+  why: string,
+  claim: (client: Pick<PoolClient, 'query'>) => Promise<boolean>,
+): Promise<boolean> {
+  const coins = Number.isInteger(amount) && amount > 0 ? amount : 0
+  if (coins) {
+    await getBalance(userId)
+    await ensureLedger()
+  }
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    if (!(await claim(client))) {
+      await client.query('ROLLBACK')
+      return false
+    }
+    if (coins && (await applyCoins(userId, coins, why, { client })) === null) throw new Error('Cüzdan bulunamadı.')
+    await client.query('COMMIT')
+    return true
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw error
+  } finally {
+    client.release()
+  }
 }
 
 export type HistoryInput = {
