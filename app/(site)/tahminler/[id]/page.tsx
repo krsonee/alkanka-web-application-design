@@ -1,9 +1,9 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { LeagueView, leagueMatches, leagueMember } from '@/components/alkanka/predictions/league-view'
-import { recordPath } from '@/lib/record-links'
+import { LEAGUE_HOME, recordPath } from '@/lib/record-links'
 import { OG_BASE, shareImage } from '@/lib/seo'
 
 export const dynamic = 'force-dynamic'
@@ -36,7 +36,10 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 }
 
 export default async function PredictionMatchPage({ params }: { params: Promise<{ id: string }> }) {
-  const m = await find((await params).id)
+  const { id } = await params
+  // `/tahminler/lig` with no league after it is the league list itself.
+  if (id === 'lig') redirect(LEAGUE_HOME)
+  const m = await find(id)
   if (!m) notFound()
 
   return (

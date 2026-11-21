@@ -5,15 +5,21 @@ import Link from 'next/link'
 import { Check, Coins, Loader2, Lock, Palette, Target } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatAC, usePoints } from '@/components/alkanka/points-context'
+import { useAddressChoice } from '@/components/alkanka/use-address-choice'
 import { ThemeSwatch, useThemeState } from '@/components/alkanka/arena/table-theme'
 import { TABLE_THEMES, THEME_CATEGORIES, THEME_RARITY, type ThemeCategory } from '@/lib/table-themes'
 
-const SHOP_CATS = (Object.keys(THEME_CATEGORIES) as ThemeCategory[]).filter((c) => c !== 'std')
+type ShopCategory = Exclude<ThemeCategory, 'std'>
+
+const SHOP_CATS = (Object.keys(THEME_CATEGORIES) as ThemeCategory[]).filter((c): c is ShopCategory => c !== 'std')
+
+/** What the theme categories are called in the page's address. */
+const CATEGORY_WORD: Record<ShopCategory, string> = { fan: 'taraftar', hero: 'kahraman', car: 'araba', nat: 'doga' }
 
 export function ThemeShop() {
   const { state, loaded, owned, buy } = useThemeState()
   const { points, setBalance, requireLogin } = usePoints()
-  const [cat, setCat] = useState<ThemeCategory>('fan')
+  const [cat, setCat] = useAddressChoice('tema', CATEGORY_WORD, 'fan')
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ id: string; text: string; ok: boolean } | null>(null)
 

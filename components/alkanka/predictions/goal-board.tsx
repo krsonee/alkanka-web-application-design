@@ -3,6 +3,7 @@
 import { useEffect, useId, useState } from 'react'
 import { Check } from 'lucide-react'
 import { pickGoalSideAction } from '@/app/actions/community'
+import { useAddressChoice } from '@/components/alkanka/use-address-choice'
 import {
   GOAL_APPROVAL_LABEL,
   GOAL_CATEGORIES,
@@ -21,6 +22,9 @@ import { StatusLine, useAction } from '../community/use-action'
 
 const when = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })
 const fmt = (n: number) => n.toLocaleString('tr-TR')
+
+/** What the two event kinds are called in the page's address. */
+const CATEGORY_WORD: Record<GoalCategory, string> = { alkanka: 'alkanka', sponsor: 'sponsor' }
 
 function Crest({ name, src }: { name: string; src: string | null }) {
   if (!src) return <TeamLogo name={name} className="size-7 border-0" />
@@ -219,9 +223,9 @@ export function GoalBoard({
 
   const has = (c: GoalCategory) => events.some((e) => e.category === c)
   const shown = GOAL_CATEGORIES.filter((c) => has(c.id) || (c.id === 'sponsor' && sponsorNote))
-  const [chosen, setChosen] = useState<GoalCategory | null>(null)
+  const [chosen, setChosen] = useAddressChoice('etkinlik', CATEGORY_WORD, 'alkanka')
   if (shown.length === 0) return null
-  const category = chosen && shown.some((c) => c.id === chosen) ? chosen : shown[0].id
+  const category = shown.some((c) => c.id === chosen) ? chosen : shown[0].id
   const list = events.filter((e) => e.category === category)
 
   return (

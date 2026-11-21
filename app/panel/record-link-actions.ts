@@ -10,7 +10,7 @@ import { recordShortLink } from '@/lib/record-short'
 type Result = { ok: true; url: string; created: boolean } | { ok: false; error: string }
 
 /** Whoever manages the record can give it a short link; so can whoever manages the links. */
-const MODULE: Record<RecordKind, PanelModule> = { turnuva: 'tournaments', tahmin: 'community', market: 'market', kampanya: 'catalog' }
+const MODULE: Record<RecordKind, PanelModule> = { turnuva: 'tournaments', tahmin: 'community', lig: 'community', market: 'market', kampanya: 'catalog' }
 
 export async function makeRecordShortLink(kind: string, id: string, name: string): Promise<Result> {
   if (!isRecordKind(kind)) return { ok: false, error: 'Bu kayıt türü için kısa link üretilemiyor.' }

@@ -4,7 +4,8 @@ import { useEffect, useId, useState } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import type { LeagueMatch, LeagueRow, LeagueScope, PaidPeriod } from '@/lib/predictions'
 import { SPORTS, SPORT_IDS, sportOf, type Award, type PeriodKind, type Sport } from '@/lib/predictions-shared'
-import { LEAGUE_TAB_PARAM } from '@/lib/record-links'
+import { plainClick } from '@/lib/plain-click'
+import { LEAGUE_HOME, LEAGUE_SPORT_ADDRESS, LEAGUE_SPORT_PARAM, LEAGUE_TAB_PARAM, LEAGUE_TABLE_ADDRESS, LEAGUE_TABLE_PARAM, leaguePath } from '@/lib/record-links'
 import { cn } from '@/lib/utils'
 import { MatchRow, matchState, type MatchState } from './match-row'
 import { MyAwards } from './my-awards'
@@ -20,6 +21,8 @@ const TABS: { id: MatchState; label: string; short: string; empty: string }[] = 
   { id: 'waiting', label: 'Sonuç bekleyen', short: 'Bekleyen', empty: 'Sonucu beklenen maç yok.' },
   { id: 'done', label: 'Sonuçlanan', short: 'Biten', empty: 'Son 7 günde sonuçlanan maç yok.' },
 ]
+
+const GENERAL_LEAGUE_NAME = 'Genel lig'
 
 const DAY_MS = 86_400_000
 const dayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul' })
@@ -56,6 +59,11 @@ function byDay(list: LeagueMatch[], now: number) {
   return days
 }
 
+function setParam(url: URL, name: string, value: string | null) {
+  if (value) url.searchParams.set(name, value)
+  else url.searchParams.delete(name)
+}
+
 function HowTo() {
   const [open, setOpen] = useState(false)
   const id = useId()
@@ -80,7 +88,7 @@ function HowTo() {
           <li>Basketbolda uzatmalar skora dahildir. Voleybol ve teniste set skoru, e-sporda harita skoru sorulur; bu maçlarda beraberlik olmaz.</li>
           <li>Verisi alınamayan bir soru iptal edilir; puanlanmaz ve bonusu etkilemez.</li>
           <li>Puanların haftalık ve aylık lig tablosuna yazılır. Eşitlikte tam skoru daha çok bilen öne geçer.</li>
-          <li>Kartında özel lig adı yazan maçın puanı o ligin kendi tablosuna yazılır; tablo &quot;Lig tablosu&quot; altında ayrı sekmededir.</li>
+          <li>Kartında özel lig adı yazan maçın puanı o ligin kendi tablosuna yazılır. Her özel ligin kendi sayfası vardır: ligin adına bastığında maçları ve tablosu birlikte açılır.</li>
         </ul>
       )}
     </div>
@@ -98,6 +106,9 @@ export function League({
   serverNow,
   focus,
   start,
+  league: leagueStart,
+  table: tableStart,
+  sport: sportStart,
 }: {
   matches: LeagueMatch[]
   tables: Record<LeagueScope, LeagueRow[]>
@@ -111,6 +122,11 @@ export function League({
   /** The match of a shared /tahminler/[id] address: its tab is shown and its row starts open. */
   focus?: number
   start?: LeagueStart
+  /** The league of a shared /tahminler/lig/... address; 0 stands for the general league. */
+  league?: number | null
+  /** The table period and the sport a shared address asked for. */
+  table?: LeagueScope
+  sport?: Sport
 }) {
   const now = useNow(serverNow, 30_000)
   const [chosen, setChosen] = useState<MatchState | null>(() => {
@@ -119,33 +135,72 @@ export function League({
     return start && start !== 'league' ? start : null
   })
   const [view, setView] = useState<'matches' | 'league'>(focus == null && start === 'league' ? 'league' : 'matches')
-  // On a match's own page the address already says what is shown.
-  const remember = (tab: LeagueStart) => {
-    if (focus != null) return
-    const url = new URL(window.location.href)
-    url.searchParams.set(LEAGUE_TAB_PARAM, TAB_ADDRESS[tab])
-    window.history.replaceState(null, '', url)
-  }
   const [mineOnly, setMineOnly] = useState(false)
-  const [onlySport, setOnlySport] = useState<Sport | null>(null)
+  const [onlySport, setOnlySport] = useState<Sport | null>(sportStart ?? null)
   // 0 stands for the general league.
-  const [onlyLeague, setOnlyLeague] = useState<number | null>(null)
+  const [league, setLeague] = useState<number | null>(leagueStart ?? null)
+  const [scope, setScope] = useState<LeagueScope>(tableStart ?? 'week')
   const [saved, setSaved] = useState(false)
 
-  const groups: Record<MatchState, LeagueMatch[]> = { open: [], waiting: [], done: [] }
-  for (const m of matches) groups[matchState(m, now)].push(m)
-  groups.open.sort((a, b) => a.kickoff.localeCompare(b.kickoff))
-  groups.waiting.sort((a, b) => a.kickoff.localeCompare(b.kickoff))
-  groups.done.sort((a, b) => b.kickoff.localeCompare(a.kickoff))
+  const allGroups: Record<MatchState, LeagueMatch[]> = { open: [], waiting: [], done: [] }
+  for (const m of matches) allGroups[matchState(m, now)].push(m)
+  allGroups.open.sort((a, b) => a.kickoff.localeCompare(b.kickoff))
+  allGroups.waiting.sort((a, b) => a.kickoff.localeCompare(b.kickoff))
+  allGroups.done.sort((a, b) => b.kickoff.localeCompare(a.kickoff))
 
+  // With a league chosen, the tabs, their counts and the filters below all speak of that league alone.
+  const inLeague = (m: LeagueMatch) => league === null || (m.boardId ?? 0) === league
+  const groups: Record<MatchState, LeagueMatch[]> = { open: allGroups.open.filter(inLeague), waiting: allGroups.waiting.filter(inLeague), done: allGroups.done.filter(inLeague) }
   const tab = chosen ?? (groups.open.length ? 'open' : groups.waiting.length ? 'waiting' : 'done')
+
+  const leagueNames = new Map<number, string>([[0, GENERAL_LEAGUE_NAME]])
+  for (const b of boards) leagueNames.set(b.id, b.name)
+  for (const m of matches) if (m.boardId && m.boardName) leagueNames.set(m.boardId, m.boardName)
+  const leagueHref = (id: number | null) => (id === null ? LEAGUE_HOME : leaguePath(id, leagueNames.get(id)))
+
+  // On a match's own page the address already says what is shown.
+  const address = (change: (url: URL) => void) => {
+    if (focus != null) return
+    const url = new URL(window.location.href)
+    change(url)
+    window.history.replaceState(null, '', url)
+  }
+  const remember = (next: LeagueStart) => address((url) => url.searchParams.set(LEAGUE_TAB_PARAM, TAB_ADDRESS[next]))
+  // Choosing a league keeps the tab the visitor is looking at, even when that league has nothing in it.
+  const pickLeague = (id: number | null) => {
+    setChosen(tab)
+    setLeague(id)
+    address((url) => {
+      url.pathname = leagueHref(id)
+    })
+  }
+  const pickSport = (next: Sport | null) => {
+    setOnlySport(next)
+    address((url) => setParam(url, LEAGUE_SPORT_PARAM, next ? LEAGUE_SPORT_ADDRESS[next] : null))
+  }
+  // The weekly, monthly and all-time tables belong to the general league: asking for one leaves a special league's page.
+  const pickScope = (next: LeagueScope) => {
+    const leaving = league !== null && league > 0
+    setScope(next)
+    if (leaving) {
+      setChosen(tab)
+      setLeague(null)
+    }
+    address((url) => {
+      setParam(url, LEAGUE_TABLE_PARAM, next === 'week' ? null : LEAGUE_TABLE_ADDRESS[next])
+      if (leaving) url.pathname = LEAGUE_HOME
+    })
+  }
+
   const canFilter = tab !== 'open' && groups[tab].some((m) => m.myPick) && groups[tab].some((m) => !m.myPick)
   // The sport filter only appears where there is something to tell apart, and lets go of a sport the tab no longer has.
   const sportsHere = SPORT_IDS.filter((s) => groups[tab].some((m) => sportOf(m.set) === s))
   const sport = onlySport && sportsHere.length > 1 && sportsHere.includes(onlySport) ? onlySport : null
-  const leaguesHere = [...new Map(groups[tab].map((m) => [m.boardId ?? 0, m.boardName ?? 'Genel lig'])).entries()].sort((a, b) => a[0] - b[0])
-  const league = onlyLeague !== null && leaguesHere.length > 1 && leaguesHere.some(([id]) => id === onlyLeague) ? onlyLeague : null
-  const list = groups[tab].filter((m) => (!canFilter || !mineOnly || m.myPick) && (!sport || sportOf(m.set) === sport) && (league === null || (m.boardId ?? 0) === league))
+  // The leagues with a match in this tab, and the chosen one even when it has none here: its button is the way back out.
+  const leaguesHere = [...new Set(allGroups[tab].map((m) => m.boardId ?? 0))]
+  if (league !== null && !leaguesHere.includes(league)) leaguesHere.push(league)
+  leaguesHere.sort((a, b) => a - b)
+  const list = groups[tab].filter((m) => (!canFilter || !mineOnly || m.myPick) && (!sport || sportOf(m.set) === sport))
   const filtered = list.length < groups[tab].length
 
   const week = tables.week
@@ -170,9 +225,9 @@ export function League({
                 ' topladın'
               )}
               .{' '}
-              {groups.open.length > 0 ? (
+              {allGroups.open.length > 0 ? (
                 <>
-                  <b className="text-foreground">{groups.open.length} maç</b> tahminini bekliyor.
+                  <b className="text-foreground">{allGroups.open.length} maç</b> tahminini bekliyor.
                 </>
               ) : stillOpen ? (
                 'Açık maçların hepsini tahmin ettin.'
@@ -182,9 +237,9 @@ export function League({
             </>
           ) : (
             <>
-              {groups.open.length > 0 ? (
+              {allGroups.open.length > 0 ? (
                 <>
-                  <b className="text-foreground">{groups.open.length} maç</b> tahmine açık.{' '}
+                  <b className="text-foreground">{allGroups.open.length} maç</b> tahmine açık.{' '}
                 </>
               ) : null}
               Soruları cevapla, her doğru cevapla puan ve ödül kazan. Tahminlerin lig tablosuna yazılır.
@@ -268,7 +323,7 @@ export function League({
                   key={s ?? 'hepsi'}
                   type="button"
                   aria-pressed={sport === s}
-                  onClick={() => setOnlySport(s)}
+                  onClick={() => pickSport(s)}
                   className={cn(
                     'flex min-h-9 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
                     sport === s ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:text-foreground',
@@ -281,24 +336,28 @@ export function League({
             </div>
           )}
 
-          {leaguesHere.length > 1 && (
-            <div role="group" aria-label="Lig" className="flex flex-wrap gap-1.5">
-              {[[null, 'Bütün ligler'] as const, ...leaguesHere].map(([id, name]) => (
-                <button
+          {(leaguesHere.length > 1 || league !== null) && (
+            <nav aria-label="Ligler" className="flex flex-wrap gap-1.5">
+              {[null, ...leaguesHere].map((id) => (
+                <a
                   key={id ?? 'hepsi'}
-                  type="button"
-                  aria-pressed={league === id}
-                  onClick={() => setOnlyLeague(id)}
+                  href={leagueHref(id)}
+                  aria-current={league === id ? 'page' : undefined}
+                  onClick={(e) => {
+                    if (!plainClick(e)) return
+                    e.preventDefault()
+                    pickLeague(id)
+                  }}
                   className={cn(
                     'flex min-h-9 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
                     league === id ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:text-foreground',
                   )}
                 >
-                  {name}
-                  <span className="tabular-nums opacity-80">{id === null ? groups[tab].length : groups[tab].filter((m) => (m.boardId ?? 0) === id).length}</span>
-                </button>
+                  {id === null ? 'Bütün ligler' : (leagueNames.get(id) ?? 'Özel lig')}
+                  <span className="tabular-nums opacity-80">{id === null ? allGroups[tab].length : allGroups[tab].filter((m) => (m.boardId ?? 0) === id).length}</span>
+                </a>
               ))}
-            </div>
+            </nav>
           )}
 
           {saved && (
@@ -309,7 +368,7 @@ export function League({
 
           {list.length === 0 ? (
             <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm leading-relaxed text-muted-foreground">
-              {filtered ? 'Bu süzgeçle eşleşen maç yok.' : TABS.find((t) => t.id === tab)?.empty}
+              {filtered ? 'Bu süzgeçle eşleşen maç yok.' : league !== null ? `${leagueNames.get(league) ?? 'Bu lig'} için bu sekmede maç yok. Diğer sekmelere ya da "Bütün ligler"e bakabilirsin.` : TABS.find((t) => t.id === tab)?.empty}
             </p>
           ) : (
             byDay(list, now).map((day) => (
@@ -329,7 +388,17 @@ export function League({
 
         <aside className={cn('min-w-0 flex-col gap-4 @4xl:sticky @4xl:top-20', view === 'league' ? 'flex' : 'hidden @4xl:flex')}>
           <MyAwards awards={awards} />
-          <Standings tables={tables} periods={periods} paid={paid} boards={boards} meId={meId} />
+          <Standings
+            tables={tables}
+            periods={periods}
+            paid={paid}
+            boards={boards}
+            meId={meId}
+            scope={scope}
+            onScope={pickScope}
+            boardId={league !== null && league > 0 ? league : null}
+            onBoard={pickLeague}
+          />
         </aside>
       </div>
     </div>

@@ -6,6 +6,7 @@ import { closeLeagueBoard, removeLeagueBoard, saveLeagueBoard } from '@/app/pane
 import { MAX_BOARD_NAME, MAX_LEAGUE_PLACES, prizeText, type Board, type Prize } from '@/lib/predictions-shared'
 import { askConfirm } from '@/components/panel/confirm-dialog'
 import { usePanelAction } from '@/components/panel/flash'
+import { RecordLink } from '@/components/panel/record-link'
 import { StatusLine } from '@/components/alkanka/community/use-action'
 import { cn } from '@/lib/utils'
 import { PrizeField, prizeProblem, type PrizeOptions } from './league-fields'
@@ -143,6 +144,7 @@ function BoardRow({ b, options, onChanged }: { b: Board; options: PrizeOptions; 
           <span className="text-xs leading-relaxed text-muted-foreground">
             Ödüller: {b.places.length ? <span className="text-foreground">{b.places.map((p, i) => `${i + 1}. ${prizeText(p)}`).join(' · ')}</span> : 'yok'}
           </span>
+          <RecordLink kind="lig" id={b.id} name={b.name} className="pt-1.5" />
         </div>
         {b.open && (
           <div className="flex flex-wrap items-center gap-2">
