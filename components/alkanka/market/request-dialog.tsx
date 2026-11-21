@@ -5,6 +5,7 @@ import { Check, Coins, X } from 'lucide-react'
 import { requestMarketItem } from '@/app/actions/market'
 import type { MarketProduct } from '@/lib/market'
 import { rewardText } from '@/lib/market-shared'
+import { useEscape } from '@/lib/use-escape'
 import { formatAC } from '../points-context'
 
 export type RequestResult = Awaited<ReturnType<typeof requestMarketItem>>
@@ -24,6 +25,7 @@ export function RequestDialog({
 }) {
   const [username, setUsername] = useState('')
   const [pending, startTransition] = useTransition()
+  useEscape(true, onClose)
   const short = item.price - points
   const auto = item.deliveryMode === 'auto' && item.reward
 

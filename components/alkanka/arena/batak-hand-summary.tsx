@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils"
 import { SUIT_SYMBOLS, teamOf, ZERO_BONUS, type BatakResult, type BatakView } from "@/lib/games/batak"
 import { suitColor } from "./batak-card"
+import { useEscape } from "@/lib/use-escape"
 
 export function HandSummary({
   result,
@@ -23,6 +24,7 @@ export function HandSummary({
   teamLabel: (seat: number) => string
   onClose: () => void
 }) {
+  useEscape(true, onClose)
   const isTeam = variant === 'esli'
   const kozMaca = variant === 'koz-maca'
   const totals = result.totals ?? []

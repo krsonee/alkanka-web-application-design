@@ -6,6 +6,7 @@ import useSWR, { useSWRConfig } from 'swr'
 import { ArrowLeft, Check, Clock, Coins, Eye, Flag, Loader2, LogOut, Plus, Swords, Trophy, Users, X } from 'lucide-react'
 import { ARENA_META, BOT_DAILY_PROFIT_CAP, TURN_SECONDS, botFillSeconds, isFullPotGame, tablePot, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
 import { TableChat } from './table-chat'
+import { useEscape } from '@/lib/use-escape'
 import { MobileTableChat } from './mobile-table-chat'
 import { VoiceChat } from './voice-chat'
 import { FitToScreen } from './fit-to-screen'
@@ -2048,6 +2049,7 @@ function LeaveTableButton({
       setError(null)
     }
   }
+  useEscape(confirming && !busy, () => setConfirming(false))
 
   const btnClass = cn(
     'flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors',

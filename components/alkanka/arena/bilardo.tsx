@@ -1963,6 +1963,9 @@ function SpinPad({ value, onChange }: { value: SpinInput; onChange: (v: SpinInpu
         role="slider"
         tabIndex={0}
         aria-label="Falso noktası"
+        aria-valuemin={0}
+        aria-valuemax={80}
+        aria-valuenow={Math.round(Math.hypot(value.x, value.y) * 100)}
         aria-valuetext={spinLabel(value)}
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId)

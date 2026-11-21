@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Trophy, X } from 'lucide-react'
 import { buzz } from '@/lib/sound'
+import { useEscape } from '@/lib/use-escape'
 import { cn } from '@/lib/utils'
 import {
   analyzeMeld,
@@ -68,6 +69,7 @@ export function Okey101Pvp({ remote }: { remote: Remote<Okey101View> }) {
   const rack = useRack(hand, okey, 2, `${s.handNo}:${hand.length > 0}`)
   const [localError, setLocalError] = useState<string | null>(null)
   const [scoresOpen, setScoresOpen] = useState(false)
+  useEscape(scoresOpen, () => setScoresOpen(false))
 
   const autoLayout = (mode: 'seri' | 'cift') => {
     const groups = mode === 'seri' ? bestPartition(hand, okey).groups : findPairs(hand, okey)
