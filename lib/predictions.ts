@@ -22,6 +22,7 @@ import {
   resultError,
   resultNeeds,
   sportOf,
+  startingSet,
   voidedBy,
   type Answers,
   type LeagueSettings,
@@ -67,12 +68,13 @@ export async function getLeagueSettings(): Promise<LeagueSettings> {
   return normalizeSettings(await getContent<Partial<LeagueSettings>>(LEAGUE_SETTINGS_KEY).catch(() => null))
 }
 
-export async function saveLeagueDefaults(input: unknown) {
+/** Saves the questions new matches of one sport open with. */
+export async function saveLeagueDefaults(input: unknown, sportInput: unknown = 'football') {
   const current = await getLeagueSettings()
-  // The saved defaults are the football ones; every other sport starts from its own built-in set.
-  const defaults = normalizeSet({ ...(input && typeof input === 'object' ? input : {}), sport: 'football' })
-  await checkSetPrize(defaults)
-  await setContent(LEAGUE_SETTINGS_KEY, { ...current, defaults })
+  const sport = parseSport(sportInput)
+  const set = normalizeSet({ ...(input && typeof input === 'object' ? input : {}), sport })
+  await checkSetPrize(set)
+  await setContent(LEAGUE_SETTINGS_KEY, sport === 'football' ? { ...current, defaults: set } : { ...current, sportDefaults: { ...current.sportDefaults, [sport]: set } })
 }
 
 export async function setLeagueAuto(on: boolean) {
@@ -352,9 +354,7 @@ export async function addLeagueMatch(input: { league: string; home: string; away
   // The sport chosen in the form wins over whatever the question set carries.
   const set = input.set
     ? normalizeSet({ ...(typeof input.set === 'object' ? input.set : {}), sport, bestOf: input.bestOf })
-    : sport === 'football'
-      ? (await getLeagueSettings()).defaults
-      : defaultSet(sport, input.bestOf)
+    : startingSet(await getLeagueSettings(), sport, input.bestOf)
   await checkSetPrize(set)
   await rows(sql`INSERT INTO league_matches (league, home, away, kickoff, closes_at, markets)
     VALUES (${input.league.trim().slice(0, 80) || SPORTS[sport].label}, ${input.home.trim().slice(0, 80)}, ${input.away.trim().slice(0, 80)}, ${when.toISOString()}, ${closes}, ${JSON.stringify(set)}::jsonb)`)
@@ -370,14 +370,14 @@ export async function updateLeagueMarkets(id: number, input: unknown) {
   if (!r.length) throw new Error('Bu maça tahmin yapılmış ya da maç sonuçlanmış; soruları artık değiştirilemez.')
 }
 
-export type FixtureInput = { extId: number; league: string; home: string; away: string; homeLogo: string; awayLogo: string; kickoff: string; sport?: string }
+export type FixtureInput = { extId: number; league: string; home: string; away: string; homeLogo: string; awayLogo: string; kickoff: string; sport?: string; set?: unknown }
 
 const safeLogo = (url: string) => (/^https:\/\/imagecache\.365scores\.com\//.test(url) ? url : null)
 
-/** Publishes fixtures picked from the calendar with the default questions; already-published games are skipped. */
+/** Publishes fixtures picked from the calendar, each with its own questions or its sport's template; already-published games are skipped. */
 export async function importLeagueFixtures(list: FixtureInput[]) {
   await ensureLeague()
-  const football = JSON.stringify((await getLeagueSettings()).defaults)
+  const settings = await getLeagueSettings()
   let added = 0
   for (const f of list.slice(0, 60)) {
     const when = new Date(f.kickoff)
@@ -385,7 +385,9 @@ export async function importLeagueFixtures(list: FixtureInput[]) {
     const sport = parseSport(f.sport)
     // Only sports the feed carries can be published from it: their results are read back by the same id.
     if (!SPORTS[sport].feed) continue
-    const set = sport === 'football' ? football : JSON.stringify(defaultSet(sport))
+    const own = f.set && typeof f.set === 'object' ? normalizeSet({ ...f.set, sport }) : null
+    if (own) await checkSetPrize(own)
+    const set = JSON.stringify(own ?? startingSet(settings, sport))
     const r = await rows(sql`INSERT INTO league_matches (league, home, away, kickoff, home_logo, away_logo, ext_id, markets)
       VALUES (${f.league.slice(0, 80)}, ${f.home.slice(0, 80)}, ${f.away.slice(0, 80)}, ${when.toISOString()},
         ${safeLogo(f.homeLogo)}, ${safeLogo(f.awayLogo)}, ${f.extId}, ${set}::jsonb)

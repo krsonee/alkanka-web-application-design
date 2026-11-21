@@ -135,8 +135,9 @@ export async function saveGoalEvent(input: unknown): Promise<GoalEvent> {
   const e = checked.value
   let siteName: string | null = null
   if (e.category === 'sponsor') {
-    const { siteOptions } = await import('@/lib/sites')
-    const site = (await siteOptions()).find((s) => String(s.id) === String(e.siteId))
+    // The event keeps the sponsor's numeric id; `siteOptions` hands out slugs, which never match it.
+    const { listSites } = await import('@/lib/sites')
+    const site = (await listSites()).find((s) => Number(s.id) === e.siteId)
     if (!site) throw new Error('Seçilen sponsor bulunamadı.')
     siteName = site.name
   }

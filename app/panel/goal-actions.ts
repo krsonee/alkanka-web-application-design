@@ -47,10 +47,13 @@ export type GoalAdminData = { events: GoalEventView[]; sites: { id: string; name
 export async function loadGoalAdmin(): Promise<{ ok: true; data: GoalAdminData } | { ok: false; error: string }> {
   if (!(await allowed())) return { ok: false, error: EXPIRED }
   try {
-    const [{ siteOptions }, { getLeagueBook }] = await Promise.all([import('@/lib/sites'), import('@/lib/prediction-book')])
+    const [{ listSites }, { getLeagueBook }] = await Promise.all([import('@/lib/sites'), import('@/lib/prediction-book')])
     const [events, sites, pins] = await Promise.all([
       goalBoard(null, { admin: true }),
-      siteOptions().catch(() => []),
+      listSites().then(
+        (all) => all.filter((s) => s.active),
+        () => [],
+      ),
       getLeagueBook().then(
         (book) => book.pins.filter((p) => p.sport === 'football'),
         () => [],

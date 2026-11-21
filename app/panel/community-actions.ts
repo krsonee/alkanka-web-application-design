@@ -209,8 +209,9 @@ export async function removeBookTeam(game: string, name: string) {
 export async function publishFixtures(list: FixtureInput[]) {
   return guard(async () => {
     const added = await importLeagueFixtures(list)
-    if (added) await logPanel('community', 'Fikstür maçları yayınlandı', null, `${added} maç`)
-    return added ? `${added} maç varsayılan sorularla sitede yayınlandı.` : 'Seçilen maçlar zaten yayında veya başlamış.'
+    const own = (Array.isArray(list) ? list : []).filter((f) => f.set).length
+    if (added) await logPanel('community', 'Fikstür maçları yayınlandı', null, `${added} maç${own ? ` · ${own} maça özel soru seçildi` : ''}`)
+    return added ? `${added} maç sitede yayınlandı.` : 'Seçilen maçlar zaten yayında veya başlamış.'
   })
 }
 
@@ -314,11 +315,12 @@ export async function loadLeagueSetup(): Promise<{ ok: true; data: LeagueSetup }
   }
 }
 
-export async function saveLeagueDefaultSet(set: QuestionSet) {
+export async function saveLeagueDefaultSet(set: QuestionSet, sportInput: string = 'football') {
   return guard(async () => {
-    await saveLeagueDefaults(set)
-    await logPanel('community', 'Varsayılan tahmin soruları değişti', null, questionNames(normalizeSet(set)))
-    return 'Varsayılan sorular kaydedildi. Bundan sonra eklenen maçlar bu sorularla açılır.'
+    const sport = parseSport(sportInput)
+    await saveLeagueDefaults(set, sport)
+    await logPanel('community', 'Varsayılan tahmin soruları değişti', SPORTS[sport].label, questionNames(normalizeSet({ ...set, sport })))
+    return `${SPORTS[sport].label} şablonu kaydedildi. Bundan sonra eklenen ${SPORTS[sport].label.toLocaleLowerCase('tr')} maçları bu sorularla açılır.`
   })
 }
 

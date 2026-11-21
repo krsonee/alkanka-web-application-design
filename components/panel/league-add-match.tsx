@@ -6,7 +6,7 @@ import { ChevronDown, Star, X } from 'lucide-react'
 import { createLeagueMatch, loadLeagueTeams, removeBookTeam } from '@/app/panel/community-actions'
 import type { FeedLeague } from '@/lib/kankatv'
 import { gameKey, type LeagueBook } from '@/lib/prediction-book-shared'
-import { ESPORT_GAMES, SPORTS, SPORT_IDS, defaultSet, type QuestionSet, type Sport } from '@/lib/predictions-shared'
+import { ESPORT_GAMES, SPORTS, SPORT_IDS, startingSet, type LeagueSettings, type QuestionSet, type Sport } from '@/lib/predictions-shared'
 import { usePanelAction } from '@/components/panel/flash'
 import { StatusLine } from '@/components/alkanka/community/use-action'
 import { cn } from '@/lib/utils'
@@ -33,14 +33,14 @@ const START_LEAGUE: Record<Sport, string> = { football: 'Süper Lig', basketball
  * Adds a match by hand. The sport decides everything below it: where the league and the teams come from
  * (the feed's directory, or the saved e-sport list), how long the match runs and which questions it can ask.
  */
-export function AddMatchForm({ defaults, options, book, onBookChanged }: { defaults: QuestionSet; options: PrizeOptions; book: LeagueBook; onBookChanged: () => void }) {
+export function AddMatchForm({ settings, options, book, onBookChanged }: { settings: LeagueSettings; options: PrizeOptions; book: LeagueBook; onBookChanged: () => void }) {
   const { pending, status, run } = usePanelAction('Maç eklendi.')
   const forget = usePanelAction()
   const listId = useId()
   const [sport, setSport] = useState<Sport>('football')
   const [form, setForm] = useState({ league: START_LEAGUE.football, home: '', away: '', kickoff: '', closesAt: '' })
   const [custom, setCustom] = useState(false)
-  const [draft, setDraft] = useState<QuestionSet>(defaults)
+  const [draft, setDraft] = useState<QuestionSet>(settings.defaults)
   const [source, setSource] = useState<FeedLeague | null>(null)
   const [browsing, setBrowsing] = useState(false)
   const [otherGame, setOtherGame] = useState(false)
@@ -48,7 +48,7 @@ export function AddMatchForm({ defaults, options, book, onBookChanged }: { defau
 
   const info = SPORTS[sport]
   const esport = sport === 'esports'
-  const standard = (s: Sport, length?: number) => (s === 'football' ? defaults : defaultSet(s, length))
+  const standard = (s: Sport, length?: number) => startingSet(settings, s, length)
   const usual = standard(sport, draft.bestOf)
   const pins = book.pins.filter((p) => p.sport === sport)
   const games = [...new Set<string>([...ESPORT_GAMES, ...Object.keys(book.teams)])]

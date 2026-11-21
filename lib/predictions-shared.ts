@@ -12,6 +12,8 @@ export const MARKET_IDS = [
   'mapScore',
   'goals',
   'points',
+  'margin',
+  'parity',
   'sets',
   'maps',
   'btts',
@@ -92,6 +94,8 @@ export const MARKETS: Record<MarketId, { label: string; short: string; ask: stri
   mapScore: { label: 'Harita skoru', short: 'Harita', ask: 'Seri haritalarda kaç kaç biter?', series: true },
   goals: { label: 'Toplam gol', short: 'Gol', ask: 'Toplam gol sayısı', line: { def: 2.5, min: 0.5, max: 6.5 } },
   points: { label: 'Toplam sayı', short: 'Sayı', ask: 'İki takımın toplam sayısı', line: { def: 160.5, min: 100.5, max: 300.5 } },
+  margin: { label: 'Sayı farkı', short: 'Fark', ask: 'Kazanan kaç sayı farkla kazanır?', line: { def: 9.5, min: 0.5, max: 40.5 } },
+  parity: { label: 'Tek / çift', short: 'Tek/çift', ask: 'İki takımın toplam sayısı tek mi, çift mi?' },
   sets: { label: 'Toplam set', short: 'Set sayısı', ask: 'Maç toplam kaç set sürer?', line: { def: 3.5, min: 2.5, max: 4.5 } },
   maps: { label: 'Toplam harita', short: 'Harita sayısı', ask: 'Seri toplam kaç harita sürer?', line: { def: 2.5, min: 2.5, max: 6.5 } },
   btts: { label: 'Karşılıklı gol', short: 'KG', ask: 'İki takım da gol atar mı?' },
@@ -121,7 +125,7 @@ export type SportInfo = {
 
 export const SPORTS: Record<Sport, SportInfo> = {
   football: { label: 'Futbol', markets: ['side', 'score', 'goals', 'btts', 'half', 'corners', 'cards'], maxScore: 20, draw: true, bestOf: [], scoreLabel: 'Maç skoru (90 dk)', unit: 'gol', feed: true },
-  basketball: { label: 'Basketbol', markets: ['winner', 'points', 'half'], maxScore: 250, draw: false, bestOf: [], scoreLabel: 'Maç skoru (uzatma dahil)', unit: 'sayı', feed: true },
+  basketball: { label: 'Basketbol', markets: ['winner', 'points', 'margin', 'parity', 'half'], maxScore: 250, draw: false, bestOf: [], scoreLabel: 'Maç skoru (uzatma dahil)', unit: 'sayı', feed: true },
   volleyball: { label: 'Voleybol', markets: ['winner', 'setScore', 'sets', 'firstSet'], maxScore: 3, draw: false, bestOf: [5], scoreLabel: 'Set skoru', unit: 'set', feed: true },
   tennis: { label: 'Tenis', markets: ['winner', 'setScore', 'sets', 'firstSet'], maxScore: 3, draw: false, bestOf: [3, 5], scoreLabel: 'Set skoru', unit: 'set', feed: true },
   esports: { label: 'E-spor', markets: ['winner', 'mapScore', 'maps', 'firstMap'], maxScore: 4, draw: false, bestOf: [3, 1, 5, 7], scoreLabel: 'Harita skoru', unit: 'harita', feed: false },
@@ -216,6 +220,8 @@ export const DEFAULT_RULES: Record<MarketId, MarketRule> = {
   mapScore: { pts: 3, coin: 'kc', amount: 150, nearPts: 0, nearAmount: 0 },
   goals: { pts: 1, coin: 'kc', amount: 40, line: 2.5 },
   points: { pts: 1, coin: 'kc', amount: 40, line: 160.5 },
+  margin: { pts: 2, coin: 'kc', amount: 60, line: 9.5 },
+  parity: { pts: 1, coin: 'kc', amount: 40 },
   sets: { pts: 1, coin: 'kc', amount: 40, line: 3.5 },
   maps: { pts: 1, coin: 'kc', amount: 40, line: 2.5 },
   btts: { pts: 1, coin: 'kc', amount: 40 },
@@ -311,6 +317,12 @@ export function marketOptions(id: MarketId, teams: Teams, rule: MarketRule | und
       { value: 'yok', label: 'Yok' },
     ]
   }
+  if (id === 'parity') {
+    return [
+      { value: 'tek', label: 'Tek' },
+      { value: 'cift', label: 'Çift' },
+    ]
+  }
   if (id === 'score') return []
   if (MARKETS[id].series) return seriesScores(rule?.bestOf ?? 3).map((value) => ({ value, label: value.replace('-', ' - ') }))
   const line = lineText(rule?.line ?? MARKETS[id].line!.def)
@@ -360,6 +372,10 @@ export function correctAnswer(id: MarketId, rule: MarketRule | undefined, r: Mat
     case 'sets':
     case 'maps':
       return overUnder(r.home + r.away, rule?.line ?? MARKETS[id].line!.def)
+    case 'margin':
+      return overUnder(Math.abs(r.home - r.away), rule?.line ?? MARKETS.margin.line!.def)
+    case 'parity':
+      return (r.home + r.away) % 2 === 0 ? 'cift' : 'tek'
     case 'firstSet':
     case 'firstMap':
       return r.first === '1' || r.first === '2' ? r.first : null
@@ -540,8 +556,10 @@ export type PeriodPrizes = {
 }
 
 export type LeagueSettings = {
-  /** The questions a new match gets unless it is given its own. */
+  /** The questions a new football match gets unless it is given its own. */
   defaults: QuestionSet
+  /** The saved starting questions of the other sports; a sport left out starts from its built-in pair. */
+  sportDefaults: Partial<Record<Sport, QuestionSet>>
   week: PeriodPrizes
   month: PeriodPrizes
   /** Score finished calendar matches without anyone pressing a button. */
@@ -557,10 +575,28 @@ function normalizePeriod(raw: unknown): PeriodPrizes {
   return { on: Boolean(p.on) && places.length > 0, since, places }
 }
 
+function normalizeSportDefaults(raw: unknown): LeagueSettings['sportDefaults'] {
+  const input = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const out: LeagueSettings['sportDefaults'] = {}
+  for (const sport of SPORT_IDS) {
+    const saved = input[sport]
+    if (sport !== 'football' && saved && typeof saved === 'object') out[sport] = normalizeSet({ ...saved, sport })
+  }
+  return out
+}
+
+/** The questions a new match of this sport opens with: the saved template, refitted to the match length. */
+export function startingSet(settings: Pick<LeagueSettings, 'defaults' | 'sportDefaults'>, sport: Sport, length?: number): QuestionSet {
+  if (sport === 'football') return settings.defaults
+  const saved = settings.sportDefaults[sport]
+  return saved ? normalizeSet({ ...saved, sport, bestOf: length ?? saved.bestOf }) : defaultSet(sport, length)
+}
+
 export function normalizeSettings(raw: unknown): LeagueSettings {
   const s = (raw && typeof raw === 'object' ? raw : {}) as Partial<LeagueSettings>
   return {
-    defaults: normalizeSet(s.defaults),
+    defaults: normalizeSet({ ...(s.defaults && typeof s.defaults === 'object' ? s.defaults : {}), sport: 'football' }),
+    sportDefaults: normalizeSportDefaults(s.sportDefaults),
     week: normalizePeriod(s.week),
     month: normalizePeriod(s.month),
     auto: Boolean(s.auto),
