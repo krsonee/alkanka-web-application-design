@@ -144,8 +144,10 @@ export async function attachReferral(userId: string, code: string) {
   if (!referrer || referrer === userId) return false
   const fresh = await rows(sql`SELECT 1 FROM public."user" WHERE id = ${userId} AND "createdAt" > now() - interval '48 hours'`)
   if (!fresh.length) return false
-  const { sameNetwork } = await import('@/lib/growth')
-  if (await sameNetwork(userId, referrer).catch(() => false)) return false
+  // Without a recorded network the same-network rule has nothing to compare, so the invite is not linked;
+  // a failed lookup throws and leaves it unlinked as well.
+  const { originKnown, sameNetwork } = await import('@/lib/growth')
+  if (!(await originKnown(userId)) || (await sameNetwork(userId, referrer))) return false
   const r = await rows(sql`INSERT INTO referrals (referred_id, referrer_id) VALUES (${userId}, ${referrer}) ON CONFLICT DO NOTHING RETURNING referred_id`)
   if (!r.length) return false
   const { getReferralSettings } = await import('@/lib/referral-settings')

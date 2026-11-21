@@ -331,7 +331,7 @@ function BlockedList({ stats }: { stats: TourStats }) {
               <div className="flex min-w-0 flex-col">
                 <span className="truncate text-sm font-semibold text-foreground">{b.name}</span>
                 <span className="text-xs text-muted-foreground">
-                  {b.reason} · {new Date(b.at).toLocaleString('tr-TR')}
+                  {b.reason} · {new Date(b.at).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' })}
                 </span>
               </div>
               <button

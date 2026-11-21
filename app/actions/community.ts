@@ -36,13 +36,19 @@ export async function linkReferralAction(): Promise<ActionResult> {
   if (!code && originDone) return { ok: true }
   const member = await getMember()
   if (!member) return { ok: true }
-  if (originDone !== member.id) {
+  // The cookie only saves a query on ordinary page loads, and the visitor can set it. With an invite code
+  // the network is recorded first whatever the cookie says, because the same-network rule reads that record.
+  if (code || originDone !== member.id) {
     const h = await headers()
     const ip = h.get('x-forwarded-for') ?? h.get('x-real-ip')
-    const isNew = await recordOrigin(member.id, store.get('alk_src')?.value ?? 'direkt', hashNetwork(ip)).catch((error) => {
+    let isNew: boolean
+    try {
+      isNew = await recordOrigin(member.id, store.get('alk_src')?.value ?? 'direkt', hashNetwork(ip))
+    } catch (error) {
+      // Nothing is marked as done and the invite code stays, so the next page load tries again.
       console.error('[growth] kaynak kaydedilemedi', error)
-      return false
-    })
+      return { ok: true }
+    }
     if (isNew) store.set('alk_new', '1', { maxAge: 60 * 10, path: '/', sameSite: 'lax', secure: true })
     store.set('alk_org', member.id, { maxAge: 60 * 60 * 24 * 365, path: '/', sameSite: 'lax', secure: true, httpOnly: true })
   }
@@ -119,16 +125,41 @@ export async function savePickAction(matchId: number, answers: Answers) {
   }, '/tahminler')
 }
 
-export async function pickGoalSideAction(matchId: number, side: string, siteUsername: string) {
+/** Sponsor events follow the rule of every sponsor page: the age question has to be answered first. */
+async function sponsorGate() {
+  const { getSponsorAccess } = await import('@/lib/sponsor-access')
+  if ((await getSponsorAccess()).state !== 'open') throw new Error('Sponsor etkinliğine katılmak için önce sponsorlar sayfasında 18 yaş onayını ver.')
+}
+
+/** Alkanka events: the member joins the match; a joining fee, when there is one, leaves the wallet with the entry. */
+export async function joinGoalMatchAction(matchId: number): Promise<ActionResult> {
+  const result = await run(async (m) => {
+    const { joinGoalMatch } = await import('@/lib/goal-rewards')
+    const { fee } = await joinGoalMatch(m, Number(matchId))
+    return fee > 0 ? `Maça katıldın, ${fee.toLocaleString('tr-TR')} KC katılım ücreti bakiyenden düştü.` : 'Maça katıldın. Şartı maç günü tamamlamayı unutma.'
+  }, '/tahminler')
+  if (!result.ok) return result
+  const member = await getMember()
+  return member ? { ...result, balance: await getBalance(member.id).catch(() => undefined) } : result
+}
+
+/** Sponsor events: the member hands in the coupon number of the bet placed at the sponsor. */
+export async function submitGoalCouponAction(matchId: number, coupon: string) {
   return run(async (m) => {
-    const { goalMatchCategory, pickGoalSide } = await import('@/lib/goal-rewards')
-    // Sponsor events follow the rule of every sponsor page: the age question has to be answered first.
-    if ((await goalMatchCategory(Number(matchId))) === 'sponsor') {
-      const { getSponsorAccess } = await import('@/lib/sponsor-access')
-      if ((await getSponsorAccess()).state !== 'open') throw new Error('Sponsor etkinliğine katılmak için önce sponsorlar sayfasında 18 yaş onayını ver.')
-    }
-    await pickGoalSide(m, Number(matchId), side, siteUsername)
-    return 'Seçimin kaydedildi.'
+    await sponsorGate()
+    const { submitGoalCoupon } = await import('@/lib/goal-rewards')
+    const outcome = await submitGoalCoupon(m, Number(matchId), coupon)
+    return outcome === 'updated' ? 'Kupon numaran güncellendi.' : 'Talebin alındı. Kuponun kontrol edilince sonucu burada görürsün.'
+  }, '/tahminler')
+}
+
+/** Links the member's account at a sponsor, from the event that asks for it. */
+export async function linkGoalAccountAction(siteSlug: string, username: string) {
+  return run(async (m) => {
+    await sponsorGate()
+    const { linkSponsorAccount } = await import('@/lib/growth')
+    await linkSponsorAccount(m.id, String(siteSlug), String(username))
+    return 'Hesabın bağlandı. Artık kupon numaranı girebilirsin.'
   }, '/tahminler')
 }
 

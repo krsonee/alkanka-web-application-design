@@ -42,11 +42,12 @@ const STEPS: Step[] = [
     body: (
       <ol className="flex list-decimal flex-col gap-1.5 pl-5">
         <li>
-          İçerik Takvimi → Tahminler → <b>Gol başı ödül</b> sekmesinde etkinlik aç ve gol başı ödülü yaz. Üye bir takım seçer; maç sonuçlanınca o takımın attığı her gol için bu ödülü kazanır (gol başı 10 KC, 5 gol, 50 KC). Tahmin liginden ayrıdır,
+          İçerik Takvimi → Tahminler → <b>Gol başı ödül</b> sekmesinde etkinlik aç ve gol başı ödülü yaz. Üye takım seçmez: maça katılır ve maçta atılan her gol için bu ödülü kazanır (gol başı 10 KC, 5 gol, 50 KC). Tahmin liginden ayrıdır,
           lig puanına yazılmaz.
         </li>
         <li>
-          <b>Alkanka etkinliği</b>: ödül KC. Sonucu girdiğin an üyelerin hesabına kendiliğinden yatar ve coin dökümüne yazılır. <b>Sponsor etkinliği</b>: ödülü sponsor verir (freebet, freespin). Katılım şartını (linkten üyelik, en az bahis)
+          <b>Alkanka etkinliği</b>: ödül KC. Etkinliğe en az bir şart yazarsın (oyun oyna, oyun kazan, oyunda vakit geçir, görev tamamla); üye bu şartı maç günü Alkanka&apos;da tamamlayınca ödülü alır. Şartı sistem kendisi sayar, ödül
+          kendiliğinden yatar ve coin dökümüne yazılır; gün bitene kadar tamamlamayanın ödülü verilmez. <b>Sponsor etkinliği</b>: ödülü sponsor verir (freebet, freespin). Katılım şartını (linkten üyelik, en az bahis)
           forma yaz; üye kartta bu şartı görür ve seçim yaparken sponsordaki kullanıcı adını yazar.
         </li>
         <li>

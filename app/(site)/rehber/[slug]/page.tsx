@@ -83,7 +83,7 @@ export default async function GuideArticle({ params }: { params: Promise<{ slug:
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
           <span>{SITE_NAME} ekibi</span>
           <time dateTime={post.updatedAt}>
-            Son kontrol: {new Date(post.updatedAt).toLocaleDateString('tr-TR', { dateStyle: 'long' })}
+            Son kontrol: {new Date(post.updatedAt).toLocaleDateString('tr-TR', { dateStyle: 'long', timeZone: 'Europe/Istanbul' })}
           </time>
           <span>{minutes} dk okuma</span>
         </p>

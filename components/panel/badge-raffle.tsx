@@ -125,7 +125,7 @@ export function BadgeRaffle({ badges, recent }: { badges: BadgeOption[]; recent:
           {rows.map((r) => (
             <li key={r.id} className="flex flex-wrap justify-between gap-2 py-2">
               <span className="text-foreground"><b>{r.userName}</b> · {r.badgeName}{r.note ? ` · ${r.note}` : ''}</span>
-              <span className="text-muted-foreground">+{r.prize.toLocaleString('tr-TR')} KP · {new Date(r.drawnAt).toLocaleDateString('tr-TR')}</span>
+              <span className="text-muted-foreground">+{r.prize.toLocaleString('tr-TR')} KP · {new Date(r.drawnAt).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })}</span>
             </li>
           ))}
         </ul>

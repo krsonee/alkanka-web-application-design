@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { MatchRow, matchState, type MatchState } from './match-row'
 import { MyAwards } from './my-awards'
 import { Standings, type BoardView, type PeriodView } from './standings'
+import { filterChip, filterCount, segmentCount, segmentItem, segmentTray } from './ui'
 
 /** What a shared address can open: one of the match tabs, or the league table (its own view on a narrow screen). */
 export type LeagueStart = MatchState | 'league'
@@ -249,7 +250,7 @@ export function League({
         <HowTo />
       </div>
 
-      <div role="tablist" aria-label="Görünüm" className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-card p-1 @4xl:hidden">
+      <div role="tablist" aria-label="Görünüm" className={cn(segmentTray, 'grid grid-cols-2 gap-1 @4xl:hidden')}>
         {(['matches', 'league'] as const).map((v) => (
           <button
             key={v}
@@ -260,7 +261,7 @@ export function League({
               setView(v)
               remember(v === 'league' ? 'league' : tab)
             }}
-            className={cn('flex h-10 items-center justify-center gap-1.5 rounded-md text-sm font-bold transition-colors', view === v ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
+            className={cn(segmentItem(view === v), 'h-10 text-sm')}
           >
             {v === 'matches' ? 'Maçlar' : 'Lig ve ödüller'}
             {v === 'league' && waitingAwards > 0 && (
@@ -276,7 +277,7 @@ export function League({
       <div className="grid items-start gap-5 @4xl:grid-cols-[minmax(0,1fr)_19rem]">
         <div className={cn('@container min-w-0 flex-col gap-3', view === 'matches' ? 'flex' : 'hidden @4xl:flex')}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div role="tablist" aria-label="Maç durumu" className="grid w-full grid-cols-3 gap-1 rounded-lg border border-border bg-card p-1 @md:flex @md:w-auto">
+            <div role="tablist" aria-label="Maç durumu" className={cn(segmentTray, 'grid w-full grid-cols-3 gap-1 @md:flex @md:w-auto')}>
               {TABS.map((t) => (
                 <button
                   key={t.id}
@@ -288,16 +289,13 @@ export function League({
                     setSaved(false)
                     remember(t.id)
                   }}
-                  className={cn(
-                    'flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-bold transition-colors @md:shrink-0 @md:px-3',
-                    tab === t.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
-                  )}
+                  className={cn(segmentItem(tab === t.id), 'h-10 px-2 text-xs @md:shrink-0 @md:px-4 @md:text-sm')}
                 >
                   <span className="truncate @md:hidden" aria-hidden="true">
                     {t.short}
                   </span>
                   <span className="sr-only @md:not-sr-only">{t.label}</span>
-                  <span className={cn('tabular-nums', tab === t.id ? 'opacity-80' : 'text-foreground')}>{groups[t.id].length}</span>
+                  <span className={segmentCount(tab === t.id)}>{groups[t.id].length}</span>
                 </button>
               ))}
             </div>
@@ -306,7 +304,7 @@ export function League({
                 type="button"
                 aria-pressed={mineOnly}
                 onClick={() => setMineOnly((v) => !v)}
-                className={cn('flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-colors', mineOnly ? 'border-primary text-primary' : 'border-border text-muted-foreground hover:text-foreground')}
+                className={cn('flex h-10 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-colors', mineOnly ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card text-foreground/80 hover:border-primary/50 hover:text-foreground')}
               >
                 <span className={cn('flex size-4 items-center justify-center rounded border', mineOnly ? 'border-primary bg-primary text-primary-foreground' : 'border-border')}>
                   {mineOnly && <Check className="size-3" aria-hidden="true" />}
@@ -317,27 +315,30 @@ export function League({
           </div>
 
           {sportsHere.length > 1 && (
-            <div role="group" aria-label="Spor" className="flex flex-wrap gap-1.5">
+            <div role="group" aria-label="Spor" className="flex flex-wrap items-center gap-1.5">
+              <span className="w-full text-xs font-semibold text-muted-foreground @md:w-10" aria-hidden="true">
+                Spor
+              </span>
               {[null, ...sportsHere].map((s) => (
                 <button
                   key={s ?? 'hepsi'}
                   type="button"
                   aria-pressed={sport === s}
                   onClick={() => pickSport(s)}
-                  className={cn(
-                    'flex min-h-9 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
-                    sport === s ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:text-foreground',
-                  )}
+                  className={filterChip(sport === s)}
                 >
                   {s ? SPORTS[s].label : 'Hepsi'}
-                  <span className="tabular-nums opacity-80">{s ? groups[tab].filter((m) => sportOf(m.set) === s).length : groups[tab].length}</span>
+                  <span className={filterCount(sport === s)}>{s ? groups[tab].filter((m) => sportOf(m.set) === s).length : groups[tab].length}</span>
                 </button>
               ))}
             </div>
           )}
 
           {(leaguesHere.length > 1 || league !== null) && (
-            <nav aria-label="Ligler" className="flex flex-wrap gap-1.5">
+            <nav aria-label="Ligler" className="flex flex-wrap items-center gap-1.5">
+              <span className="w-full text-xs font-semibold text-muted-foreground @md:w-10" aria-hidden="true">
+                Lig
+              </span>
               {[null, ...leaguesHere].map((id) => (
                 <a
                   key={id ?? 'hepsi'}
@@ -348,13 +349,10 @@ export function League({
                     e.preventDefault()
                     pickLeague(id)
                   }}
-                  className={cn(
-                    'flex min-h-9 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
-                    league === id ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:text-foreground',
-                  )}
+                  className={filterChip(league === id)}
                 >
                   {id === null ? 'Bütün ligler' : (leagueNames.get(id) ?? 'Özel lig')}
-                  <span className="tabular-nums opacity-80">{id === null ? allGroups[tab].length : allGroups[tab].filter((m) => (m.boardId ?? 0) === id).length}</span>
+                  <span className={filterCount(league === id)}>{id === null ? allGroups[tab].length : allGroups[tab].filter((m) => (m.boardId ?? 0) === id).length}</span>
                 </a>
               ))}
             </nav>

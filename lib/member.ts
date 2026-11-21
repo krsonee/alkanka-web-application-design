@@ -89,6 +89,44 @@ export async function creditClaimed(
   }
 }
 
+/**
+ * Takes a fee exactly once, together with what it pays for. `claim` writes that record inside the
+ * transaction and reports whether this call made it; the coins leave with the record or not at all.
+ * 'taken' means the record was already there (or could not be made), 'short' that the balance does not
+ * cover the fee; in both cases nothing was written.
+ */
+export async function debitClaimed(
+  userId: string,
+  amount: number,
+  why: string,
+  claim: (client: Pick<PoolClient, 'query'>) => Promise<boolean>,
+): Promise<'ok' | 'taken' | 'short'> {
+  if (!Number.isInteger(amount) || amount < 0) throw new Error('Geçersiz tutar.')
+  if (amount) {
+    await getBalance(userId)
+    await ensureLedger()
+  }
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    if (!(await claim(client))) {
+      await client.query('ROLLBACK')
+      return 'taken'
+    }
+    if (amount && (await applyCoins(userId, -amount, why, { client, min: 0 })) === null) {
+      await client.query('ROLLBACK')
+      return 'short'
+    }
+    await client.query('COMMIT')
+    return 'ok'
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
 export type HistoryInput = {
   userId: string
   userName: string

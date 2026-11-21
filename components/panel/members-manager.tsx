@@ -45,7 +45,7 @@ const STATUS: Record<MemberStatus, { label: string; cls: string }> = {
 }
 
 const input = 'rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary'
-const date = (iso: string | null) => (iso ? new Date(iso).toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' }) : '—')
+const date = (iso: string | null) => (iso ? new Date(iso).toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Istanbul' }) : '—')
 
 const WALLET_LIMIT = 1_000_000
 
@@ -337,7 +337,7 @@ export function MembersManager({
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-col">
-                    <span className="text-foreground">{new Date(m.createdAt).toLocaleDateString('tr-TR')}</span>
+                    <span className="text-foreground">{new Date(m.createdAt).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })}</span>
                     <span className="text-xs text-muted-foreground">{m.source ?? 'Doğrudan'}</span>
                   </div>
                 </td>

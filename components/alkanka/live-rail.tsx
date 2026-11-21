@@ -42,8 +42,8 @@ import { MemberBadge, MemberName, MemberRank } from './kp/member-rank'
 
 export const OPEN_CHAT_EVENT = 'alkanka:open-chat'
 
-const timeFormat = new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-digit' })
-const dateTimeFormat = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+const timeFormat = new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })
+const dateTimeFormat = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })
 
 const TABS: { id: ChatTab; label: string; icon: typeof Send }[] = [
   { id: 'sohbet', label: 'Sohbet', icon: MessagesSquare },

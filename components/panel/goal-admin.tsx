@@ -20,24 +20,32 @@ import {
 import {
   GOAL_APPROVAL_LABEL,
   GOAL_CATEGORIES,
+  GOAL_MAX_FEE,
   GOAL_MAX_GOALS,
   GOAL_MAX_PER_GOAL,
+  GOAL_REJECT_REASONS,
   checkGoalEvent,
   checkGoalScore,
   goalAmount,
-  goalConditions,
   goalPickState,
   goalPickTotals,
   goalPicksCsv,
   goalReward,
+  goalRuleLines,
+  goalSideName,
   goalStatusLabel,
+  oddsText,
+  parseOdds,
   type GoalCategory,
   type GoalEventInput,
   type GoalEventView,
   type GoalMatch,
 } from '@/lib/goal-rewards-shared'
+import { TR_TZ, TR_ZONE_NOTE, trInputMs, trInputToIso } from '@/lib/tr-time'
 import { askConfirm } from '@/components/panel/confirm-dialog'
 import { GoalFixturePicker } from '@/components/panel/goal-fixture-picker'
+import { GoalFlags, GoalTag } from '@/components/panel/goal-flags'
+import { GoalRulesEditor } from '@/components/panel/goal-rules-editor'
 import { usePanelAction } from '@/components/panel/flash'
 import { SideSheet } from '@/components/panel/side-sheet'
 import { StatusLine } from '@/components/alkanka/community/use-action'
@@ -49,13 +57,56 @@ const label = 'flex flex-col gap-1.5 text-xs font-semibold text-foreground'
 const hint = 'text-xs font-normal leading-relaxed text-muted-foreground'
 const ghost = 'h-9 rounded-lg border border-border px-3 text-xs font-bold text-foreground hover:bg-secondary disabled:opacity-40'
 const solid = 'h-9 rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground disabled:opacity-40'
-const when = (iso: string) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })
+const when = (iso: string) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: TR_TZ })
 
-type Draft = Omit<GoalEventInput, 'perGoal' | 'siteId'> & { perGoal: string; siteId: string }
+type Draft = Omit<GoalEventInput, 'perGoal' | 'siteId' | 'minOdds' | 'entryFee'> & { perGoal: string; siteId: string; minOdds: string; entryFee: string }
 
-const blank = (category: GoalCategory): Draft => ({ id: null, title: '', category, perGoal: category === 'sponsor' ? '20' : '10', unit: category === 'sponsor' ? 'freebet' : 'KC', siteId: '', viaLink: category === 'sponsor', minBet: '', terms: '', active: true })
-const draftOf = (e: GoalEventView): Draft => ({ id: e.id, title: e.title, category: e.category, perGoal: String(e.perGoal), unit: e.unit, siteId: e.siteId === null ? '' : String(e.siteId), viaLink: e.viaLink, minBet: e.minBet, terms: e.terms, active: e.active })
-const inputOf = (d: Draft) => ({ ...d, perGoal: d.perGoal.trim() === '' ? NaN : Number(d.perGoal), siteId: d.siteId === '' ? null : Number(d.siteId) })
+const blank = (category: GoalCategory): Draft => {
+  const sponsor = category === 'sponsor'
+  return {
+    id: null,
+    title: '',
+    category,
+    perGoal: sponsor ? '20' : '10',
+    unit: sponsor ? 'freebet' : 'KC',
+    siteId: '',
+    viaLink: sponsor,
+    minBet: '',
+    // A sponsor event starts with the usual condition: a deposit on the match day and a pre-match bet at 1,80 or above.
+    needDeposit: sponsor,
+    minOdds: sponsor ? '1,80' : '',
+    entryFee: '0',
+    // An Alkanka event cannot be saved without a condition, so the form starts with the lightest one.
+    rules: sponsor ? [] : [{ kind: 'play', game: '', amount: 1 }],
+    ruleMode: 'all',
+    terms: '',
+    active: true,
+  }
+}
+const draftOf = (e: GoalEventView): Draft => ({
+  id: e.id,
+  title: e.title,
+  category: e.category,
+  perGoal: String(e.perGoal),
+  unit: e.unit,
+  siteId: e.siteId === null ? '' : String(e.siteId),
+  viaLink: e.viaLink,
+  minBet: e.minBet,
+  needDeposit: e.needDeposit,
+  minOdds: e.minOdds ? oddsText(e.minOdds) : '',
+  entryFee: String(e.entryFee),
+  rules: e.rules,
+  ruleMode: e.ruleMode,
+  terms: e.terms,
+  active: e.active,
+})
+const inputOf = (d: Draft) => ({
+  ...d,
+  perGoal: d.perGoal.trim() === '' ? NaN : Number(d.perGoal),
+  siteId: d.siteId === '' ? null : Number(d.siteId),
+  minOdds: parseOdds(d.minOdds),
+  entryFee: d.entryFee.trim() === '' ? 0 : Number(d.entryFee),
+})
 
 function EventSheet({ initial, sites, onClose, onSaved }: { initial: Draft; sites: GoalAdminData['sites']; onClose: () => void; onSaved: () => void }) {
   const { pending, status, run } = usePanelAction()
@@ -63,14 +114,20 @@ function EventSheet({ initial, sites, onClose, onSaved }: { initial: Draft; site
   const sponsor = d.category === 'sponsor'
   const checked = checkGoalEvent(inputOf(d))
   const perGoal = Number(d.perGoal)
-  const example = Number.isInteger(perGoal) && perGoal > 0 ? `Örnek: takım 5 gol atarsa üye ${goalAmount(goalReward(perGoal, 5), sponsor ? d.unit || 'ödül' : 'KC')} kazanır.` : ''
+  const example =
+    Number.isInteger(perGoal) && perGoal > 0
+      ? sponsor
+        ? `Örnek: maç 3-2 biterse (5 gol) kuponu geçerli her üye ${goalAmount(goalReward(perGoal, 5), d.unit || 'ödül')} hak eder.`
+        : `Örnek: maç 3-2 biterse (5 gol) şartı tamamlayan her üye ${goalAmount(goalReward(perGoal, 5), 'KC')} kazanır.`
+      : ''
   const siteName = sites.find((s) => s.id === d.siteId)?.name ?? null
-  const preview = sponsor ? goalConditions({ category: 'sponsor', viaLink: d.viaLink, minBet: d.minBet.trim(), terms: d.terms.trim(), siteName }) : []
+  // The rule box exactly as the member will read it, from what is typed so far.
+  const preview = checked.ok ? goalRuleLines({ ...checked.value, siteName }) : []
 
   return (
     <SideSheet
       title={d.id ? 'Etkinliği düzenle' : sponsor ? 'Yeni sponsor etkinliği' : 'Yeni Alkanka etkinliği'}
-      eyebrow="Gol başı ödül"
+      eyebrow="Gol Yağmuru"
       onClose={onClose}
       footer={
         <div className="flex flex-col gap-2">
@@ -112,7 +169,7 @@ function EventSheet({ initial, sites, onClose, onSaved }: { initial: Draft; site
                 className={cn('flex flex-col gap-1 rounded-lg border p-3 text-left', d.category === c.id ? 'border-primary bg-primary/10' : 'border-border hover:bg-secondary')}
               >
                 <span className="text-sm font-bold text-foreground">{c.id === 'alkanka' ? 'Alkanka' : 'Sponsor'}</span>
-                <span className={hint}>{c.id === 'alkanka' ? 'Ödül KC. Maç sonuçlanınca kendiliğinden yatar.' : 'Ödülü sponsor verir (freebet, freespin). Şartı sen onaylarsın, teslimi sen işaretlersin.'}</span>
+                <span className={hint}>{c.id === 'alkanka' ? "Ödül KC. Üye maça katılır, maç günü Alkanka'daki şartı tamamlar; sistem kontrol eder, ödül kendiliğinden yatar." : 'Ödülü sponsor verir (freebet, freespin). Şartı sen onaylarsın, teslimi sen işaretlersin.'}</span>
               </button>
             ))}
           </div>
@@ -152,21 +209,54 @@ function EventSheet({ initial, sites, onClose, onSaved }: { initial: Draft; site
           </label>
         </div>
         {example && <p className={hint}>{example}</p>}
-        {d.id && <p className={hint}>Gol başı ödülü değiştirirsen sadece henüz kimsenin seçim yapmadığı maçlar yeni rakama geçer. Seçim yapılmış maçlar üyeye söz verilen eski rakamla ödenir.</p>}
+        {d.id && <p className={hint}>Gol başı ödülü değiştirirsen sadece henüz kimsenin katılmadığı maçlar yeni rakama geçer. Katılım olan maçlar üyeye söz verilen eski rakamla ödenir.</p>}
 
         {sponsor && (
           <fieldset className="flex flex-col gap-3 rounded-lg border border-border p-3">
             <legend className="px-1 text-xs font-bold text-foreground">Katılım şartı (kartta yazar)</legend>
+            <p className={hint}>
+              Üye taraf seçmez: sponsor hesabını Alkanka&apos;ya bağlar, sponsorda maç başlamadan bahsini alır ve maçın kartına kupon numarasını yazar. Kullanıcı adı talebe kendiliğinden eklenir. Sen kuponu kontrol edip geçerli ya da geçersiz
+              sayarsın; maçtaki her gol ödül kazandırır.
+            </p>
+            <label className="flex items-start gap-2 text-xs font-semibold text-foreground">
+              <input type="checkbox" checked={d.needDeposit} onChange={(e) => setD({ ...d, needDeposit: e.target.checked })} className="mt-0.5 size-4 accent-primary" />
+              <span className="flex flex-col gap-0.5">
+                Maç günü sponsora yatırım yapmış olmalı
+                <span className={hint}>Maçın oynandığı gün yatırımı olmayan üyenin talebi geçersiz sayılır.</span>
+              </span>
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className={label}>
+                En düşük oran (maç öncesi bahis)
+                <input inputMode="decimal" value={d.minOdds} maxLength={5} placeholder="1,80" onChange={(e) => setD({ ...d, minOdds: e.target.value.replace(/[^\d.,]/g, '') })} className={field} />
+                <span className={hint}>Bu oranın altındaki bahis geçersiz. Oran şartı yoksa boş bırak.</span>
+              </label>
+              <label className={label}>
+                En az bahis tutarı
+                <input value={d.minBet} maxLength={40} placeholder="100 TL" onChange={(e) => setD({ ...d, minBet: e.target.value })} className={field} />
+                <span className={hint}>Şart yoksa boş bırak.</span>
+              </label>
+            </div>
             <label className="flex items-start gap-2 text-xs font-semibold text-foreground">
               <input type="checkbox" checked={d.viaLink} onChange={(e) => setD({ ...d, viaLink: e.target.checked })} className="mt-0.5 size-4 accent-primary" />
               <span>Üyeliğini Alkanka linkiyle açmış olmalı</span>
             </label>
-            <label className={label}>
-              En az bahis tutarı
-              <input value={d.minBet} maxLength={40} placeholder="100 TL" onChange={(e) => setD({ ...d, minBet: e.target.value })} className={field} />
-              <span className={hint}>Şart yoksa boş bırak.</span>
-            </label>
           </fieldset>
+        )}
+
+        {!sponsor && (
+          <>
+            <label className={label}>
+              Katılım ücreti (KC)
+              <input inputMode="numeric" value={d.entryFee} onChange={(e) => setD({ ...d, entryFee: e.target.value.replace(/\D/g, '').slice(0, 6) })} className={field} />
+              <span className={hint}>
+                Ücretsizse 0 yaz. Ücret, üye maça katılırken bakiyesinden düşer; maç iptal edilirse kendiliğinden geri yatar. En fazla {GOAL_MAX_FEE.toLocaleString('tr-TR')} KC.
+                {d.id ? ' Ücreti değiştirirsen sonraki katılımlar yeni ücreti öder; daha önce katılanlar etkilenmez.' : ''}
+              </span>
+            </label>
+            <GoalRulesEditor rules={d.rules} mode={d.ruleMode} onChange={(rules, ruleMode) => setD({ ...d, rules, ruleMode })} />
+            {d.id && <p className={hint}>Şartları değiştirirsen henüz ödenmemiş bütün katılımlar yeni şarta göre değerlendirilir.</p>}
+          </>
         )}
 
         <label className={label}>
@@ -176,7 +266,7 @@ function EventSheet({ initial, sites, onClose, onSaved }: { initial: Draft; site
 
         {preview.length > 0 && (
           <div className="flex flex-col gap-1.5 rounded-lg bg-secondary/60 p-3">
-            <p className="text-xs font-bold text-foreground">Üyenin kartta göreceği şart</p>
+            <p className="text-xs font-bold text-foreground">Üyenin sitede göreceği kurallar</p>
             <ul className="flex list-disc flex-col gap-1 pl-4 text-xs leading-relaxed text-muted-foreground">
               {preview.map((c) => (
                 <li key={c}>{c}</li>
@@ -189,7 +279,7 @@ function EventSheet({ initial, sites, onClose, onSaved }: { initial: Draft; site
           <input type="checkbox" checked={d.active} onChange={(e) => setD({ ...d, active: e.target.checked })} className="mt-0.5 size-4 accent-primary" />
           <span className="flex flex-col gap-0.5">
             Sitede yayında
-            <span className={hint}>Kapatırsan etkinlik siteden kalkar ve yeni seçim alınmaz; kayıtları ve katılımcı listesi panelde durur.</span>
+            <span className={hint}>Kapatırsan etkinlik siteden kalkar ve yeni katılım alınmaz; kayıtları ve katılımcı listesi panelde durur.</span>
           </span>
         </label>
       </div>
@@ -201,14 +291,14 @@ function AddMatch({ eventId, onSaved }: { eventId: number; onSaved: () => void }
   const { pending, status, run } = usePanelAction()
   const [f, setF] = useState({ league: '', home: '', away: '', kickoff: '' })
   const put = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value })
-  const past = f.kickoff !== '' && new Date(f.kickoff).getTime() < Date.now()
+  const past = f.kickoff !== '' && trInputMs(f.kickoff) < Date.now()
   return (
     <form
       className="flex flex-col gap-3 rounded-lg bg-secondary/50 p-3"
       onSubmit={(e) => {
         e.preventDefault()
         run(
-          () => createGoalMatch(eventId, { ...f, kickoff: new Date(f.kickoff).toISOString() }),
+          () => createGoalMatch(eventId, { ...f, kickoff: trInputToIso(f.kickoff) ?? '' }),
           () => {
             setF({ ...f, home: '', away: '', kickoff: '' })
             onSaved()
@@ -230,13 +320,13 @@ function AddMatch({ eventId, onSaved }: { eventId: number; onSaved: () => void }
           <input value={f.league} maxLength={80} onChange={put('league')} className={field} />
         </label>
         <label className={label}>
-          Maç saati
+          Maç saati ({TR_ZONE_NOTE})
           <input type="datetime-local" value={f.kickoff} onChange={put('kickoff')} className={field} />
         </label>
       </div>
       {past && (
         <p role="alert" className="text-xs font-medium text-destructive">
-          Maç saati geçmişte. Seçimler maç başlarken kapanır; ileri bir saat gir.
+          Maç saati geçmişte. Katılım maç başlarken kapanır; ileri bir saat gir.
         </p>
       )}
       <div className="flex flex-wrap items-center gap-3">
@@ -253,7 +343,8 @@ function MatchRow({ event, m, now, onChanged, onOpenPicks }: { event: GoalEventV
   const { pending, status, run } = usePanelAction()
   const [home, setHome] = useState('')
   const [away, setAway] = useState('')
-  const picks = m.homePicks + m.awayPicks
+  const picks = m.picks
+  const sponsor = event.category === 'sponsor'
   const started = Date.parse(m.kickoff) <= now
   const waiting = m.status === 'open' && started
   const score = checkGoalScore(home, away)
@@ -261,8 +352,12 @@ function MatchRow({ event, m, now, onChanged, onOpenPicks }: { event: GoalEventV
 
   const finish = async () => {
     if (!score.ok) return
-    const owed = goalReward(m.perGoal, score.home) * m.homePicks + goalReward(m.perGoal, score.away) * m.awayPicks
-    const pay = event.category === 'sponsor' ? `${picks} seçim hesaplanır, toplam ${goalAmount(owed, event.unit)} hak edilir (teslimi sen işaretlersin).` : `${picks} seçim hesaplanır ve toplam ${goalAmount(owed, 'KC')} üyelere hemen yatırılır.`
+    const owed = goalReward(m.perGoal, score.home) * m.homePicks + goalReward(m.perGoal, score.away) * m.awayPicks + goalReward(m.perGoal, score.home + score.away) * (m.picks - m.homePicks - m.awayPicks)
+    const pay = sponsor
+      ? `${picks} talep hesaplanır; hepsi geçerli sayılırsa toplam ${goalAmount(owed, event.unit)} hak edilir (kuponu sen kontrol eder, teslimi sen işaretlersin).`
+      : event.rules.length > 0
+        ? `${picks} katılım hesaplanır, toplam ${goalAmount(owed, 'KC')} kazanılır; ödül, etkinliğin şartını maç günü tamamlayan üyelere yatar.`
+        : `${picks} katılım hesaplanır ve toplam ${goalAmount(owed, 'KC')} üyelere hemen yatırılır.`
     if (!(await askConfirm(`${m.home} ${score.home} - ${score.away} ${m.away} olarak sonuçlandırılsın mı? ${pay} Sonuç bir kez girilir, sonradan değiştirilemez.`))) return
     run(() => finishGoalMatch(m.id, score.home, score.away), onChanged)
   }
@@ -282,7 +377,13 @@ function MatchRow({ event, m, now, onChanged, onOpenPicks }: { event: GoalEventV
             {m.extId === null ? '' : ' · takvim maçı, sonucu kendiliğinden gelir'}
           </p>
           <p className="text-xs text-muted-foreground">
-            {picks === 0 ? 'Henüz seçim yok.' : `${m.home}: ${m.homePicks} seçim · ${m.away}: ${m.awayPicks} seçim`}
+            {picks === 0
+              ? sponsor
+                ? 'Henüz kupon girilmedi.'
+                : 'Henüz katılan yok.'
+              : sponsor
+                ? `${picks} kupon talebi`
+                : `${picks} katılım${m.homePicks + m.awayPicks > 0 ? ` (${m.homePicks + m.awayPicks} tanesi eski takım seçimi: ${m.home} ${m.homePicks}, ${m.away} ${m.awayPicks})` : ''}`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -296,7 +397,7 @@ function MatchRow({ event, m, now, onChanged, onOpenPicks }: { event: GoalEventV
               type="button"
               disabled={pending}
               onClick={async () => {
-                if (await askConfirm(`${m.home} - ${m.away} iptal edilsin mi? ${picks} seçim için ödül verilmez ve maça artık sonuç girilemez. Bu geri alınamaz.`)) run(() => cancelGoalMatch(m.id), onChanged)
+                if (await askConfirm(`${m.home} - ${m.away} iptal edilsin mi? ${picks} katılım için ödül verilmez ve maça artık sonuç girilemez.${event.entryFee > 0 ? ' Katılım ücreti ödeyen üyelere ücretleri geri yatırılır.' : ''} Bu geri alınamaz.`)) run(() => cancelGoalMatch(m.id), onChanged)
               }}
               className={ghost}
             >
@@ -338,11 +439,17 @@ function MatchRow({ event, m, now, onChanged, onOpenPicks }: { event: GoalEventV
   )
 }
 
+/** The choice in the reason list that lets staff write their own. */
+const OTHER = 'other'
+
 function PicksSheet({ matchId, onClose, onChanged }: { matchId: number; onClose: () => void; onChanged: () => void }) {
   const { data, isLoading, mutate } = useSWR(['goal-picks', matchId], () => loadGoalPicks(matchId))
   const { pending, status, run } = usePanelAction()
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [query, setQuery] = useState('')
+  const [rejecting, setRejecting] = useState(false)
+  const [reason, setReason] = useState(GOAL_REJECT_REASONS[0])
+  const [custom, setCustom] = useState('')
   const refresh = () => {
     setPicked(new Set())
     void mutate()
@@ -351,7 +458,7 @@ function PicksSheet({ matchId, onClose, onChanged }: { matchId: number; onClose:
 
   if (isLoading || !data) {
     return (
-      <SideSheet title="Katılımcılar" eyebrow="Gol başı ödül" onClose={onClose} size="xl" guard="marked">
+      <SideSheet title="Katılımcılar" eyebrow="Gol Yağmuru" onClose={onClose} size="xl" guard="marked">
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" aria-hidden="true" /> Liste okunuyor...
         </p>
@@ -360,7 +467,7 @@ function PicksSheet({ matchId, onClose, onChanged }: { matchId: number; onClose:
   }
   if (!data.ok) {
     return (
-      <SideSheet title="Katılımcılar" eyebrow="Gol başı ödül" onClose={onClose} size="xl" guard="marked">
+      <SideSheet title="Katılımcılar" eyebrow="Gol Yağmuru" onClose={onClose} size="xl" guard="marked">
         <p role="alert" className="text-sm font-medium text-destructive">
           {data.error}
         </p>
@@ -370,18 +477,20 @@ function PicksSheet({ matchId, onClose, onChanged }: { matchId: number; onClose:
 
   const { event, match, picks } = data.data
   const sponsor = event.category === 'sponsor'
+  const paidEntry = picks.some((p) => p.fee > 0)
   const needle = query.trim().toLocaleLowerCase('tr')
-  const shown = needle ? picks.filter((p) => `${p.userName} ${p.siteUsername ?? ''}`.toLocaleLowerCase('tr').includes(needle)) : picks
+  const shown = needle ? picks.filter((p) => `${p.userName} ${p.siteUsername ?? ''} ${p.coupon ?? ''}`.toLocaleLowerCase('tr').includes(needle)) : picks
   const ids = [...picked].filter((id) => shown.some((p) => p.userId === id))
   const allOn = shown.length > 0 && shown.every((p) => picked.has(p.userId))
   const totals = goalPickTotals(picks, sponsor)
   const failed = totals.failed
+  const why = (reason === OTHER ? custom : reason).trim()
 
   const download = () => {
     const url = URL.createObjectURL(new Blob([goalPicksCsv(match, event.unit, sponsor, shown)], { type: 'text/csv;charset=utf-8' }))
     const a = document.createElement('a')
     a.href = url
-    a.download = `gol-basi-odul-${match.home}-${match.away}.csv`.replace(/[^\w.\-ğüşıöçĞÜŞİÖÇ]+/g, '-')
+    a.download = `gol-yagmuru-${match.home}-${match.away}.csv`.replace(/[^\w.\-ğüşıöçĞÜŞİÖÇ]+/g, '-')
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -390,63 +499,108 @@ function PicksSheet({ matchId, onClose, onChanged }: { matchId: number; onClose:
     <SideSheet title={`${match.home} - ${match.away}`} eyebrow={`${event.title} · katılımcılar`} onClose={onClose} size="xl" guard="marked">
       <div className="flex flex-col gap-4">
         <p className="text-xs leading-relaxed text-muted-foreground">
-          {picks.length} seçim · {goalStatusLabel(match, Date.now())}
+          {picks.length} {sponsor ? 'talep' : 'katılım'} · {goalStatusLabel(match, Date.now())}
           {match.status === 'settled'
-            ? ` · ${match.homeGoals} - ${match.awayGoals} · ${sponsor ? 'verilecek' : 'kazanılan'} ${goalAmount(totals.owed, event.unit)}, ${sponsor ? 'teslim edilen' : 'ödenen'} ${goalAmount(totals.done, event.unit)}${totals.refused ? `, şart sağlanmadığı için verilmeyen ${goalAmount(totals.refused, event.unit)}` : ''}`
+            ? ` · ${match.homeGoals} - ${match.awayGoals} · ${sponsor ? 'verilecek' : 'kazanılan'} ${goalAmount(totals.owed, event.unit)}, ${sponsor ? 'teslim edilen' : 'ödenen'} ${goalAmount(totals.done, event.unit)}${totals.refused ? `, ${sponsor ? 'geçersiz talep olduğu' : 'şart tamamlanmadığı'} için verilmeyen ${goalAmount(totals.refused, event.unit)}` : ''}`
             : ''}
-          {sponsor ? '. Önce üyenin sponsorun şartını sağladığını onayla; ödülü sponsor tanımlayınca "Teslim edildi" olarak işaretle.' : '. Alkanka ödülleri sonuç girilince kendiliğinden yatar.'}
+          {!sponsor && totals.fees > 0 ? ` · toplanan katılım ücreti ${goalAmount(totals.fees, 'KC')}` : ''}
+          {sponsor
+            ? '. Her talepte üyenin bağlı sponsor kullanıcı adı ve kupon numarası yazar. Kuponu sponsorda kontrol et: şartlara uyuyorsa "Kupon geçerli", uymuyorsa nedenini seçip "Geçersiz say". Ödülü sponsor tanımlayınca "Teslim edildi" olarak işaretle.'
+            : event.rules.length > 0
+              ? '. Üye takım seçmez, maçın bütün golleri sayılır. Ödül, üye etkinliğin şartını maç günü tamamlayınca kendiliğinden yatar; şartı sistem sayar, gün bitene kadar tamamlamayanınki verilmez.'
+              : '. Bu etkinlikte şart yok: şart zorunlu olmadan önce açılmış. Var olan katılımların ödülü sonuç girilince yatar; yeni katılım, etkinliğe şart eklenene kadar kapalıdır.'}
         </p>
         {failed > 0 && (
           <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-foreground">
             {failed} ödeme yazılamadı. Yazılamayan ödül üyeye yatmadı; site ziyaret edildikçe yaklaşık 10 dakikada bir kendiliğinden yeniden denenir. Beklemek istemezsen satırdaki &quot;Yeniden dene&quot; düğmesine bas.
           </p>
         )}
+        {totals.waiting > 0 && <p className="rounded-lg bg-secondary/60 px-3 py-2 text-xs leading-relaxed text-foreground">{totals.waiting} üye ödül kazandı ama etkinliğin şartını henüz tamamlamadı. Şart tamamlandığında ödül yaklaşık 10 dakika içinde yatar.</p>}
 
         <div className="flex flex-wrap items-center gap-2">
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Üye ya da kullanıcı adı ara" aria-label="Katılımcılarda ara" className={cn(field, 'max-w-xs')} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={sponsor ? 'Üye, kullanıcı adı ya da kupon ara' : 'Üye ara'} aria-label="Katılımcılarda ara" className={cn(field, 'max-w-xs')} />
           <button type="button" onClick={download} disabled={shown.length === 0} className={cn(ghost, 'flex items-center gap-1.5')}>
             <Download className="size-3.5" aria-hidden="true" /> Excel indir
           </button>
         </div>
 
         {sponsor && (
-          <div className="flex flex-wrap items-center gap-2 rounded-lg bg-secondary/50 p-3">
-            <span className="text-xs font-semibold text-foreground">{ids.length} üye seçili</span>
-            <button type="button" disabled={pending || !ids.length} onClick={() => run(() => approveGoalPicks(matchId, ids, 'approved'), refresh)} className={solid}>
-              Şartı onayla
-            </button>
-            <button type="button" disabled={pending || !ids.length} onClick={() => run(() => approveGoalPicks(matchId, ids, 'rejected'), refresh)} className={ghost}>
-              Şart sağlanmadı
-            </button>
-            <button type="button" disabled={pending || !ids.length || match.status !== 'settled'} onClick={() => run(() => deliverGoalPicks(matchId, ids, true), refresh)} className={ghost}>
-              Teslim edildi
-            </button>
-            <button type="button" disabled={pending || !ids.length} onClick={() => run(() => deliverGoalPicks(matchId, ids, false), refresh)} className={ghost}>
-              Teslimi geri al
-            </button>
+          <div className="flex flex-col gap-3 rounded-lg bg-secondary/50 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-foreground">{ids.length} talep seçili</span>
+              <button type="button" disabled={pending || !ids.length} onClick={() => run(() => approveGoalPicks(matchId, ids, 'approved'), refresh)} className={solid}>
+                Kupon geçerli
+              </button>
+              <button type="button" disabled={pending || !ids.length} aria-expanded={rejecting} onClick={() => setRejecting((v) => !v)} className={cn(ghost, 'border-destructive/50 text-destructive hover:bg-destructive/10')}>
+                Geçersiz say
+              </button>
+              <button type="button" disabled={pending || !ids.length} onClick={() => run(() => approveGoalPicks(matchId, ids, 'pending'), refresh)} className={ghost}>
+                Yeniden kontrole al
+              </button>
+              <button type="button" disabled={pending || !ids.length || match.status !== 'settled'} onClick={() => run(() => deliverGoalPicks(matchId, ids, true), refresh)} className={ghost}>
+                Teslim edildi
+              </button>
+              <button type="button" disabled={pending || !ids.length} onClick={() => run(() => deliverGoalPicks(matchId, ids, false), refresh)} className={ghost}>
+                Teslimi geri al
+              </button>
+            </div>
+            {rejecting && (
+              <div className="flex flex-col gap-2 rounded-lg border border-border bg-background p-3">
+                <label className={label}>
+                  Talep neden geçersiz?
+                  <select value={reason} onChange={(e) => setReason(e.target.value)} className={field}>
+                    {GOAL_REJECT_REASONS.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                    <option value={OTHER}>Başka bir neden (yaz)</option>
+                  </select>
+                </label>
+                {reason === OTHER && <input value={custom} maxLength={160} onChange={(e) => setCustom(e.target.value)} placeholder="Nedeni yaz" aria-label="Geçersizlik nedeni" className={field} />}
+                <span className={hint}>Üye bu nedeni maçın kartında görür. Geçersiz sayılan her talep üyenin etiketine yazılır; tekrarlayanları &quot;Geçersiz talepler&quot; ekranından uyarabilir ya da katılımını kapatabilirsin.</span>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={pending || !ids.length || why.length < 3}
+                    onClick={() =>
+                      run(
+                        () => approveGoalPicks(matchId, ids, 'rejected', why),
+                        () => {
+                          setRejecting(false)
+                          refresh()
+                        },
+                      )
+                    }
+                    className={solid}
+                  >
+                    {ids.length} talebi geçersiz say
+                  </button>
+                  <button type="button" onClick={() => setRejecting(false)} className={ghost}>
+                    Vazgeç
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
         <StatusLine status={status} />
 
         <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full min-w-[640px] text-left text-xs">
+          <table className="w-full min-w-[720px] text-left text-xs">
             <thead className="bg-secondary/60 text-muted-foreground">
               <tr>
                 {sponsor && (
                   <th scope="col" className="w-10 p-2">
-                    <input
-                      type="checkbox"
-                      aria-label="Listedeki herkesi seç"
-                      checked={allOn}
-                      onChange={() => setPicked(allOn ? new Set() : new Set(shown.map((p) => p.userId)))}
-                      className="size-4 accent-primary"
-                    />
+                    <input type="checkbox" aria-label="Listedeki herkesi seç" checked={allOn} onChange={() => setPicked(allOn ? new Set() : new Set(shown.map((p) => p.userId)))} className="size-4 accent-primary" />
                   </th>
                 )}
                 <th scope="col" className="p-2 font-semibold">Üye</th>
                 {sponsor && <th scope="col" className="p-2 font-semibold">Sponsordaki adı</th>}
-                {sponsor && <th scope="col" className="p-2 font-semibold">Şart</th>}
-                <th scope="col" className="p-2 font-semibold">Takım</th>
+                {sponsor && <th scope="col" className="p-2 font-semibold">Kupon no</th>}
+                {sponsor && <th scope="col" className="p-2 font-semibold">Talep</th>}
+                {!sponsor && <th scope="col" className="p-2 font-semibold">Sayılan goller</th>}
+                {!sponsor && paidEntry && <th scope="col" className="p-2 text-right font-semibold">Ücret</th>}
                 <th scope="col" className="p-2 text-right font-semibold">Gol</th>
                 <th scope="col" className="p-2 text-right font-semibold">Ödül</th>
                 <th scope="col" className="p-2 font-semibold">Durum</th>
@@ -454,7 +608,7 @@ function PicksSheet({ matchId, onClose, onChanged }: { matchId: number; onClose:
             </thead>
             <tbody>
               {shown.map((p) => (
-                <tr key={p.userId} className="border-t border-border text-foreground">
+                <tr key={p.userId} className="border-t border-border align-top text-foreground">
                   {sponsor && (
                     <td className="p-2">
                       <input
@@ -473,10 +627,22 @@ function PicksSheet({ matchId, onClose, onChanged }: { matchId: number; onClose:
                       />
                     </td>
                   )}
-                  <td className="p-2 font-semibold">{p.userName}</td>
+                  <td className="p-2 font-semibold">
+                    <span className="flex flex-col items-start gap-1">
+                      {p.userName}
+                      {sponsor && (p.invalid > 0 || p.flag) && <GoalTag member={{ state: p.flag, warns: p.warns, invalid: p.invalid }} />}
+                    </span>
+                  </td>
                   {sponsor && <td className="p-2">{p.siteUsername ?? '-'}</td>}
-                  {sponsor && <td className={cn('p-2', p.approval === 'approved' ? 'text-success' : p.approval === 'rejected' ? 'text-destructive' : 'text-muted-foreground')}>{GOAL_APPROVAL_LABEL[p.approval]}</td>}
-                  <td className="p-2">{p.side === 'home' ? match.home : match.away}</td>
+                  {sponsor && <td className="p-2 font-mono">{p.coupon ?? '-'}</td>}
+                  {sponsor && (
+                    <td className={cn('p-2', p.approval === 'approved' ? 'text-success' : p.approval === 'rejected' ? 'text-destructive' : 'text-muted-foreground')}>
+                      {GOAL_APPROVAL_LABEL[p.approval]}
+                      {p.approval === 'rejected' && p.rejectReason && <span className="block text-muted-foreground">{p.rejectReason}</span>}
+                    </td>
+                  )}
+                  {!sponsor && <td className="p-2">{goalSideName(p.side, match)}</td>}
+                  {!sponsor && paidEntry && <td className="p-2 text-right tabular-nums">{p.fee > 0 ? goalAmount(p.fee, 'KC') : '-'}</td>}
                   <td className="p-2 text-right tabular-nums">{p.goals ?? '-'}</td>
                   <td className="p-2 text-right tabular-nums">{p.reward === null ? '-' : goalAmount(p.reward, event.unit)}</td>
                   <td className="p-2">
@@ -505,8 +671,8 @@ function PicksSheet({ matchId, onClose, onChanged }: { matchId: number; onClose:
               ))}
               {shown.length === 0 && (
                 <tr>
-                  <td colSpan={sponsor ? 8 : 5} className="p-4 text-center text-muted-foreground">
-                    {picks.length === 0 ? 'Bu maça henüz seçim yapılmadı.' : 'Aramaya uyan katılımcı yok.'}
+                  <td colSpan={sponsor ? 8 : paidEntry ? 6 : 5} className="p-4 text-center text-muted-foreground">
+                    {picks.length === 0 ? (sponsor ? 'Bu maça henüz kupon girilmedi.' : 'Bu maça henüz katılan olmadı.') : 'Aramaya uyan katılımcı yok.'}
                   </td>
                 </tr>
               )}
@@ -538,7 +704,10 @@ function EventCard({
   const [adding, setAdding] = useState<'feed' | 'manual' | null>(event.matches.length === 0 ? 'feed' : null)
   const taken = event.matches.flatMap((m) => (m.extId === null ? [] : [m.extId]))
   const sponsor = event.category === 'sponsor'
-  const joined = event.matches.reduce((s, m) => s + m.homePicks + m.awayPicks, 0)
+  const joined = event.matches.reduce((s, m) => s + m.picks, 0)
+  const setup = sponsor
+    ? ['kuponla katılım', event.needDeposit ? 'maç günü yatırım' : '', event.minOdds ? `en düşük oran ${oddsText(event.minOdds)}` : '', event.minBet ? `en az ${event.minBet}` : '', event.viaLink ? 'Alkanka linkiyle üyelik' : ''].filter(Boolean)
+    : [event.entryFee > 0 ? `katılım ${goalAmount(event.entryFee, 'KC')}` : 'ücretsiz', event.rules.length ? `${event.rules.length} ödül şartı (${event.rules.length > 1 && event.ruleMode === 'any' ? 'biri yeterli' : 'hepsi'})` : 'ŞART YOK: katılım kapalı, düzenleyip şart ekle']
   const waiting = event.matches.filter((m) => m.status === 'open' && Date.parse(m.kickoff) <= now).length
   return (
     <section aria-label={event.title} data-find={`goal-${event.id}`} className={card}>
@@ -547,8 +716,9 @@ function EventCard({
           <h3 className="font-display text-base font-bold text-foreground">{event.title}</h3>
           <p className="text-xs leading-relaxed text-muted-foreground">
             {sponsor ? `Sponsor etkinliği · ${event.siteName ?? 'sponsor silinmiş'}` : 'Alkanka etkinliği'} · gol başı <b className="text-foreground">{goalAmount(event.perGoal, event.unit)}</b> ·{' '}
-            <span className={cn('font-semibold', event.active ? 'text-success' : 'text-destructive')}>{event.active ? 'yayında' : 'kapalı'}</span> · {event.matches.length} maç · {joined} seçim
+            <span className={cn('font-semibold', event.active ? 'text-success' : 'text-destructive')}>{event.active ? 'yayında' : 'kapalı'}</span> · {event.matches.length} maç · {joined} katılım
           </p>
+          <p className="text-xs leading-relaxed text-muted-foreground">{setup.join(' · ')}</p>
           {event.active && event.matches.length === 0 && <p className="text-xs font-medium text-destructive">Maçı olmayan etkinlik sitede görünmez. Takvimden maç al ya da elle ekle.</p>}
           {waiting > 0 && <p className="text-xs font-semibold text-primary">{waiting} maç sonuç bekliyor.</p>}
         </div>
@@ -596,7 +766,7 @@ export function GoalAdmin() {
   const { data, isLoading, mutate } = useSWR('goal-admin', loadGoalAdmin)
   const [editing, setEditing] = useState<{ draft: ReturnType<typeof blank>; key: number } | null>(null)
   const [picksFor, setPicksFor] = useState<number | null>(null)
-  const [filter, setFilter] = useState<GoalCategory | 'all'>('all')
+  const [filter, setFilter] = useState<GoalCategory | 'all' | 'flags'>('all')
   const reload = () => void mutate()
 
   if (isLoading || !data) {
@@ -616,7 +786,7 @@ export function GoalAdmin() {
 
   const { events, sites, pins } = data.data
   const now = Date.now()
-  const shown = filter === 'all' ? events : events.filter((e) => e.category === filter)
+  const shown = filter === 'all' || filter === 'flags' ? events : events.filter((e) => e.category === filter)
   const count = (c: GoalCategory) => events.filter((e) => e.category === c).length
   const open = (category: GoalCategory) => setEditing({ draft: blank(category), key: Date.now() })
 
@@ -624,7 +794,7 @@ export function GoalAdmin() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div role="group" aria-label="Etkinlik türü süzgeci" className="flex flex-wrap gap-1 rounded-lg border border-border bg-background p-1">
-          {([['all', `Hepsi (${events.length})`], ['alkanka', `Alkanka (${count('alkanka')})`], ['sponsor', `Sponsor (${count('sponsor')})`]] as const).map(([id, text]) => (
+          {([['all', `Hepsi (${events.length})`], ['alkanka', `Alkanka (${count('alkanka')})`], ['sponsor', `Sponsor (${count('sponsor')})`], ['flags', 'Geçersiz talepler']] as const).map(([id, text]) => (
             <button key={id} type="button" aria-pressed={filter === id} onClick={() => setFilter(id)} className={cn('h-9 rounded-md px-3 text-xs font-bold', filter === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
               {text}
             </button>
@@ -640,9 +810,13 @@ export function GoalAdmin() {
         </div>
       </div>
 
-      {shown.length === 0 ? (
+      <p className={hint}>Sitede &quot;Gol Yağmuru&quot; adıyla, Tahminler sayfasının ikinci sekmesinde görünür. Bütün saatler {TR_ZONE_NOTE} ile gösterilir ve girilir.</p>
+
+      {filter === 'flags' ? (
+        <GoalFlags />
+      ) : shown.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm leading-relaxed text-muted-foreground">
-          {events.length === 0 ? 'Henüz gol başı ödül etkinliği yok. Bir etkinlik aç, gol başı ödülü belirle, sonra maçlarını ekle.' : 'Bu türde etkinlik yok.'}
+          {events.length === 0 ? 'Henüz Gol Yağmuru etkinliği yok. Bir etkinlik aç, gol başı ödülü belirle, sonra maçlarını ekle.' : 'Bu türde etkinlik yok.'}
         </p>
       ) : (
         shown.map((e) => <EventCard key={e.id} event={e} now={now} pins={pins} onEdit={() => setEditing({ draft: draftOf(e), key: e.id })} onChanged={reload} onOpenPicks={setPicksFor} />)

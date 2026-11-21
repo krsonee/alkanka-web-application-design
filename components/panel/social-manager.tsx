@@ -1,6 +1,7 @@
 'use client'
 
 
+import { trInputToIso } from '@/lib/tr-time'
 import { askConfirm } from '@/components/panel/confirm-dialog'
 import { HideButton } from '@/components/panel/hide-button'
 import { useState, useTransition, type ComponentProps } from 'react'
@@ -239,7 +240,7 @@ function EventsAdmin({ events, entries }: { events: SocialEvent[]; entries: Admi
         className={card}
         onSubmit={(e) => {
           e.preventDefault()
-          run(() => createSocialEventAction({ ...form, endsAt: form.endsAt || null }), () => setForm(empty))
+          run(() => createSocialEventAction({ ...form, endsAt: trInputToIso(form.endsAt) }), () => setForm(empty))
         }}
       >
         <div className="flex flex-col gap-1">
@@ -259,7 +260,7 @@ function EventsAdmin({ events, entries }: { events: SocialEvent[]; entries: Admi
             <input aria-label="Ödül KP" type="number" min={0} max={10000} value={form.reward} onChange={(e) => setForm({ ...form, reward: Number(e.target.value) })} className={cn(input, 'w-full')} />
             KP
           </label>
-          <input aria-label="Bitiş tarihi" type="datetime-local" value={form.endsAt} onChange={(e) => setForm({ ...form, endsAt: e.target.value })} className={input} />
+          <input aria-label="Bitiş tarihi (Türkiye saati)" title="Türkiye saatiyle" type="datetime-local" value={form.endsAt} onChange={(e) => setForm({ ...form, endsAt: e.target.value })} className={input} />
         </div>
         <div className="flex items-center gap-3">
           <button type="submit" disabled={pending} className={btn}>
@@ -280,7 +281,7 @@ function EventsAdmin({ events, entries }: { events: SocialEvent[]; entries: Admi
                   <span className="truncate text-sm font-semibold text-foreground">{ev.title}</span>
                   <span className="text-xs text-muted-foreground">
                     {PLATFORM_LABEL[ev.platform]} · {ev.reward} KP · {ev.entries} katılım
-                    {ev.endsAt ? ` · ${new Date(ev.endsAt).toLocaleString('tr-TR')} bitiş` : ''}
+                    {ev.endsAt ? ` · ${new Date(ev.endsAt).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' })} bitiş` : ''}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">

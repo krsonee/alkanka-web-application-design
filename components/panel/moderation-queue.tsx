@@ -213,7 +213,7 @@ export function ModerationQueue({ items }: { items: ModerationItem[] }) {
                     </div>
                     <span className="text-sm text-muted-foreground">
                       {item.who}
-                      {item.createdAt && ` · ${new Date(item.createdAt).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })}`}
+                      {item.createdAt && ` · ${new Date(item.createdAt).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Istanbul' })}`}
                     </span>
                     {item.detail && <p className="line-clamp-2 text-sm leading-relaxed text-foreground">{item.detail}</p>}
                   </div>

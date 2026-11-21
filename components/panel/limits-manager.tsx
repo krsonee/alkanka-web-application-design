@@ -1,6 +1,7 @@
 'use client'
 
 
+import { trInput, trInputToIso } from '@/lib/tr-time'
 import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useState, useTransition } from 'react'
 import { Pencil, Search, Trash2 } from 'lucide-react'
@@ -14,18 +15,11 @@ const field = 'h-10 w-full rounded-lg border border-border bg-background px-3 te
 type Target = { id: string; name: string; email: string }
 type Draft = { dailyWinLimit: string; dailyGameLimit: string; marketBan: boolean; marketSpendLimit: string; note: string; expiresAt: string }
 
-/** ISO time as the value a datetime-local input shows in the browser's own time zone. */
-function localInput(iso: string | null | undefined) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
-}
-
-const fromNow = (days: number) => localInput(new Date(Date.now() + days * 86_400_000).toISOString())
+const fromNow = (days: number) => trInput(Date.now() + days * 86_400_000)
 const endsLabel = (iso: string) => new Date(iso).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', dateStyle: 'short', timeStyle: 'short' })
 
 const toDraft = (l?: MemberLimit): Draft => ({
-  expiresAt: localInput(l?.expiresAt),
+  expiresAt: trInput(l?.expiresAt),
   dailyWinLimit: l?.dailyWinLimit == null ? '' : String(l.dailyWinLimit),
   dailyGameLimit: l?.dailyGameLimit == null ? '' : String(l.dailyGameLimit),
   marketBan: l?.marketBan ?? false,
@@ -76,7 +70,7 @@ export function LimitsManager({ limits }: { limits: MemberLimit[] }) {
         marketBan: draft.marketBan,
         marketSpendLimit: num(draft.marketSpendLimit),
         note: draft.note,
-        expiresAt: draft.expiresAt ? new Date(draft.expiresAt).toISOString() : null,
+        expiresAt: trInputToIso(draft.expiresAt),
       })
       setMsg(res.ok ? { ok: true, text: res.message ?? 'Kaydedildi.' } : { ok: false, text: res.error })
       if (res.ok) setTarget(null)
@@ -178,7 +172,7 @@ export function LimitsManager({ limits }: { limits: MemberLimit[] }) {
           </label>
           <div className="flex flex-col gap-2">
             <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-              Bitiş tarihi (boş bırakırsan sen kaldırana kadar sürer)
+              Bitiş tarihi, Türkiye saatiyle (boş bırakırsan sen kaldırana kadar sürer)
               <input
                 type="datetime-local"
                 value={draft.expiresAt}

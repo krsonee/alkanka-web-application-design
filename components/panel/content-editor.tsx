@@ -1,5 +1,6 @@
 'use client'
 
+import { TrClock } from '@/components/panel/tr-clock'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { useUnsavedGuard, UnsavedBar } from '@/components/panel/unsaved-guard'
 import { useRouter } from 'next/navigation'
@@ -387,6 +388,7 @@ export function ContentEditor({
             </div>
           )}
         </nav>
+        <TrClock />
         <div className="flex items-center gap-2 border-t border-border p-3">
           <a
             href={siteUrl}

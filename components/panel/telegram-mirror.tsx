@@ -52,7 +52,7 @@ const STATUS: Record<MirrorLog['status'], { label: string; className: string }> 
   pending: { label: 'Bekliyor', className: 'bg-secondary text-muted-foreground' },
 }
 
-const timeFmt = new Intl.DateTimeFormat('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+const timeFmt = new Intl.DateTimeFormat('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })
 
 function Feedback({ state }: { state: ActionState }) {
   if (!state.message) return null

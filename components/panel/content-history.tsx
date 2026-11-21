@@ -8,7 +8,7 @@ import { areaLabel, type HistoryPage, type HistoryRow } from '@/lib/panel-log-sh
 
 const pager = 'flex size-10 items-center justify-center rounded-lg border border-border bg-card text-foreground hover:bg-secondary disabled:opacity-40'
 
-const when = (iso: string) => new Date(iso).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })
+const when = (iso: string) => new Date(iso).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Istanbul' })
 
 export function ContentHistory({ initial }: { initial: HistoryPage }) {
   const [data, setData] = useState(initial)

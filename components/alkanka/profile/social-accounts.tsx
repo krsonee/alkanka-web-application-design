@@ -176,7 +176,7 @@ function EventItem({ event, entry, verified }: { event: SocialEvent; entry?: MyE
             {event.endsAt && (
               <span className="inline-flex items-center gap-1">
                 <CalendarClock className="size-3.5" aria-hidden />
-                {new Date(event.endsAt).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })} bitiyor
+                {new Date(event.endsAt).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', timeZone: 'Europe/Istanbul' })} bitiyor
               </span>
             )}
             <span>{event.entries} onaylı katılım</span>

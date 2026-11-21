@@ -82,7 +82,7 @@ export function MarketRequests({ requests }: { requests: MarketRequest[] }) {
             <li key={r.id} className={cn('flex flex-col gap-2 rounded-xl border bg-card p-3', r.status === 'beklemede' ? 'border-primary/50' : 'border-border')}>
               <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                 <span className="font-semibold text-foreground">{r.itemName}</span>
-                <span className="text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleString('tr-TR')}</span>
+                <span className="text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' })}</span>
               </div>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
                 <div>

@@ -354,7 +354,7 @@ function Flagged({ flagged }: { flagged: FlaggedMember[] }) {
               <div className="flex min-w-0 flex-1 flex-col">
                 <span className="font-semibold text-foreground">{f.name}</span>
                 <span className="truncate text-xs text-muted-foreground">
-                  {f.email} · kaynak: {f.src} · aynı ağda {f.siblings} hesap · {new Date(f.createdAt).toLocaleDateString('tr-TR')}
+                  {f.email} · kaynak: {f.src} · aynı ağda {f.siblings} hesap · {new Date(f.createdAt).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })}
                 </span>
               </div>
               <button type="button" disabled={pending} className={btn} onClick={() => run(() => setFlagAction(f.userId, false))}>

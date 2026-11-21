@@ -177,7 +177,7 @@ export async function dashExtras(range: { from: Fragment; to: Fragment }, now = 
       null,
     ),
     quiet(async () => {
-      const spend = (await rows<{ month: string }>(sql`SELECT coalesce(sum(cost) FILTER (WHERE created_at > date_trunc('month', now())), 0) AS month FROM studio_jobs`))[0]
+      const spend = (await rows<{ month: string }>(sql`SELECT coalesce(sum(cost) FILTER (WHERE created_at > (date_trunc('month', now() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')), 0) AS month FROM studio_jobs`))[0]
       const cap = Number((await rows<{ value: { monthlyCap?: unknown } | null }>(sql`SELECT value FROM site_content WHERE key = 'studio:budget'`))[0]?.value?.monthlyCap)
       return { month: num(spend?.month), cap: Number.isFinite(cap) && cap > 0 ? cap : null }
     }, null),
