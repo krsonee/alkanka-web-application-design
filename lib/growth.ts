@@ -26,6 +26,11 @@ export function ensureGrowth() {
       user_id text NOT NULL, site_id text NOT NULL, username text NOT NULL, status text NOT NULL DEFAULT 'pending',
       note text, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (user_id, site_id))`)
+    // A sponsor username belongs to one member. The check in linkSponsorAccount alone lets two members through
+    // at the same moment. Left to fail quietly: rows that already clash must not take the whole module down.
+    await rows(sql`CREATE UNIQUE INDEX IF NOT EXISTS sponsor_accounts_username ON sponsor_accounts (site_id, lower(username)) WHERE status <> 'rejected'`).catch(
+      (error) => console.error('sponsor_accounts_username index could not be created:', error),
+    )
     await rows(sql`CREATE TABLE IF NOT EXISTS wager_entries (
       site_id text NOT NULL, username_key text NOT NULL, period text NOT NULL, amount numeric NOT NULL,
       updated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (site_id, username_key, period))`)
@@ -260,6 +265,14 @@ export type SponsorAccount = {
   updatedAt: string
 }
 
+const USERNAME_TAKEN = 'Bu kullanıcı adı başka bir üyeye bağlı. Hata olduğunu düşünüyorsan şikâyet aç.'
+
+/** The database refused a second member for the same sponsor username (`sponsor_accounts_username`). */
+function usernameClash(error: unknown) {
+  const e = error as { code?: string; cause?: { code?: string } }
+  return (e?.code ?? e?.cause?.code) === '23505'
+}
+
 const mapAccount = (x: Record<string, unknown>): SponsorAccount => ({
   userId: String(x.user_id),
   userName: String(x.name ?? 'Üye'),
@@ -277,14 +290,38 @@ export async function linkSponsorAccount(userId: string, siteId: string, rawUser
   await ensureGrowth()
   const taken = await rows(sql`SELECT 1 FROM sponsor_accounts WHERE site_id = ${siteId} AND lower(username) = lower(${username})
     AND user_id <> ${userId} AND status <> 'rejected'`)
-  if (taken.length) throw new Error('Bu kullanıcı adı başka bir üyeye bağlı. Hata olduğunu düşünüyorsan şikâyet aç.')
+  if (taken.length) throw new Error(USERNAME_TAKEN)
+  // Sending the same approved username again changes nothing; only a different username goes back to staff.
   await rows(sql`INSERT INTO sponsor_accounts (user_id, site_id, username) VALUES (${userId}, ${siteId}, ${username})
-    ON CONFLICT (user_id, site_id) DO UPDATE SET username = EXCLUDED.username, status = 'pending', note = NULL, updated_at = now()`)
+    ON CONFLICT (user_id, site_id) DO UPDATE SET username = EXCLUDED.username,
+      status = CASE WHEN lower(sponsor_accounts.username) = lower(EXCLUDED.username) AND sponsor_accounts.status = 'approved' THEN 'approved' ELSE 'pending' END,
+      note = CASE WHEN lower(sponsor_accounts.username) = lower(EXCLUDED.username) AND sponsor_accounts.status = 'approved' THEN sponsor_accounts.note ELSE NULL END,
+      updated_at = now()`).catch((error) => {
+    // Another member took the name between the check above and this write.
+    if (usernameClash(error)) throw new Error(USERNAME_TAKEN)
+    throw error
+  })
+  // Coupon requests still waiting for staff carry the member's one linked account, not the name it had before.
+  const { followSponsorAccount } = await import('@/lib/goal-rewards')
+  await followSponsorAccount(userId, siteId, username)
 }
 
 export async function removeSponsorAccount(userId: string, siteId: string) {
   await ensureGrowth()
+  const { openSponsorRequests } = await import('@/lib/goal-rewards')
+  if ((await openSponsorRequests(userId, siteId)) > 0) {
+    throw new Error('Bu sponsorda kontrol bekleyen kupon talebin var; talep sonuçlanana kadar hesap kaldırılamaz. Kullanıcı adın yanlışsa doğrusunu yazıp yeniden bağla.')
+  }
   await rows(sql`DELETE FROM sponsor_accounts WHERE user_id = ${userId} AND site_id = ${siteId}`)
+}
+
+/** The accounts these members linked at one sponsor; the panel shows them next to coupon requests. */
+export async function sponsorAccountsOf(siteId: string, userIds: string[]) {
+  if (userIds.length === 0) return []
+  await ensureGrowth()
+  const r = await rows(sql`SELECT * FROM sponsor_accounts WHERE site_id = ${siteId}
+    AND user_id IN (SELECT jsonb_array_elements_text(${JSON.stringify([...new Set(userIds)])}::jsonb))`)
+  return r.map(mapAccount)
 }
 
 export async function mySponsorAccounts(userId: string) {
@@ -303,7 +340,11 @@ export async function adminSponsorAccounts() {
 export async function setSponsorAccountStatus(userId: string, siteId: string, status: 'approved' | 'rejected', note: string) {
   await ensureGrowth()
   await rows(sql`UPDATE sponsor_accounts SET status = ${status}, note = ${note.trim().slice(0, 200) || null}, updated_at = now()
-    WHERE user_id = ${userId} AND site_id = ${siteId}`)
+    WHERE user_id = ${userId} AND site_id = ${siteId}`).catch((error) => {
+    // Bringing a rejected account back while another member holds the same username.
+    if (usernameClash(error)) throw new Error('Bu kullanıcı adı şu an başka bir üyede kayıtlı. Önce o kaydı reddet, sonra bunu onayla.')
+    throw error
+  })
 }
 
 /** Accepts "kullaniciadi,tutar" lines (comma, semicolon or tab). Replaces the period's data for that site. */

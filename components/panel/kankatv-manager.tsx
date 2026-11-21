@@ -86,7 +86,8 @@ export function KankaTvManager({
   status: TvBotStatus
   stats: TvStats
   targets: MirrorTarget[]
-  cronUrl: string
+  /** The address carries the cron key, so only the owner account is sent it. */
+  cronUrl: string | null
 }) {
   const [saveState, save, saving] = useActionState(saveTvAction, {})
   const [testState, test, testing] = useActionState(testGoalBotAction, {})
@@ -152,11 +153,13 @@ export function KankaTvManager({
         </div>
         <Status state={scanState} />
         <Status state={testState} />
+        {cronUrl ? (
         <div className={label}>
           <span>Dış zamanlayıcı adresi (isteğe bağlı)</span>
           <SecretUrl url={cronUrl} label="KankaTV dış zamanlayıcı adresi" />
           <span className={hint}>Eklemezsen gol uyarıları ve tahmin ödemeleri sitede ziyaretçi oldukça işler. cron-job.org gibi bir servise eklersen ziyaretçi olmasa da işler; ama her çağrı veritabanını uyandırır. Veritabanı kullandıkça öde planında, uyanık kaldığı her saat faturaya yazılır; “her dakika” seçersen hiç uyumaz. Adres gizli anahtar içerir, kimseyle paylaşma.</span>
         </div>
+        ) : null}
       </Card>
 
       <form action={save} className="flex flex-col gap-5">

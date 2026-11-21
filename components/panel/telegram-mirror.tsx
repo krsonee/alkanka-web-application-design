@@ -34,7 +34,8 @@ type Props = {
   targets: MirrorTarget[]
   sources: MirrorSource[]
   log: MirrorLog[]
-  cronUrl: string
+  /** The address carries the cron key, so only the owner account is sent it. */
+  cronUrl: string | null
   sharedRules?: ReplaceRule[]
   links?: LinkChoice[]
 }
@@ -115,7 +116,7 @@ function BotCard({ bot, targets }: { bot: MirrorBot; targets: MirrorTarget[] }) 
             <a href={`https://t.me/${bot.username}`} target="_blank" rel="noreferrer" className="text-sm font-semibold text-foreground hover:underline">
               {bot.name} <span className="font-normal text-muted-foreground">@{bot.username}</span>
             </a>
-            <span className="font-mono text-xs text-muted-foreground">{bot.tokenHint}</span>
+            {bot.tokenHint ? <span className="font-mono text-xs text-muted-foreground">{bot.tokenHint}</span> : null}
           </div>
         </div>
         {owner ? (
@@ -163,6 +164,7 @@ export function TelegramMirror({ bots, targets, sources, log, cronUrl, sharedRul
   const [botState, botAction, addingBot] = useActionState<ActionState, FormData>(addBotAction, {})
   const [addState, addAction, adding] = useActionState<ActionState, FormData>(addSourceAction, {})
   const [runState, runAction, running] = useActionState<ActionState>(runMirrorAction, {})
+  const { owner } = useTgAccess()
   const activeTargets = targets.filter((t) => t.active).length
   const targetTitle = (id: number | null) => (id == null ? 'Tüm kanallar' : (targets.find((t) => t.id === id)?.title ?? 'Silinmiş kanal'))
 
@@ -190,26 +192,34 @@ export function TelegramMirror({ bots, targets, sources, log, cronUrl, sharedRul
         </div>
         <Feedback state={runState} />
 
-        <form action={botAction} className="flex flex-col gap-2 rounded-xl bg-secondary p-4">
-          <label className="flex flex-col gap-1.5 text-sm font-medium text-foreground">
-            Bot ekle
-            <div className="flex gap-2">
-              <input
-                name="token"
-                type="password"
-                autoComplete="off"
-                required
-                placeholder="BotFather token: 123456789:AAH..."
-                className={`${input} min-w-0 flex-1 font-mono`}
-              />
-              <button disabled={addingBot} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">
-                {addingBot ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Plus className="size-4" aria-hidden />}
-                Bağla
-              </button>
-            </div>
-          </label>
-          <Feedback state={botState} />
-        </form>
+        {owner ? (
+          <form action={botAction} className="flex flex-col gap-2 rounded-xl bg-secondary p-4">
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-foreground">
+              Bot ekle
+              <div className="flex gap-2">
+                <input
+                  name="token"
+                  type="password"
+                  autoComplete="off"
+                  required
+                  placeholder="BotFather token: 123456789:AAH..."
+                  className={`${input} min-w-0 flex-1 font-mono`}
+                />
+                <button disabled={addingBot} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+                  {addingBot ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Plus className="size-4" aria-hidden />}
+                  Bağla
+                </button>
+              </div>
+            </label>
+            <Feedback state={botState} />
+          </form>
+        ) : (
+          <p className="flex items-start gap-2 rounded-xl bg-secondary p-4 text-sm leading-relaxed text-muted-foreground">
+            <KeyRound className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+            Bot tokenını ve gizli otomatik kontrol adresini sadece ana yönetici görür, ekler ve değiştirir. Bağlı botlara hedef kanal ekleyebilir, kaynakları ve kuralları
+            düzenleyebilirsin.
+          </p>
+        )}
 
         {bots.length ? (
           <ul className="grid gap-3 lg:grid-cols-2">
@@ -218,17 +228,21 @@ export function TelegramMirror({ bots, targets, sources, log, cronUrl, sharedRul
             ))}
           </ul>
         ) : (
-          <p className="text-sm leading-relaxed text-muted-foreground">Henüz bağlı bot yok. Yukarıdaki rehberin ilk dört adımını takip et.</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            {owner ? 'Henüz bağlı bot yok. Yukarıdaki rehberin ilk dört adımını takip et.' : 'Henüz bağlı bot yok. İlk botu ana yönetici bağlar.'}
+          </p>
         )}
 
-        <div className="flex flex-wrap items-center gap-3 rounded-xl bg-secondary p-3 text-sm">
-          <KeyRound className="size-4 shrink-0 text-primary" aria-hidden />
-          <span className="text-foreground">Otomatik kontrol adresi:</span>
-          <SecretUrl url={cronUrl} label="Otomatik kontrol adresi" />
-          <form action={rotateCronKeyAction}>
-            <button className={ghostBtn}>Anahtarı yenile</button>
-          </form>
-        </div>
+        {owner && cronUrl ? (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl bg-secondary p-3 text-sm">
+            <KeyRound className="size-4 shrink-0 text-primary" aria-hidden />
+            <span className="text-foreground">Otomatik kontrol adresi:</span>
+            <SecretUrl url={cronUrl} label="Otomatik kontrol adresi" />
+            <form action={rotateCronKeyAction}>
+              <button className={ghostBtn}>Anahtarı yenile</button>
+            </form>
+          </div>
+        ) : null}
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[360px_1fr]">

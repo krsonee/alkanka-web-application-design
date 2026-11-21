@@ -29,7 +29,7 @@ type Row = PanelModule | PanelView | 'account' | 'audit' | 'staff'
  * Screens and settings that sit inside a section, so the menu filter alone cannot find them.
  * `words` are what people type when they look for one; a `moved` tab opens wherever this account sees it.
  */
-const SETTINGS: ({ title: string; words?: string; query?: string; anyOf?: PanelModule[] } & ({ row: Row } | { moved: MovedTab }))[] = [
+const SETTINGS: ({ title: string; words?: string; query?: string; anyOf?: PanelModule[]; owner?: true } & ({ row: Row } | { moved: MovedTab }))[] = [
   { title: 'Telegram premium emoji', words: 'emoji paketi addemoji özel emoji hareketli emoji post', row: 'telegram', query: 's=post-new', anyOf: ['telegram', 'tg_posts'] },
   { title: 'Telegram kaynakları', words: 'kaynak kanal kaynak grup botların okuduğu liste', row: 'telegram', query: 's=sources' },
   { title: 'Özel oran botu paylaşım kuralı', words: 'alakasız post oran içermeyen atlandı anahtar kelime video albüm görselsiz bekleyen', row: 'telegram', query: 's=odds' },
@@ -56,7 +56,9 @@ const SETTINGS: ({ title: string; words?: string; query?: string; anyOf?: PanelM
   { title: '404 kayıtları', words: 'bulunamayan sayfa kırık link', row: 'seo' },
   { title: 'Hazır rehber yazıları', words: 'hazır yazı taslak ekle rehber blog bölüm', row: 'seo' },
   { title: 'Arama motoru doğrulaması', words: 'google bing yandex search console', row: 'seo' },
-  { title: 'Stüdyo aylık tavanı', words: 'harcama bütçe limit', row: 'studio' },
+  { title: 'Stüdyo aylık tavanı', words: 'harcama bütçe limit', row: 'studio', owner: true },
+  { title: 'Telegram bot tokenı ve gizli cron adresi', words: 'bot ekle token botfather anahtarı yenile otomatik kontrol adresi cron', row: 'telegram', query: 's=mirror', owner: true },
+  { title: 'Sosyal medya API anahtarları', words: 'api key bearer token youtube twitch x doğrulama bağlantısı', row: 'social', owner: true },
   { title: 'Stüdyo marka alanları', words: 'sponsor site ayrı sayfa üretimler arşiv liste tür süzgeç karışmasın', row: 'studio' },
   { title: 'Stüdyo görselini slider\'a ekle', words: 'banner slayt gönder aktar', row: 'studio' },
   { title: 'Stüdyo hazır tarifler ve isteği geliştir', words: 'form konu sahne karakter stil tarif şablon prompt talimat', row: 'studio' },
@@ -179,6 +181,7 @@ export async function panelSearchAction(raw: string): Promise<SearchHit[]> {
   for (const s of SETTINGS) {
     if (hits.length >= SETTING_LIMIT) break
     if (!has(`${s.title} ${s.words ?? ''}`)) continue
+    if (s.owner && !session.isOwner) continue
     const row = 'moved' in s ? tabHome(s.moved, can) : (s.anyOf ? s.anyOf.some(can) : opens(s.row)) ? s.row : null
     if (!row) continue
     hits.push({ kind: 'setting', id: s.title, title: s.title, detail: '', ...address(row, s.query) })

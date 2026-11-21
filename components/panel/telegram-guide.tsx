@@ -6,7 +6,8 @@ type Step = { title: string; body: ReactNode }
 
 const code = 'rounded bg-background px-1.5 py-0.5 font-mono text-xs text-foreground'
 
-function steps(cronUrl: string): Step[] {
+/** `cronUrl` is `null` for every account but the owner: the address carries a secret key. */
+function steps(cronUrl: string | null): Step[] {
   return [
     {
       title: 'Telegram hesabı ve kendi kanalını aç',
@@ -121,7 +122,7 @@ function steps(cronUrl: string): Step[] {
           <li>
             URL alanına aşağıdaki adresi yapıştır. Adres ekranda kapalı durur, <b>Kopyala</b> ile al:
             <span className="mt-1 flex">
-              <SecretUrl url={cronUrl} label="Otomatik kontrol adresi" />
+              {cronUrl ? <SecretUrl url={cronUrl} label="Otomatik kontrol adresi" /> : <b>Bu adresi sadece ana yönetici görür; bu adımı o yapar.</b>}
             </span>
           </li>
           <li>
@@ -159,7 +160,7 @@ function steps(cronUrl: string): Step[] {
   ]
 }
 
-export function TelegramGuide({ cronUrl, open }: { cronUrl: string; open: boolean }) {
+export function TelegramGuide({ cronUrl, open }: { cronUrl: string | null; open: boolean }) {
   return (
     <details open={open} className="group rounded-2xl border border-border bg-card">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 [&::-webkit-details-marker]:hidden">

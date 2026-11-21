@@ -1,5 +1,5 @@
 import 'server-only'
-import { rows, sql } from '@/lib/db'
+import { pool, rows, sql } from '@/lib/db'
 import { ruleDoneFor } from '@/lib/goal-play'
 import { creditClaimed, debitClaimed } from '@/lib/member'
 import { trDay, trDayBounds } from '@/lib/tr-time'
@@ -449,26 +449,63 @@ export async function submitGoalCoupon(user: { id: string; name: string }, match
   if (!account) throw new Error(`Önce ${site} hesabını Alkanka'ya bağla.`)
   if (account.status === 'rejected') throw new Error(`${site} hesabın onaylanmadı. Doğru kullanıcı adıyla yeniden bağla.`)
 
-  const [mine] = await rows(sql`SELECT approval FROM goal_picks WHERE match_id = ${key} AND user_id = ${user.id}`)
-  if (mine && mine.approval !== 'pending') throw new Error('Bu maçtaki talebin kontrol edildi; kupon numarası artık değiştirilemez.')
-  const [used] = await rows(sql`SELECT 1 FROM goal_picks p JOIN goal_matches mm ON mm.id = p.match_id JOIN goal_events ee ON ee.id = mm.event_id
-    WHERE ee.site_id = ${Number(m.site_id)} AND lower(p.coupon) = lower(${coupon.value}) AND p.user_id <> ${user.id} LIMIT 1`)
-  if (used) throw new Error('Bu kupon numarası başka bir üye tarafından girilmiş. Numarayı kontrol et.')
-  let saved: Record<string, unknown>[]
+  const siteId = Number(m.site_id)
+  const client = await pool.connect()
   try {
-    saved = await rows(sql`INSERT INTO goal_picks (match_id, user_id, user_name, side, site_username, coupon, approval)
-      SELECT m.id, ${user.id}, ${user.name.slice(0, 40)}, 'all', ${account.username}, ${coupon.value}, 'pending'
-      FROM goal_matches m JOIN goal_events e ON e.id = m.event_id
-      WHERE m.id = ${key} AND m.status = 'open' AND m.kickoff > now() AND e.active AND e.category = 'sponsor'
-      ON CONFLICT (match_id, user_id) DO UPDATE SET coupon = EXCLUDED.coupon, site_username = EXCLUDED.site_username, created_at = now()
-        WHERE goal_picks.approval = 'pending'
-      RETURNING match_id`)
+    await client.query('BEGIN')
+    // One coupon belongs to one member at a sponsor, but the unique index only covers a single match.
+    // Without this lock two members entering the same number for different matches at the same moment both pass the check.
+    await client.query(`SELECT pg_advisory_xact_lock(hashtextextended('goal-coupon:' || $1::text || ':' || lower($2::text), 0))`, [siteId, coupon.value])
+    const mine = await client.query(`SELECT approval FROM goal_picks WHERE match_id = $1::int AND user_id = $2::text`, [key, user.id])
+    if (mine.rows[0] && mine.rows[0].approval !== 'pending') throw new Error('Bu maçtaki talebin kontrol edildi; kupon numarası artık değiştirilemez.')
+    const used = await client.query(
+      `SELECT 1 FROM goal_picks p JOIN goal_matches mm ON mm.id = p.match_id JOIN goal_events ee ON ee.id = mm.event_id
+       WHERE ee.site_id = $1::int AND lower(p.coupon) = lower($2::text) AND p.user_id <> $3::text LIMIT 1`,
+      [siteId, coupon.value, user.id],
+    )
+    if (used.rowCount) throw new Error('Bu kupon numarası başka bir üye tarafından girilmiş. Numarayı kontrol et.')
+    const saved = await client.query(
+      `INSERT INTO goal_picks (match_id, user_id, user_name, side, site_username, coupon, approval)
+       SELECT m.id, $2::text, $3::text, 'all', $4::text, $5::text, 'pending'
+       FROM goal_matches m JOIN goal_events e ON e.id = m.event_id
+       WHERE m.id = $1::int AND m.status = 'open' AND m.kickoff > now() AND e.active AND e.category = 'sponsor'
+       ON CONFLICT (match_id, user_id) DO UPDATE SET coupon = EXCLUDED.coupon, site_username = EXCLUDED.site_username, created_at = now()
+         WHERE goal_picks.approval = 'pending'
+       RETURNING match_id`,
+      [key, user.id, user.name.slice(0, 40), account.username, coupon.value],
+    )
+    if (!saved.rowCount) throw new Error(`${CLOSED} Kupon numarası maç başlayana kadar girilir.`)
+    await client.query('COMMIT')
+    return mine.rows[0] ? 'updated' : 'saved'
   } catch (error) {
+    await client.query('ROLLBACK').catch(() => {})
     if ((error as { code?: string })?.code === '23505') throw new Error('Bu kupon numarası bu maç için zaten girilmiş.')
     throw error
+  } finally {
+    client.release()
   }
-  if (!saved.length) throw new Error(`${CLOSED} Kupon numarası maç başlayana kadar girilir.`)
-  return mine ? 'updated' : 'saved'
+}
+
+/**
+ * A member has one account at a sponsor. When they correct it, the requests staff has not looked at yet
+ * follow the new username, so one member never shows up under several names; a checked request keeps the
+ * username staff judged it with.
+ */
+export async function followSponsorAccount(userId: string, siteSlug: string, username: string) {
+  await ensureGoal()
+  await rows(sql`UPDATE goal_picks p SET site_username = ${username}
+    FROM goal_matches m JOIN goal_events e ON e.id = m.event_id
+    WHERE m.id = p.match_id AND p.user_id = ${userId} AND p.approval = 'pending' AND p.coupon IS NOT NULL
+      AND e.category = 'sponsor' AND e.site_slug = ${siteSlug} AND p.site_username IS DISTINCT FROM ${username}`)
+}
+
+/** How many coupon requests of the member at this sponsor staff has not checked yet. */
+export async function openSponsorRequests(userId: string, siteSlug: string) {
+  await ensureGoal()
+  const [r] = await rows(sql`SELECT count(*) AS n FROM goal_picks p JOIN goal_matches m ON m.id = p.match_id JOIN goal_events e ON e.id = m.event_id
+    WHERE p.user_id = ${userId} AND p.approval = 'pending' AND p.coupon IS NOT NULL AND m.status <> 'void'
+      AND e.category = 'sponsor' AND e.site_slug = ${siteSlug}`)
+  return Number(r?.n ?? 0)
 }
 
 // --- Scoring and paying --------------------------------------------------
@@ -634,6 +671,13 @@ export async function goalPicks(matchId: number, limit = 2000): Promise<{ event:
             WHERE p2.user_id = p.user_id AND e2.category = 'sponsor' AND p2.approval = 'rejected') AS invalid
         FROM goal_picks p LEFT JOIN goal_flags f ON f.user_id = p.user_id WHERE p.match_id = ${key} ORDER BY p.created_at ASC LIMIT ${limit}`)
     : await rows(sql`SELECT p.* FROM goal_picks p WHERE p.match_id = ${key} ORDER BY p.created_at ASC LIMIT ${limit}`)
+  // Staff sees next to each request which account the member has linked right now and whether it is approved.
+  const linked = new Map<string, { username: string; status: GoalApproval }>()
+  if (sponsor && e.site_slug && picks.length > 0) {
+    const { sponsorAccountsOf } = await import('@/lib/growth')
+    const found = await sponsorAccountsOf(String(e.site_slug), picks.map((p) => String(p.user_id))).catch(() => [])
+    for (const a of found) linked.set(a.userId, { username: a.username, status: a.status })
+  }
   return {
     event: eventOf(e),
     match: { ...matchOf(m), picks: picks.length },
@@ -642,6 +686,7 @@ export async function goalPicks(matchId: number, limit = 2000): Promise<{ event:
       userName: String(p.user_name),
       side: sideOf(p.side),
       siteUsername: str(p.site_username),
+      accountNow: linked.get(String(p.user_id)) ?? null,
       coupon: str(p.coupon),
       approval: isGoalApproval(p.approval) ? p.approval : 'pending',
       rejectReason: str(p.reject_reason),
