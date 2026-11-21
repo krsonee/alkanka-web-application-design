@@ -83,7 +83,11 @@ export async function setFlagAction(userId: string, flagged: boolean): Promise<R
 
 export async function reviewSponsorAccountAction(userId: string, siteId: string, approve: boolean, note: string): Promise<Result> {
   if (!(await canPanel('growth'))) return denied
-  await setSponsorAccountStatus(userId, siteId, approve ? 'approved' : 'rejected', note)
+  try {
+    await setSponsorAccountStatus(userId, siteId, approve ? 'approved' : 'rejected', note)
+  } catch (error) {
+    return fail(error)
+  }
   revalidatePath('/panel')
   revalidatePath('/siralama')
   await logPanel('growth', approve ? 'Sponsor hesabı onaylandı' : 'Sponsor hesabı reddedildi', await memberTag(userId), `sponsor ${siteId}${note ? ` · ${note}` : ''}`)

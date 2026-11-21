@@ -1,6 +1,7 @@
 import 'server-only'
 import { generateText } from 'ai'
 import sharp from 'sharp'
+import { assertPublicUrl, pointsInside } from '@/lib/public-address'
 import { storeFile } from '@/lib/studio'
 
 const VISION_MODEL = 'google/gemini-3.5-flash'
@@ -148,6 +149,9 @@ async function fetchLimited(url: string, accept = '*/*', maxBytes = MAX_BYTES) {
   const jar = new Map<string, string>()
   let current = url
   for (let hop = 0; hop < 8; hop++) {
+    // The first address, every redirect and every address read out of the page pass through here:
+    // a site someone typed must not be able to send this server to an inside address.
+    await assertPublicUrl(current)
     const res = await fetch(current, {
       headers: {
         'User-Agent': UA,
@@ -265,6 +269,7 @@ async function faviconFallback(domain: string) {
 
 export async function extractBrand(domainInput: string): Promise<ExtractedBrand> {
   const domain = normalizeDomain(domainInput)
+  if (await pointsInside(domain)) throw new Error('Geçersiz domain.')
   const warnings: string[] = []
   const page = await fetchPage(domain)
   if (!page) {
