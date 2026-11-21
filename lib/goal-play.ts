@@ -6,11 +6,17 @@ import { trDayBounds } from '@/lib/tr-time'
 
 let ready: Promise<unknown> | null = null
 
-/** Minutes a member spent on a game's page, one row per member, Turkey day and game. */
+/**
+ * Minutes a member spent on a game's page, one row per member, Turkey day and game. `play_gate` holds
+ * when each member was last credited a minute, in any game.
+ */
 export function ensurePlay() {
-  ready ??= rows(sql`CREATE TABLE IF NOT EXISTS play_minutes (
+  ready ??= (async () => {
+    await rows(sql`CREATE TABLE IF NOT EXISTS play_minutes (
       user_id text NOT NULL, day date NOT NULL, game text NOT NULL, minutes int NOT NULL DEFAULT 0,
-      last_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (user_id, day, game))`).catch((error) => {
+      last_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (user_id, day, game))`)
+    await rows(sql`CREATE TABLE IF NOT EXISTS play_gate (user_id text PRIMARY KEY, last_at timestamptz NOT NULL DEFAULT now())`)
+  })().catch((error) => {
     ready = null
     throw error
   })
@@ -38,15 +44,19 @@ async function minutesWanted() {
 /**
  * Counts one minute for the game whose page the member has open. Rides on the minute ping every member
  * already sends. A member is credited at most one minute per 50 seconds across all games, so several
- * open tabs or a hurried ping add nothing.
+ * open tabs or a hurried ping add nothing. The member's gate row decides it: pings arriving at the same
+ * moment queue on that row, and only the first one finds it old enough.
  */
 export async function notePlayMinute(userId: string, game: unknown) {
   if (typeof game !== 'string' || !GAMES.has(game)) return
   if (!(await minutesWanted())) return
   await ensurePlay()
-  await rows(sql`INSERT INTO play_minutes (user_id, day, game, minutes, last_at)
-    SELECT ${userId}, (now() AT TIME ZONE 'Europe/Istanbul')::date, ${game}, 1, now()
-    WHERE NOT EXISTS (SELECT 1 FROM play_minutes p WHERE p.user_id = ${userId} AND p.last_at > now() - interval '50 seconds')
+  await rows(sql`WITH gate AS (
+      INSERT INTO play_gate (user_id, last_at) VALUES (${userId}::text, now())
+      ON CONFLICT (user_id) DO UPDATE SET last_at = now() WHERE play_gate.last_at <= now() - interval '50 seconds'
+      RETURNING user_id)
+    INSERT INTO play_minutes (user_id, day, game, minutes, last_at)
+    SELECT gate.user_id, (now() AT TIME ZONE 'Europe/Istanbul')::date, ${game}::text, 1, now() FROM gate
     ON CONFLICT (user_id, day, game) DO UPDATE SET minutes = play_minutes.minutes + 1, last_at = now()`)
 }
 

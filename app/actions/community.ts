@@ -36,13 +36,19 @@ export async function linkReferralAction(): Promise<ActionResult> {
   if (!code && originDone) return { ok: true }
   const member = await getMember()
   if (!member) return { ok: true }
-  if (originDone !== member.id) {
+  // The cookie only saves a query on ordinary page loads, and the visitor can set it. With an invite code
+  // the network is recorded first whatever the cookie says, because the same-network rule reads that record.
+  if (code || originDone !== member.id) {
     const h = await headers()
     const ip = h.get('x-forwarded-for') ?? h.get('x-real-ip')
-    const isNew = await recordOrigin(member.id, store.get('alk_src')?.value ?? 'direkt', hashNetwork(ip)).catch((error) => {
+    let isNew: boolean
+    try {
+      isNew = await recordOrigin(member.id, store.get('alk_src')?.value ?? 'direkt', hashNetwork(ip))
+    } catch (error) {
+      // Nothing is marked as done and the invite code stays, so the next page load tries again.
       console.error('[growth] kaynak kaydedilemedi', error)
-      return false
-    })
+      return { ok: true }
+    }
     if (isNew) store.set('alk_new', '1', { maxAge: 60 * 10, path: '/', sameSite: 'lax', secure: true })
     store.set('alk_org', member.id, { maxAge: 60 * 60 * 24 * 365, path: '/', sameSite: 'lax', secure: true, httpOnly: true })
   }

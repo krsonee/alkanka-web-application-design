@@ -1,8 +1,8 @@
 import 'server-only'
 import { createHash } from 'node:crypto'
-import { rows, sql } from '@/lib/db'
+import { pool, rows, sql } from '@/lib/db'
 import { driftMessage, wholeInRange } from '@/lib/drift'
-import { credit } from '@/lib/member'
+import { creditClaimed } from '@/lib/member'
 import { noteCoins } from '@/lib/wallet-ledger'
 
 export type WithdrawStatus = 'pending' | 'approved' | 'rejected' | 'fake'
@@ -57,6 +57,15 @@ export const IMAGE_TYPES: Record<string, string> = { 'image/png': 'png', 'image/
 const REJECT_LIMIT = 3
 const REJECT_WINDOW_DAYS = 30
 const REJECT_BLOCK_DAYS = 14
+
+const SHARE_LOCK = 6_310_552
+
+const TAKEN = {
+  pending: 'Onay bekleyen bir paylaşımın var. Sonuçlanınca yenisini gönderebilirsin.',
+  owner: 'Bu site kullanıcı adı başka bir üyeye kayıtlı.',
+  image: 'Bu ekran görüntüsü daha önce yüklenmiş.',
+  payout: 'Bu çekim zaten paylaşılmış.',
+}
 
 let ready: Promise<unknown> | null = null
 function ensure() {
@@ -237,7 +246,7 @@ export async function checkWithdrawShare(user: { id: string }, input: ShareInput
   if (paidAt.getTime() < Date.now() - s.maxAgeDays * 86_400_000) throw new Error(`Sadece son ${s.maxAgeDays} günde yapılan çekimleri paylaşabilirsin.`)
 
   const [pending] = await rows(sql`SELECT 1 FROM withdraw_shares WHERE user_id = ${user.id} AND status = 'pending' LIMIT 1`)
-  if (pending) throw new Error('Onay bekleyen bir paylaşımın var. Sonuçlanınca yenisini gönderebilirsin.')
+  if (pending) throw new Error(TAKEN.pending)
 
   const [{ n }] = await rows<{ n: string }>(sql`SELECT count(*) AS n FROM withdraw_shares
     WHERE user_id = ${user.id} AND status = 'approved' AND created_at > now() - interval '7 days'`)
@@ -245,24 +254,56 @@ export async function checkWithdrawShare(user: { id: string }, input: ShareInput
 
   const [owner] = await rows<{ user_id: string }>(sql`SELECT user_id FROM withdraw_shares
     WHERE site_id = ${siteId} AND lower(site_username) = lower(${username}) AND status IN ('pending', 'approved') AND user_id <> ${user.id} LIMIT 1`)
-  if (owner) throw new Error('Bu site kullanıcı adı başka bir üyeye kayıtlı.')
+  if (owner) throw new Error(TAKEN.owner)
 
   const hash = createHash('sha256').update(Buffer.from(image.bytes)).digest('hex')
   const [dupImage] = await rows(sql`SELECT 1 FROM withdraw_shares WHERE image_hash = ${hash} LIMIT 1`)
-  if (dupImage) throw new Error('Bu ekran görüntüsü daha önce yüklenmiş.')
+  if (dupImage) throw new Error(TAKEN.image)
 
   const [dupPayout] = await rows(sql`SELECT 1 FROM withdraw_shares
     WHERE site_id = ${siteId} AND amount = ${amount} AND status IN ('pending', 'approved')
       AND abs(extract(epoch FROM paid_at - ${paidAt.toISOString()}::timestamptz)) < 600 LIMIT 1`)
-  if (dupPayout) throw new Error('Bu çekim zaten paylaşılmış.')
+  if (dupPayout) throw new Error(TAKEN.payout)
 
   return { checked: { siteId, siteName, username, amount, paidAt } satisfies CheckedShare, hash }
 }
 
+/**
+ * Writes the share. The rules another share can break are looked at again here, with shares written one
+ * at a time: requests sent at the same moment all pass the first check, and only the first of them may stay.
+ */
 export async function insertWithdrawShare(user: { id: string; name: string }, c: CheckedShare, imagePath: string, hash: string) {
   await ensure()
-  await rows(sql`INSERT INTO withdraw_shares (site_id, site_name, user_id, user_name, site_username, amount, paid_at, image_path, image_hash)
-    VALUES (${c.siteId}, ${c.siteName}, ${user.id}, ${user.name.slice(0, 40)}, ${c.username}, ${c.amount}, ${c.paidAt.toISOString()}, ${imagePath}, ${hash})`)
+  const paidAt = c.paidAt.toISOString()
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    await client.query('SELECT pg_advisory_xact_lock($1)', [SHARE_LOCK])
+    const found = await client.query<{ why: keyof typeof TAKEN | null }>(
+      `SELECT CASE
+         WHEN EXISTS (SELECT 1 FROM withdraw_shares WHERE user_id = $1::text AND status = 'pending') THEN 'pending'
+         WHEN EXISTS (SELECT 1 FROM withdraw_shares WHERE site_id = $2::text AND lower(site_username) = lower($3::text)
+           AND status IN ('pending', 'approved') AND user_id <> $1::text) THEN 'owner'
+         WHEN EXISTS (SELECT 1 FROM withdraw_shares WHERE image_hash = $4::text) THEN 'image'
+         WHEN EXISTS (SELECT 1 FROM withdraw_shares WHERE site_id = $2::text AND amount = $5::numeric AND status IN ('pending', 'approved')
+           AND abs(extract(epoch FROM paid_at - $6::timestamptz)) < 600) THEN 'payout'
+       END AS why`,
+      [user.id, c.siteId, c.username, hash, c.amount, paidAt],
+    )
+    const why = found.rows[0]?.why
+    if (why) throw new Error(TAKEN[why])
+    await client.query(
+      `INSERT INTO withdraw_shares (site_id, site_name, user_id, user_name, site_username, amount, paid_at, image_path, image_hash)
+       VALUES ($1, $2, $3, $4, $5, $6::numeric, $7::timestamptz, $8, $9)`,
+      [c.siteId, c.siteName, user.id, user.name.slice(0, 40), c.username, c.amount, paidAt, imagePath, hash],
+    )
+    await client.query('COMMIT')
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw error
+  } finally {
+    client.release()
+  }
   const { notifyApproval } = await import('@/lib/telegram-bots')
   await notifyApproval('complaint', {
     uye: user.name,
@@ -330,17 +371,35 @@ export async function approveWithdrawal(id: number, reward: WithdrawReward) {
   const coin = wholeInRange(reward.coin ?? 0, 0, 100000, 'Coin ödülü')
   const kp = wholeInRange(reward.kp ?? 0, 0, 100000, 'Puan ödülü')
   const item = String(reward.item ?? '').trim().slice(0, 80) || null
-  const [row] = await rows<Record<string, unknown>>(sql`UPDATE withdraw_shares SET status = 'approved', reward_coin = ${coin}, reward_kp = ${kp},
-    reward_item = ${item}, resolved_at = now() WHERE id = ${id} AND status = 'pending' RETURNING *`)
-  if (!row) throw new Error('Kayıt zaten sonuçlanmış.')
-  const userId = String(row.user_id)
-  if (coin > 0) await credit(userId, coin, 'Çekim paylaşımı ödülü')
+  const [owner] = await rows<{ user_id: string }>(sql`SELECT user_id FROM withdraw_shares WHERE id = ${id}`)
+  if (!owner) throw new Error('Kayıt bulunamadı.')
+  const userId = owner.user_id
   if (kp > 0) {
     const { ensureKp } = await import('@/lib/kanka-puan')
     await ensureKp()
-    await rows(sql`INSERT INTO kp_events (user_id, source, points, ref, note) VALUES (${userId}, 'cekim', ${kp}, ${String(id)}, 'Çekim paylaşımı')
-      ON CONFLICT DO NOTHING`)
   }
+  // The approval, the coins and the points are written together, so a share marked fake at the same
+  // moment finds either all of them to take back or none.
+  const got: { row?: Record<string, unknown> } = {}
+  const won = await creditClaimed(userId, coin, 'Çekim paylaşımı ödülü', async (client) => {
+    const r = await client.query(
+      `UPDATE withdraw_shares SET status = 'approved', reward_coin = $2::int, reward_kp = $3::int, reward_item = $4::text, resolved_at = now()
+       WHERE id = $1::int AND status = 'pending' RETURNING *`,
+      [id, coin, kp, item],
+    )
+    if (!r.rows[0]) return false
+    got.row = r.rows[0]
+    if (kp > 0) {
+      await client.query(
+        `INSERT INTO kp_events (user_id, source, points, ref, note) VALUES ($1::text, 'cekim', $2::int, $3::text, 'Çekim paylaşımı')
+         ON CONFLICT DO NOTHING`,
+        [userId, kp, String(id)],
+      )
+    }
+    return true
+  })
+  const row = got.row
+  if (!won || !row) throw new Error('Kayıt zaten sonuçlanmış.')
   const parts = [coin && `${coin} KC`, kp && `${kp} KP`, item].filter(Boolean)
   const prize = parts.length ? parts.join(' + ') : ''
   await message(userId, 'Çekim paylaşımın onaylandı', prize ? `Ödülün hesabına eklendi: ${prize}.` : 'Paylaşımın Güven merkezinde yayında.')
@@ -374,23 +433,51 @@ export async function rejectWithdrawal(id: number, note: string) {
 /** Marks a share as fake: takes back any reward, hides it and permanently blocks the member from sharing. */
 export async function markWithdrawalFake(id: number) {
   await ensure()
-  const [row] = await rows<{ user_id: string; reward_coin: number; status: string }>(sql`SELECT user_id, reward_coin, status FROM withdraw_shares WHERE id = ${id}`)
-  if (!row) throw new Error('Kayıt bulunamadı.')
-  if (row.status === 'fake') throw new Error('Zaten sahte olarak işaretli.')
-  if (row.status === 'approved') {
-    const coin = Number(row.reward_coin)
-    if (coin > 0) {
-      const [w] = await rows<{ before: number; after: number }>(sql`UPDATE wallets w SET balance = greatest(0, w.balance - ${coin}), updated_at = now()
-        FROM (SELECT user_id, balance FROM wallets WHERE user_id = ${row.user_id} FOR UPDATE) o
-        WHERE w.user_id = o.user_id RETURNING o.balance AS before, w.balance AS after`)
-      if (w) await noteCoins(row.user_id, Number(w.after) - Number(w.before), 'Sahte çekim paylaşımı: ödül geri alındı')
+  const { ensureKp } = await import('@/lib/kanka-puan')
+  await ensureKp()
+  let userId = ''
+  let takenBack = 0
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    // The share stays locked until its reward is back: a second click or an approval arriving at the
+    // same moment waits here and then finds the share already fake.
+    const found = await client.query<{ user_id: string; reward_coin: number; status: string }>(
+      `SELECT user_id, reward_coin, status FROM withdraw_shares WHERE id = $1::int FOR UPDATE`,
+      [id],
+    )
+    const row = found.rows[0]
+    if (!row) throw new Error('Kayıt bulunamadı.')
+    if (row.status === 'fake') throw new Error('Zaten sahte olarak işaretli.')
+    userId = row.user_id
+    if (row.status === 'approved') {
+      const coin = Number(row.reward_coin)
+      if (coin > 0) {
+        const w = await client.query<{ before: number; after: number }>(
+          `UPDATE wallets w SET balance = greatest(0, w.balance - $2::int), updated_at = now()
+           FROM (SELECT user_id, balance FROM wallets WHERE user_id = $1::text FOR UPDATE) o
+           WHERE w.user_id = o.user_id RETURNING o.balance AS before, w.balance AS after`,
+          [userId, coin],
+        )
+        if (w.rows[0]) takenBack = Number(w.rows[0].before) - Number(w.rows[0].after)
+      }
+      await client.query(`DELETE FROM kp_events WHERE user_id = $1::text AND source = 'cekim' AND ref = $2::text`, [userId, String(id)])
     }
-    await rows(sql`DELETE FROM kp_events WHERE user_id = ${row.user_id} AND source = 'cekim' AND ref = ${String(id)}`).catch(() => {})
+    await client.query(`UPDATE withdraw_shares SET status = 'fake', note = 'Sahte paylaşım', resolved_at = now() WHERE id = $1::int`, [id])
+    await client.query(
+      `INSERT INTO withdraw_blocks (user_id, until, reason) VALUES ($1::text, NULL, 'Sahte paylaşım')
+       ON CONFLICT (user_id) DO UPDATE SET until = NULL, reason = EXCLUDED.reason`,
+      [userId],
+    )
+    await client.query('COMMIT')
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw error
+  } finally {
+    client.release()
   }
-  await rows(sql`UPDATE withdraw_shares SET status = 'fake', note = 'Sahte paylaşım', resolved_at = now() WHERE id = ${id}`)
-  await rows(sql`INSERT INTO withdraw_blocks (user_id, until, reason) VALUES (${row.user_id}, NULL, 'Sahte paylaşım')
-    ON CONFLICT (user_id) DO UPDATE SET until = NULL, reason = EXCLUDED.reason`)
-  await message(row.user_id, 'Çekim paylaşımın sahte olarak işaretlendi', 'Verilen ödül geri alındı ve çekim paylaşımı hesabın için kapatıldı.')
+  if (takenBack) await noteCoins(userId, -takenBack, 'Sahte çekim paylaşımı: ödül geri alındı')
+  await message(userId, 'Çekim paylaşımın sahte olarak işaretlendi', 'Verilen ödül geri alındı ve çekim paylaşımı hesabın için kapatıldı.')
   return 'Sahte olarak işaretlendi, ödül geri alındı, üye kalıcı engellendi.'
 }
 

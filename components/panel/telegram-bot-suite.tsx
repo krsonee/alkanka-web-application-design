@@ -3,7 +3,7 @@
 
 import { askConfirm } from '@/components/panel/confirm-dialog'
 import { KnownChatField } from '@/components/panel/tg-chat-field'
-import { useActionState, useTransition, useState } from 'react'
+import { startTransition, useActionState, useTransition, useState } from 'react'
 import { BellRing, Loader2, Pencil, Plus, Send, Share2, Trash2, Trophy } from 'lucide-react'
 import {
   deleteShareRuleAction,
@@ -192,25 +192,23 @@ function ShareRuleCard({ rule, targets, links }: { rule: ShareRule; targets: Mir
             <Pencil className="size-4" aria-hidden="true" />
             {open ? 'Kapat' : 'Düzenle'}
           </button>
-          <form
-            action={delAction}
-            onSubmit={(e) => {
-              void askConfirm(`"${rule.name}" sponsoru silinsin mi?`).then((ok) => {
-      if (!ok) e.preventDefault()
-    })
-  }}
+          <button
+            type="button"
+            disabled={deleting}
+            aria-label={`${rule.name} sponsorunu sil`}
+            onClick={() => {
+              void askConfirm(`"${rule.name}" sponsoru silinsin mi? Bu işlem geri alınamaz.`).then((ok) => {
+                if (!ok) return
+                const form = new FormData()
+                form.set('id', String(rule.id))
+                startTransition(() => delAction(form))
+              })
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-destructive/40 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-60"
           >
-            <input type="hidden" name="id" value={rule.id} />
-            <button
-              type="submit"
-              disabled={deleting}
-              aria-label={`${rule.name} sponsorunu sil`}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-destructive/40 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-60"
-            >
-              {deleting ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Trash2 className="size-4" aria-hidden="true" />}
-              Sil
-            </button>
-          </form>
+            {deleting ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Trash2 className="size-4" aria-hidden="true" />}
+            Sil
+          </button>
         </div>
       </div>
       <Status state={delState} />

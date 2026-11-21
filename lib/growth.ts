@@ -123,6 +123,12 @@ export async function isFlagged(userId: string) {
   return r.length > 0
 }
 
+export async function originKnown(userId: string) {
+  await ensureGrowth()
+  const r = await rows(sql`SELECT 1 FROM member_origin WHERE user_id = ${userId}`)
+  return r.length > 0
+}
+
 export async function sameNetwork(a: string, b: string) {
   await ensureGrowth()
   const r = await rows(sql`SELECT 1 FROM member_origin x JOIN member_origin y ON x.ip_hash = y.ip_hash
