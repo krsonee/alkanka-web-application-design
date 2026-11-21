@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -13,6 +13,7 @@ import { useTourOpen } from './app/site-tour'
 const PREVIEW_SECONDS = 5
 const SOFT_PROMPT_SECONDS = 25
 const DISMISS_KEY = 'alkanka:guest-prompt-dismissed'
+const GATE_SPACE_VAR = '--guest-gate-h'
 
 const MEMBER_ONLY = ['/gorevler', '/tahminler', '/biletler', '/turnuvalar', '/market', '/rozetler', '/oyunlar', '/siralama', '/kankatv', '/profil']
 
@@ -33,6 +34,7 @@ export function GuestGate() {
   const { member, loading } = usePoints()
   const [remaining, setRemaining] = useState(PREVIEW_SECONDS)
   const [dismissed, setDismissed] = useState(false)
+  const cardRef = useRef<HTMLDivElement>(null)
   const touring = useTourOpen()
 
   // Trial game pages stay open: the guest plays one hand first and meets the membership prompt at the result.
@@ -61,6 +63,22 @@ export function GuestGate() {
   }, [isGuest, remaining])
 
   const locked = isGuest && remaining <= 0 && !(dismissed && !hard)
+  const soft = locked && !hard
+
+  // The dismissable prompt sits at the bottom of the screen; whatever else is pinned there reads this to stay clear of it.
+  useEffect(() => {
+    const card = cardRef.current
+    if (!soft || !card) return
+    const root = document.documentElement
+    const publish = () => root.style.setProperty(GATE_SPACE_VAR, `${card.offsetHeight + 8}px`)
+    publish()
+    const watch = new ResizeObserver(publish)
+    watch.observe(card)
+    return () => {
+      watch.disconnect()
+      root.style.removeProperty(GATE_SPACE_VAR)
+    }
+  }, [soft])
 
   useEffect(() => {
     if (!locked || !hard) return
@@ -97,7 +115,7 @@ export function GuestGate() {
           : 'inset-x-0 bottom-[calc(5rem+var(--app-banner-h,0px))] lg:bottom-[calc(1.5rem+var(--app-banner-h,0px))] lg:left-[var(--sidebar-w)] xl:right-80',
       )}
     >
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-primary/30 bg-card shadow-2xl animate-pop">
+      <div ref={cardRef} className="relative w-full max-w-md overflow-hidden rounded-2xl border border-primary/30 bg-card shadow-2xl animate-pop">
         <div aria-hidden="true" className="absolute inset-x-0 top-0 h-1 bg-primary" />
         {!hard && (
           <button
