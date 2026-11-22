@@ -1,6 +1,7 @@
 import 'server-only'
 import { get, put } from '@vercel/blob'
 import { rows, sql } from '@/lib/db'
+import { toRole, type AssetLabel, type AssetRole } from '@/lib/studio-refs'
 import { cleanTexts, STUDIO_PAGE, type StudioAreaTotal, type StudioAsset, type StudioBrand, type StudioJob, type StudioTexts } from '@/lib/studio-types'
 
 let ready: Promise<unknown> | null = null
@@ -17,6 +18,11 @@ export function ensureTables() {
       id serial PRIMARY KEY, brand_id int, kind text NOT NULL, format text NOT NULL, prompt text NOT NULL,
       pathname text NOT NULL, parent_id int, cost numeric NOT NULL DEFAULT 0, created_at timestamptz NOT NULL DEFAULT now())`)
     await rows(sql`ALTER TABLE studio_jobs ADD COLUMN IF NOT EXISTS clean text NOT NULL DEFAULT ''`)
+    // What the picture is and how useful it is, so a job can start from a game's best pictures.
+    await rows(sql`ALTER TABLE studio_assets ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT ''`)
+    await rows(sql`ALTER TABLE studio_assets ADD COLUMN IF NOT EXISTS score int NOT NULL DEFAULT 0`)
+    await rows(sql`ALTER TABLE studio_assets ADD COLUMN IF NOT EXISTS note text NOT NULL DEFAULT ''`)
+    await rows(sql`ALTER TABLE studio_assets ADD COLUMN IF NOT EXISTS pinned boolean NOT NULL DEFAULT false`)
     await rows(sql`ALTER TABLE studio_brands ADD COLUMN IF NOT EXISTS mascot text NOT NULL DEFAULT ''`)
     await rows(sql`ALTER TABLE studio_jobs ADD COLUMN IF NOT EXISTS texts text NOT NULL DEFAULT ''`)
     // Cost set aside while a paid job runs; `kept` rows are jobs the model was paid for that failed afterwards.
@@ -83,9 +89,13 @@ export async function deleteBrand(id: number) {
   await rows(sql`DELETE FROM studio_brands WHERE id = ${id}`)
 }
 
+const ASSET_LIST_LIMIT = 2000
+
 export async function listAssets() {
   await ensureTables()
-  const r = await rows(sql`SELECT * FROM studio_assets ORDER BY provider, game, id DESC LIMIT 500`)
+  // One game's press kit is some fifty files. Past the limit it is the oldest pictures that drop out.
+  const r = await rows(sql`SELECT * FROM (SELECT * FROM studio_assets ORDER BY id DESC LIMIT ${ASSET_LIST_LIMIT}) newest
+    ORDER BY provider, game, pinned DESC, score DESC, id DESC`)
   return r.map(
     (a): StudioAsset => ({
       id: Number(a.id),
@@ -93,13 +103,42 @@ export async function listAssets() {
       game: String(a.game),
       pathname: String(a.pathname),
       url: fileUrl(String(a.pathname)),
+      role: toRole(a.role),
+      score: Number(a.score) || 0,
+      note: String(a.note ?? ''),
+      pinned: a.pinned === true,
     }),
   )
 }
 
-export async function addAsset(provider: string, game: string, pathname: string) {
+export async function addAsset(provider: string, game: string, pathname: string, label: AssetLabel | null = null) {
   await ensureTables()
-  await rows(sql`INSERT INTO studio_assets (provider, game, pathname) VALUES (${provider}, ${game}, ${pathname})`)
+  await rows(sql`INSERT INTO studio_assets (provider, game, pathname, role, score, note)
+    VALUES (${provider}, ${game}, ${pathname}, ${label?.role ?? ''}, ${label?.score ?? 0}, ${label?.note ?? ''})`)
+}
+
+export async function labelAsset(id: number, label: AssetLabel) {
+  await ensureTables()
+  await rows(sql`UPDATE studio_assets SET role = ${label.role}, score = ${label.score}, note = ${label.note} WHERE id = ${id}`)
+}
+
+/** A role set by hand. A picture the model never scored gets a middling score so it can be chosen. */
+export async function setAssetRole(id: number, role: AssetRole) {
+  await ensureTables()
+  await rows(sql`UPDATE studio_assets SET role = ${role}, score = CASE WHEN score = 0 THEN 6 ELSE score END WHERE id = ${id}`)
+}
+
+export async function pinAsset(id: number, pinned: boolean) {
+  await ensureTables()
+  await rows(sql`UPDATE studio_assets SET pinned = ${pinned} WHERE id = ${id}`)
+}
+
+/** Of the given pictures, the ones nobody has labelled yet. */
+export async function unlabelledAssets(ids: number[]) {
+  if (!ids.length) return []
+  await ensureTables()
+  const r = await rows(sql`SELECT id, pathname FROM studio_assets WHERE id IN ${ids} AND role = ''`)
+  return r.map((a) => ({ id: Number(a.id), pathname: String(a.pathname) }))
 }
 
 export async function deleteAsset(id: number) {
@@ -110,8 +149,12 @@ export async function deleteAsset(id: number) {
 export async function assetsByIds(ids: number[]) {
   if (!ids.length) return []
   await ensureTables()
-  const r = await rows(sql`SELECT id, pathname FROM studio_assets WHERE id IN ${ids}`)
-  return r.map((a) => String(a.pathname))
+  const r = await rows(sql`SELECT id, pathname, role FROM studio_assets WHERE id IN ${ids}`)
+  // In the order asked for: the prompt tells the model what each picture is by its position.
+  return ids.flatMap((id) => {
+    const a = r.find((row) => Number(row.id) === id)
+    return a ? [{ pathname: String(a.pathname), role: toRole(a.role) }] : []
+  })
 }
 
 const mapJob = (r: Record<string, unknown>): StudioJob => ({

@@ -1,13 +1,18 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import sharp from 'sharp'
-import { canPanel } from '@/lib/admin-auth'
+import { canPanel, isPanelOwner } from '@/lib/admin-auth'
 import { logPanel } from '@/lib/panel-log'
 import { rejectCrossSite } from '@/lib/same-origin'
 import { addAsset, storeFile } from '@/lib/studio'
+import { sortAsset } from '@/lib/studio-sort'
 
 export const maxDuration = 120
 
 const MAX_BYTES = 8 * 1024 * 1024
+/** The screen sends a large selection as several small requests; this is the most one request may carry. */
+const MAX_PER_REQUEST = 30
+/** Pictures worked on side by side, each of which may hold a database connection for the cap. */
+const SIDE_BY_SIDE = 4
 const TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', 'image/gif']
 const PRIVATE_HOST = /^(localhost|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|0\.|\[?::1\]?$|\[?f[cd])/i
 
@@ -47,9 +52,14 @@ export async function POST(request: NextRequest) {
 
   const saved: string[] = []
   const failed: string[] = []
-  const sources: (Source | string)[] = [...files, ...urls].slice(0, 30)
+  let unlabelled = 0
+  const all: (Source | string)[] = [...files, ...urls]
+  const sources = all.slice(0, MAX_PER_REQUEST)
+  // Anything past the limit is reported, not dropped in silence.
+  for (const extra of all.slice(MAX_PER_REQUEST)) failed.push((typeof extra === 'string' ? extra : extra.name).slice(0, 80))
+  const figures = target === 'asset' ? await isPanelOwner() : false
 
-  for (const entry of sources) {
+  async function take(entry: Source | string) {
     const label = typeof entry === 'string' ? entry : entry.name
     try {
       const source = typeof entry === 'string' ? await fromUrl(entry) : entry
@@ -60,7 +70,11 @@ export async function POST(request: NextRequest) {
         .png()
         .toBuffer()
       const pathname = await storeFile(folder, png, 'image/png', 'png')
-      if (target === 'asset') await addAsset(provider, game, pathname)
+      if (target === 'asset') {
+        const sorted = await sortAsset(png, figures)
+        if (!sorted) unlabelled += 1
+        await addAsset(provider, game, pathname, sorted)
+      }
       saved.push(pathname)
     } catch (error) {
       console.error('Studio upload failed:', label, error)
@@ -68,7 +82,16 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  if (!saved.length) return NextResponse.json({ error: `Hiçbiri eklenemedi: ${failed.join(', ')}` }, { status: 400 })
-  await logPanel('studio', 'Stüdyoya dosya yüklendi', target === 'asset' ? provider : null, `${saved.length} dosya${failed.length ? ` · ${failed.length} eklenemedi` : ''}`)
-  return NextResponse.json({ pathnames: saved, failed })
+  for (let at = 0; at < sources.length; at += SIDE_BY_SIDE) {
+    await Promise.all(sources.slice(at, at + SIDE_BY_SIDE).map(take))
+  }
+
+  if (!saved.length) return NextResponse.json({ error: `Hiçbiri eklenemedi: ${failed.join(', ')}`, failed }, { status: 400 })
+  await logPanel(
+    'studio',
+    'Stüdyoya dosya yüklendi',
+    target === 'asset' ? [provider, game].filter(Boolean).join(' · ') : null,
+    `${saved.length} dosya${failed.length ? ` · ${failed.length} eklenemedi` : ''}${unlabelled ? ` · ${unlabelled} etiketlenemedi` : ''}`,
+  )
+  return NextResponse.json({ pathnames: saved, failed, unlabelled })
 }

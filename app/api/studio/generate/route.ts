@@ -79,7 +79,8 @@ export async function POST(request: NextRequest) {
       .map((v) => Number.parseInt(String(v), 10))
       .filter(Number.isFinite)
       .slice(0, 3)
-    const assetRefs = await Promise.all((await assetsByIds(assetIds)).map(readFile))
+    const chosen = await assetsByIds(assetIds)
+    const assetRefs = await Promise.all(chosen.map((asset) => readFile(asset.pathname)))
     const references = mascot ? [mascot, ...assetRefs] : assetRefs
     const original = parent?.cleanPathname ? await readFile(parent.cleanPathname) : parent ? await readFile(parent.pathname) : null
     // A stored sticker is transparent; the model edits it on the green it is asked to hand back.
@@ -119,6 +120,7 @@ export async function POST(request: NextRequest) {
       prompt: direction ? direction.note : prompt,
       brand,
       references,
+      referenceRoles: chosen.map((asset) => asset.role),
       revisionOf,
       mascot: Boolean(mascot),
       texts: printed,

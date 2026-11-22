@@ -5,6 +5,7 @@ import { applyOverlay, brushOf } from '@/lib/studio-overlay'
 import { stylePrompt, type StyleId } from '@/lib/studio-brief'
 import { fitStaticSticker, stickerMaster } from '@/lib/studio-telegram'
 import { letterNotes, spelledOut } from '@/lib/studio-copy'
+import { referenceRules, type AssetRole } from '@/lib/studio-refs'
 import { imageRender, type ImageSize, type StudioBrand, type StudioKind, type StudioTexts } from '@/lib/studio-types'
 
 const MODEL = 'google/gemini-3.1-flash-image'
@@ -24,6 +25,8 @@ type Input = {
   prompt: string
   brand: StudioBrand | null
   references: Buffer[]
+  /** What each library picture among `references` is, in the order sent; the mascot is not in this list. */
+  referenceRoles?: (AssetRole | '')[]
   revisionOf: Buffer | null
   mascot?: boolean
   /** Copy the server prints afterwards. When set, the model is told to draw no text at all. */
@@ -91,6 +94,24 @@ function copyRules({ format, prompt, texts, scene }: Input) {
 const MASCOT_RULE =
   "The FIRST reference image is the brand's official mascot character. Feature this exact mascot prominently as the hero of the design, keeping its face, body shape, colors, outfit and art style identical. You may change its pose and expression to fit the brief, but never redesign it."
 
+/**
+ * What the model is told about the library pictures. Labelled pictures are named one by one; the
+ * general line stays for the ones nobody has labelled.
+ */
+function referenceLines({ referenceRoles = [], mascot }: Input, kind: 'banner' | 'sticker') {
+  const named = referenceRules(referenceRoles, Boolean(mascot), kind)
+  if (referenceRoles.length && referenceRoles.every(Boolean)) return named
+  const general =
+    kind === 'sticker'
+      ? mascot
+        ? ''
+        : 'If reference images are provided, use their character faithfully.'
+      : mascot
+        ? 'Any additional reference images are supporting game characters or symbols; place them around the mascot.'
+        : 'If reference images are provided, use their characters, symbols and art style faithfully as the main subject.'
+  return [...named, general]
+}
+
 function bannerPrompt(input: Input) {
   const { format, category, brand, mascot, texts } = input
   const colors = brand?.colors.length ? `Use this exact brand palette as the dominant colors: ${brand.colors.join(', ')}.` : ''
@@ -106,9 +127,7 @@ function bannerPrompt(input: Input) {
     FULL_BLEED_RULE,
     logoRule(brand),
     mascot ? MASCOT_RULE : '',
-    mascot
-      ? 'Any additional reference images are supporting game characters or symbols; place them around the mascot.'
-      : 'If reference images are provided, use their characters, symbols and art style faithfully as the main subject.',
+    ...referenceLines(input, 'banner'),
   ]
     .filter(Boolean)
     .join('\n')
@@ -137,7 +156,8 @@ function captionRule(caption: string) {
     .join(' ')
 }
 
-function stickerPrompt({ prompt, scene, brand, mascot, style, palette, caption, outline }: Input) {
+function stickerPrompt(input: Input) {
+  const { prompt, scene, brand, mascot, style, palette, caption, outline } = input
   const worded = outline ? (rule: string) => rule : asArtwork
   return [
     outline
@@ -157,7 +177,8 @@ function stickerPrompt({ prompt, scene, brand, mascot, style, palette, caption, 
     brand?.colors.length ? `Accent colors: ${brand.colors.join(', ')}.` : '',
     palette ? `Colors asked for by the client: ${palette}.` : '',
     worded(GREEN_RULE),
-    mascot ? MASCOT_RULE : 'If reference images are provided, use their character faithfully.',
+    mascot ? MASCOT_RULE : '',
+    ...referenceLines(input, 'sticker'),
     outline ? '' : 'Final check before you draw: no white outline anywhere, only the artwork on flat green.',
   ]
     .filter(Boolean)

@@ -1,3 +1,4 @@
+import { foldName } from '@/lib/studio-refs'
 import { STUDIO_TEXT_CEILING, type StudioAsset, type StudioTexts } from '@/lib/studio-types'
 
 /** The four jobs of the Studio. Each has its own form; `gif` and `video` animate a banner. */
@@ -226,7 +227,7 @@ export const RECIPES: Record<StudioFlow, Recipe[]> = {
   sticker: STICKER_RECIPES,
 }
 
-const fold = (value: string) => value.toLocaleLowerCase('tr').replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+const fold = foldName
 
 /**
  * Library pictures whose game or provider is named in the form, best match first. A game name

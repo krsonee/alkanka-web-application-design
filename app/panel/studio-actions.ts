@@ -9,7 +9,8 @@ import { put } from '@vercel/blob'
 import { getContent, setContent } from '@/lib/content'
 import { CUSTOM_SLIDES_KEY, MAX_CUSTOM_SLIDES, readCustomSlides } from '@/lib/custom-slides'
 import { HIDDEN_KEY, readHidden } from '@/lib/hidden-shared'
-import { deleteAsset, deleteBrand, deleteJob, getJob, listBrandJobs, readFile, saveBrand } from '@/lib/studio'
+import { deleteAsset, deleteBrand, deleteJob, getJob, listBrandJobs, pinAsset, readFile, saveBrand, setAssetRole } from '@/lib/studio'
+import { toRole } from '@/lib/studio-refs'
 import { briefProblem, cleanBrief, type Brief, type Improved, type Motion, type StudioFlow } from '@/lib/studio-brief'
 import { saveStudioCap } from '@/lib/studio-budget'
 import { improveBrief } from '@/lib/studio-improve'
@@ -91,6 +92,23 @@ export async function deleteAssetAction(id: number): Promise<Result> {
   await deleteAsset(id)
   revalidatePath('/panel')
   await logPanel('studio', 'Stüdyo görseli silindi', `Görsel #${id}`)
+  return { ok: true }
+}
+
+export async function setAssetRoleAction(id: number, role: string): Promise<Result> {
+  if (!(await canPanel('studio'))) return EXPIRED
+  const chosen = toRole(role)
+  if (!chosen || !Number.isSafeInteger(id)) return { message: 'Geçersiz tür.' }
+  await setAssetRole(id, chosen)
+  revalidatePath('/panel')
+  return { ok: true }
+}
+
+export async function pinAssetAction(id: number, pinned: boolean): Promise<Result> {
+  if (!(await canPanel('studio'))) return EXPIRED
+  if (!Number.isSafeInteger(id)) return { message: 'Geçersiz görsel.' }
+  await pinAsset(id, pinned === true)
+  revalidatePath('/panel')
   return { ok: true }
 }
 
