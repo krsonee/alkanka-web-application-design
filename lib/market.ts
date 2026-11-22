@@ -118,6 +118,9 @@ function ensure() {
       ADD COLUMN IF NOT EXISTS featured boolean NOT NULL DEFAULT false,
       ADD COLUMN IF NOT EXISTS deal_task_id int,
       ADD COLUMN IF NOT EXISTS deal_price int NOT NULL DEFAULT 0`)
+    // The live table already had reward_kind as NOT NULL DEFAULT 'none' from an earlier version, so the line above
+    // left it alone and every product without an automatic reward (all sponsor bonuses) failed to save.
+    await rows(sql`ALTER TABLE market_items ALTER COLUMN reward_kind DROP NOT NULL, ALTER COLUMN reward_kind DROP DEFAULT`)
     await rows(sql`ALTER TABLE market_requests ADD COLUMN IF NOT EXISTS needs_delivery boolean NOT NULL DEFAULT false`)
     // Products from before the delivery setting: the three the site already delivered keep doing so,
     // every other one goes to the staff queue instead of being marked delivered with nothing handed over.

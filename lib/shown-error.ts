@@ -10,6 +10,24 @@ export function shownError(e: unknown, fallback: string, tag = '[hata]'): string
   return fallback
 }
 
+/**
+ * The same for panel staff: they get the database's own one-line reason (which column, which rule) so the
+ * fault can be reported as it is, but never the query text and its values.
+ */
+export function staffError(e: unknown, fallback: string, tag = '[panel]'): string {
+  if (isWritten(e)) return e.message
+  console.error(tag, e)
+  const reason = rootMessage(e)
+  return reason ? `${fallback} Veritabanının verdiği sebep: ${reason}` : fallback
+}
+
+function rootMessage(e: unknown): string {
+  let at: unknown = e
+  for (let depth = 0; depth < 5 && at instanceof Error && at.cause instanceof Error; depth++) at = at.cause
+  if (at === e || !(at instanceof Error)) return ''
+  return at.message.replace(/\s+/g, ' ').trim().slice(0, 240)
+}
+
 function isWritten(e: unknown): e is Error {
   return (
     e instanceof Error &&
