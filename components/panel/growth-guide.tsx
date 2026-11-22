@@ -107,7 +107,11 @@ const STEPS: GuideStep[] = [
         <li>
           Kayıtlıysa <b>Onayla</b>. Değilse <b>Reddet</b> ve sebebini yaz (ör. “Referansımızla kayıtlı değil”). Üye sebebi profilinde görür.
         </li>
-        <li>Sadece onaylı hesaplar aylık çevrim sıralamasına girer.</li>
+        <li>Sadece onaylı hesaplar aylık çevrim sıralamasına girer ve sponsor etkinliklerinde (Gol Yağmuru) kupon numarası girebilir. Onay bekleyen üye kupon alanını göremez.</li>
+        <li>
+          Üye yazdığı kullanıcı adını kendisi değiştiremez ve kaldıramaz; böylece kontrol ettiğin talep sen bakarken değişmez. Kullanıcı adı yanlışsa <b>Reddet</b>, onaylı bir hesabı düzelttirmek için{' '}
+          <b>Onayı kaldır</b>: üye doğru kullanıcı adını yeniden yazar ve kayıt tekrar “bekliyor” olarak düşer.
+        </li>
       </ol>
     ),
   },
