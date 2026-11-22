@@ -1,6 +1,8 @@
 import 'server-only'
-import { rows, sql } from '@/lib/db'
-import { credit, debit, recordHistory, type Member } from '@/lib/member'
+import type { PoolClient } from 'pg'
+import { pool, rows, sql } from '@/lib/db'
+import { credit, creditClaimed, debit, recordHistory, type Member } from '@/lib/member'
+import { shownError } from '@/lib/shown-error'
 import { MARKET_ITEMS } from '@/components/alkanka/data'
 import { assertCanBuy } from '@/lib/member-limits'
 import { noteCoins } from '@/lib/wallet-ledger'
@@ -424,16 +426,19 @@ async function requestProductLocked(member: Member, itemId: string, siteUsername
   await recordHistory({ userId: member.id, userName: member.name, game: 'market', mode: 'harcama', opponent: item.name, stake: price, result: 'loss', delta: -price })
 
   let delivered: Delivered = null
+  // True when the staff settled the request while the purchase was still running: nothing is left for them to do.
+  let settled = false
   if (reward) {
     try {
-      delivered = await deliverReward(member.id, reward, { ref: `market:${request.id}`, label: item.name })
-      await rows(sql`UPDATE market_requests SET status = 'onaylandi', needs_delivery = false, note = ${AUTO_NOTE}, resolved_at = now() WHERE id = ${request.id}`)
+      delivered = await deliverReward(member.id, reward, { request: request.id, label: item.name, note: AUTO_NOTE })
+      settled = delivered === null
     } catch (e) {
       console.error('[market] otomatik teslim olmadı', item.id, e)
-      await rows(sql`UPDATE market_requests SET note = ${AUTO_FAILED_NOTE} WHERE id = ${request.id}`).catch(() => {})
+      // Only a request still waiting for its reward is flagged for the staff.
+      await rows(sql`UPDATE market_requests SET note = ${AUTO_FAILED_NOTE} WHERE id = ${request.id} AND needs_delivery`).catch(() => {})
     }
   }
-  if (delivered) return { ...item, price, delivered }
+  if (delivered || settled) return { ...item, price, delivered }
   const { notifyApproval } = await import('@/lib/telegram-bots')
   await notifyApproval('market', {
     uye: member.name,
@@ -454,39 +459,94 @@ export type Delivered =
   | { kind: 'badge'; name: string }
   | null
 
+type Db = Pick<PoolClient, 'query'>
+
+/** What a reward settles: `request` is the purchase it closes (null for a prize, which has none) and `note` what that request then says. */
+type Handover = { request: number | null; label: string; note: string | null }
+
 /**
- * Puts a reward on the account. `ref` names the purchase it belongs to, so Kanka Puan for one purchase
- * is never written twice even when delivery is tried again.
+ * Closes a request as delivered, on the connection that also writes its reward. False when the request is
+ * not waiting for one any more: it was already delivered, or it was rejected and refunded.
  */
-async function deliverReward(userId: string, reward: Reward, from: { ref: string | null; label: string }): Promise<Exclude<Delivered, null>> {
+async function claimDelivery(db: Db, from: Handover): Promise<boolean> {
+  if (from.request == null) return true
+  const closed = await db.query(
+    `UPDATE market_requests SET needs_delivery = false, status = 'onaylandi', note = $2, resolved_at = now()
+     WHERE id = $1 AND needs_delivery AND status = 'beklemede' RETURNING id`,
+    [from.request, from.note],
+  )
+  return (closed.rowCount ?? 0) > 0
+}
+
+/** Runs `give` in the transaction that closes the request: both are saved or neither is. Null when the request was already closed. */
+async function handOver<T>(from: Handover, give: (db: Db) => Promise<T>): Promise<T | null> {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    if (!(await claimDelivery(client, from))) {
+      await client.query('ROLLBACK')
+      return null
+    }
+    const given = await give(client)
+    await client.query('COMMIT')
+    return given
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+/**
+ * Puts a reward on the account and closes the request it belongs to in the same step, so a purchase is
+ * paid exactly once however often delivery is tried. Null means that request had already been closed and
+ * nothing was written; a throw means nothing was written and the request is still waiting.
+ */
+async function deliverReward(userId: string, reward: Reward, from: Handover): Promise<Delivered> {
   const amount = Math.floor(Number(reward.amount) || 0)
   if (reward.kind === 'cark' || reward.kind === 'zar' || reward.kind === 'sandik') {
+    const game = reward.kind
     const { grantExtraPlays } = await import('@/lib/mini-extras')
-    return { kind: 'plays', game: reward.kind, amount, total: await grantExtraPlays(userId, reward.kind, amount) }
+    return handOver(from, async (db) => ({ kind: 'plays' as const, game, amount, total: await grantExtraPlays(userId, game, amount, db) }))
   }
   if (reward.kind === 'kalkan') {
     await rows(sql`CREATE TABLE IF NOT EXISTS streak_shields (user_id text PRIMARY KEY, count int NOT NULL DEFAULT 0, used int NOT NULL DEFAULT 0, updated_at timestamptz NOT NULL DEFAULT now())`)
-    const [r] = await rows<{ count: number }>(sql`INSERT INTO streak_shields (user_id, count) VALUES (${userId}, ${amount})
-      ON CONFLICT (user_id) DO UPDATE SET count = streak_shields.count + ${amount}, updated_at = now() RETURNING count`)
-    return { kind: 'shield', amount, total: Number(r?.count ?? amount) }
+    return handOver(from, async (db) => {
+      const r = await db.query<{ count: number }>(
+        `INSERT INTO streak_shields (user_id, count) VALUES ($1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET count = streak_shields.count + EXCLUDED.count, updated_at = now() RETURNING count`,
+        [userId, amount],
+      )
+      return { kind: 'shield' as const, amount, total: Number(r.rows[0]?.count ?? amount) }
+    })
   }
   if (reward.kind === 'kc') {
-    await credit(userId, amount, 'Market ödülü')
-    return { kind: 'kc', amount }
+    const paid = await creditClaimed(userId, amount, 'Market ödülü', (db) => claimDelivery(db, from))
+    return paid ? { kind: 'kc', amount } : null
   }
   if (reward.kind === 'kp') {
     const { ensureKp } = await import('@/lib/kanka-puan')
     await ensureKp()
-    await rows(sql`INSERT INTO kp_events (user_id, source, points, ref, note)
-      VALUES (${userId}, 'market', ${amount}, ${from.ref}, ${from.label.slice(0, 120)}) ON CONFLICT DO NOTHING`)
-    return { kind: 'kp', amount }
+    const ref = from.request == null ? null : `market:${from.request}`
+    return handOver(from, async (db) => {
+      await db.query(
+        `INSERT INTO kp_events (user_id, source, points, ref, note) VALUES ($1, 'market', $2, $3, $4) ON CONFLICT DO NOTHING`,
+        [userId, amount, ref, from.label.slice(0, 120)],
+      )
+      return { kind: 'kp' as const, amount }
+    })
   }
   const { awardBadge } = await import('@/lib/kanka-puan')
-  if (!reward.ref) throw new Error('Ürüne rozet bağlanmamış.')
-  // False means the member already holds it, which is the state this delivery is after.
-  await awardBadge(reward.ref, userId, 'market', from.label)
-  const [badge] = await rows<{ name: string }>(sql`SELECT name FROM kp_badges WHERE id = ${reward.ref}`)
-  return { kind: 'badge', name: badge?.name ?? 'Rozet' }
+  const badgeId = reward.ref
+  if (!badgeId) throw new Error('Ürüne rozet bağlanmamış.')
+  // The badge is saved on its own connection while this one holds the request. If it fails the request
+  // stays open; if only the closing fails, the next try finds the badge already there and changes nothing.
+  return handOver(from, async () => {
+    await awardBadge(badgeId, userId, 'market', from.label)
+    const [badge] = await rows<{ name: string }>(sql`SELECT name FROM kp_badges WHERE id = ${badgeId}`)
+    return { kind: 'badge' as const, name: badge?.name ?? 'Rozet' }
+  })
 }
 
 /** Hands over a product won as a prize. Null means the site cannot deliver this product by itself. */
@@ -495,7 +555,7 @@ export async function deliverInSiteItem(userId: string, itemId: string): Promise
   const [row] = await rows<ItemRow>(sql`SELECT * FROM market_items WHERE id = ${itemId}`)
   const item = row ? toProduct(row) : null
   if (!item || item.deliveryMode !== 'auto' || !item.reward) return null
-  return deliverReward(userId, item.reward, { ref: null, label: item.name })
+  return deliverReward(userId, item.reward, { request: null, label: item.name, note: null })
 }
 
 type ReqRow = {
@@ -534,23 +594,28 @@ export async function resolveRequest(id: number, approve: boolean, note: string)
   if (note.trim().length > 300) throw new Error(`Not en fazla 300 karakter olabilir (şu an ${note.trim().length}). Üyeye yarım not gitmesin diye kaydedilmedi.`)
   await ensure()
   if (approve) {
-    const r = await rows<ReqRow>(sql`UPDATE market_requests SET status = 'onaylandi',
-      note = ${clean(note, 300) || null}, resolved_at = now() WHERE id = ${id} AND status = 'beklemede' RETURNING *`)
-    const req = r[0]
-    if (!req) throw new Error('Talep bulunamadı ya da zaten sonuçlandı.')
-    if (!req.needs_delivery) return
-    // An automatic product whose delivery failed at purchase: approving is what hands it over, so the
-    // request only stays approved when that worked.
+    const gone = 'Talep bulunamadı ya da zaten sonuçlandı.'
+    const staffNote = clean(note, 300) || null
+    const [req] = await rows<ReqRow>(sql`SELECT * FROM market_requests WHERE id = ${id} AND status = 'beklemede'`)
+    if (!req) throw new Error(gone)
+    if (!req.needs_delivery) {
+      const closed = await rows(sql`UPDATE market_requests SET status = 'onaylandi', note = ${staffNote}, resolved_at = now()
+        WHERE id = ${id} AND status = 'beklemede' AND needs_delivery IS NOT TRUE RETURNING id`)
+      if (!closed.length) throw new Error(gone)
+      return
+    }
+    // An automatic product whose delivery failed at purchase: approving is what hands it over. The request
+    // is closed in the same step as the reward, so it is still waiting when that fails.
+    let given: Delivered
     try {
       const [row] = await rows<ItemRow>(sql`SELECT * FROM market_items WHERE id = ${req.item_id}`)
       const reward = row ? toProduct(row).reward : null
       if (!reward) throw new Error('Ürünün otomatik ödülü kaldırılmış. Ödülü elle verip ürünü "elle teslim" yap, sonra tekrar onayla.')
-      await deliverReward(req.user_id, reward, { ref: `market:${req.id}`, label: req.item_name })
-      await rows(sql`UPDATE market_requests SET needs_delivery = false WHERE id = ${req.id}`)
+      given = await deliverReward(req.user_id, reward, { request: req.id, label: req.item_name, note: staffNote })
     } catch (e) {
-      await rows(sql`UPDATE market_requests SET status = 'beklemede', note = ${AUTO_FAILED_NOTE}, resolved_at = NULL WHERE id = ${req.id}`)
-      throw new Error(`Ödül hesaba eklenemedi, talep beklemede kaldı. ${e instanceof Error ? e.message : ''}`.trim())
+      throw new Error(`Ödül hesaba eklenemedi, talep beklemede kaldı. ${shownError(e, '', '[market] onayda teslim olmadı')}`.trim())
     }
+    if (!given) throw new Error(gone)
     return
   }
   // One statement, so a rejected request can never be left without its refund and its stock.
