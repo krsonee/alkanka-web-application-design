@@ -6,6 +6,7 @@ import { addJob, assetsByIds, getBrand, getJob, readFile, storeFile } from '@/li
 import { briefLabel, briefProblem, briefText, cleanBrief } from '@/lib/studio-brief'
 import { closeHold, holdBudget, type BudgetHold } from '@/lib/studio-budget'
 import { direct } from '@/lib/studio-direct'
+import { faultMessage, studioFault } from '@/lib/studio-fault'
 import { runGeneration } from '@/lib/studio-generate'
 import { applyOverlay, brushOf } from '@/lib/studio-overlay'
 import { stickerOnGreen, whiteEdged } from '@/lib/studio-telegram'
@@ -156,11 +157,11 @@ export async function POST(request: NextRequest) {
     await closeHold(hold, 'failed', `Görsel kaydedilemedi (${kind}, ${size})`)
     if (second.hold) await closeHold(second.hold, 'failed', `Yeniden çizilen sticker kaydedilemedi (${size})`)
     if (planning.hold) await closeHold(planning.hold, 'failed', 'Sahne tarifi yazıldı, görsel kaydedilemedi')
-    const message = error instanceof Error ? error.message : ''
-    const blocked = /safety|policy|blocked|refus/i.test(message)
+    const fault = studioFault(error)
+    const known = faultMessage(fault, { owner, video: false })
     return NextResponse.json(
-      { error: blocked ? 'Model bu talimatı reddetti. Metni biraz yumuşatıp tekrar dene.' : 'Üretim başarısız oldu, tekrar dene.' },
-      { status: 500 },
+      { error: known ?? (fault === 'blocked' ? 'Model bu talimatı reddetti. Metni biraz yumuşatıp tekrar dene.' : 'Üretim başarısız oldu, tekrar dene.') },
+      { status: fault === 'funds' ? 402 : 500 },
     )
   }
 }
