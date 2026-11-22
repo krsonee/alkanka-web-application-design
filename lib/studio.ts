@@ -127,6 +127,7 @@ const mapJob = (r: Record<string, unknown>): StudioJob => ({
   createdAt: new Date(String(r.created_at)).toISOString(),
   texts: parseTexts(r.texts),
   retextable: String(r.kind) === 'banner' && Boolean(r.clean),
+  hdUrl: String(r.kind) === 'sticker' && r.clean ? fileUrl(String(r.clean)) : '',
 })
 
 function parseTexts(value: unknown) {

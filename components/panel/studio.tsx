@@ -935,8 +935,13 @@ function JobCard({
         </p>
         <div className="flex flex-wrap gap-1.5">
           <a href={`${job.url}?download`} className={ghostBtn}>
-            <Download className="size-3.5" aria-hidden /> İndir
+            <Download className="size-3.5" aria-hidden /> {job.hdUrl ? 'İndir (Telegram)' : 'İndir'}
           </a>
+          {job.hdUrl ? (
+            <a href={`${job.hdUrl}?download`} className={ghostBtn} title="1024 px, saydam zeminli, sıkıştırılmamış PNG. Telegram dışındaki işler için.">
+              <Download className="size-3.5" aria-hidden /> HD indir (PNG)
+            </a>
+          ) : null}
           {job.kind === 'banner' || job.kind === 'sticker' ? (
             <button type="button" onClick={onRevise} className={ghostBtn}>
               <RefreshCw className="size-3.5" aria-hidden /> Revize
