@@ -6,6 +6,7 @@ import { canPanel } from '@/lib/admin-auth'
 import { deleteProduct, featureProduct, reorderProducts, resolveRequest, saveProduct, type ProductInput } from '@/lib/market'
 import { deleteSale, saveSale, setSaleActive } from '@/lib/market-sales'
 import type { SaleInput } from '@/lib/market-shared'
+import { staffError } from '@/lib/shown-error'
 
 type Result = { ok: true; message?: string } | { ok: false; error: string }
 
@@ -17,7 +18,7 @@ async function guard(fn: () => Promise<string | void>): Promise<Result> {
     revalidatePath('/market')
     return { ok: true, message: message || undefined }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'İşlem başarısız.' }
+    return { ok: false, error: staffError(e, 'İşlem kaydedilemedi.', '[market]') }
   }
 }
 
