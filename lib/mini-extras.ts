@@ -1,4 +1,5 @@
-import { rows, sql } from '@/lib/db'
+import type { PoolClient } from 'pg'
+import { pool, rows, sql } from '@/lib/db'
 
 export type ExtraGame = 'cark' | 'sandik' | 'zar'
 
@@ -23,12 +24,18 @@ export async function extraPlays(userId: string, game: ExtraGame): Promise<numbe
   return Math.max(0, Number(r?.count ?? 0))
 }
 
-/** Adds purchased plays and returns how many the member now holds. */
-export async function grantExtraPlays(userId: string, game: ExtraGame, amount: number): Promise<number> {
+/**
+ * Adds purchased plays and returns how many the member now holds. `db` is the connection of a transaction
+ * that is already open, so the plays are saved together with whatever else that transaction writes.
+ */
+export async function grantExtraPlays(userId: string, game: ExtraGame, amount: number, db: Pick<PoolClient, 'query'> = pool): Promise<number> {
   await ensure()
-  const [r] = await rows<{ count: number }>(sql`INSERT INTO mini_extra_plays (user_id, game, count) VALUES (${userId}, ${game}, ${amount})
-    ON CONFLICT (user_id, game) DO UPDATE SET count = mini_extra_plays.count + ${amount}, updated_at = now() RETURNING count`)
-  return Number(r?.count ?? amount)
+  const r = await db.query<{ count: number }>(
+    `INSERT INTO mini_extra_plays (user_id, game, count) VALUES ($1, $2, $3)
+     ON CONFLICT (user_id, game) DO UPDATE SET count = mini_extra_plays.count + EXCLUDED.count, updated_at = now() RETURNING count`,
+    [userId, game, amount],
+  )
+  return Number(r.rows[0]?.count ?? amount)
 }
 
 /** Atomically spends one purchased play; false when none are left. */

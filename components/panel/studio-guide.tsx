@@ -194,8 +194,11 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
               <>{b('Marka')} listesinden siteyi seç. Altında o sitenin logosu ve renkleri görünür, doğru site olduğunu kontrol et.</>,
               <>{b('Formatlar')}: 1:1 kare post, 9:16 hikâye/Reels, 16:9 site banner. Birden fazla işaretlersen hepsi aynı anda üretilir.</>,
               <>{b('Kategori')} seç (Casino, Spor Bahisi, Slot vb.).</>,
-              <>{b('Çözünürlük')}: Yüksek (2048 px) paylaşım için, Standart (1024 px) hızlı deneme için.</>,
-              <>{b('Görsel üstü yazılar')}: başlık, alt yazı ve buton metnini kendi kutularına yaz. Bunlar gerçek fontla basılır, harf hatası olmaz.</>,
+              <>{b('Kalite')}: Standart (1024 px) hızlı deneme için, Yüksek (2048 px) paylaşım için, En yüksek daha büyük modelle çizilir (ışık, doku ve ayrıntı daha iyi, görsel başına ücret daha yüksek).</>,
+              <>Her üretimde yazdığın istek önce ayrıntılı bir sahne tarifine çevrilir; kısa ya da Türkçe harfsiz yazsan da (papagan, cay bardagi) ne istediğin anlaşılır. Bu adım görsel başına yaklaşık 1 sent tutar ve işin ücretine eklenir.</>,
+              <>{b('Görsel üstü yazılar')}: başlık, alt yazı ve buton metnini kendi kutularına yaz. Bunlar gerçek fontla basılır, harf hatası olmaz. Türkçe harfsiz yazdıysan (HOS GELDIN) harfleri düzeltilir (HOŞ GELDİN); kelimelerin, rakamların ve marka adların değişmez.</>,
+              <>Kutuları boş bırakıp konuya yazıyı yazarsan (&quot;üstünde büyük ödül seni bekliyor yazsın, buton: şimdi katıl&quot;) o yazı ayıklanır ve yine gerçek fontla basılır. İstekte geçmeyen hiçbir yazı basılmaz; yazı istemediysen görsel yazısız çıkar. Yapay zeka görsele artık kendi eliyle yazı çizmez.</>,
+              <>Rakam ya da % içeren kelimeler vurgu rengiyle basılır; rakam yoksa başlığın son satırı vurgulanır. Basılan yazıyı beğenmezsen kartta {b('Revize')} deyip sadece yazıyı değiştir: {b('Yazıyı güncelle')} ücretsizdir.</>,
               <>Formu doldur: {b('Konu')} (zorunlu), {b('Sahne ve arka plan')}, {b('Karakter ya da ana nesne')}, {b('Stil')} (Otomatik, 3D, Çizgi, Gerçekçi) ve istersen {b('Renkler')}. Bu alanlara yazı yazma; yazılar kendi kutularına girer.</>,
               <>Sıfırdan yazmak istemezsen {b('Hazır tarifler')}den birine bas (freespin, maç günü, canlı casino, turnuva); alanlar dolar, sonra kendine göre değiştirirsin.</>,
               <>Kısa yazdıysan {b('İsteği geliştir')} düğmesi alanları daha ayrıntılı hale getirir. Görsel üretmez; sonucu okuyup düzeltirsin.</>,
@@ -209,7 +212,7 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
           <Steps
             items={[
               <>{b('Sticker')} türünü seç ve markayı belirle.</>,
-              <>{b('Konu')} ve {b('Karakter')} alanlarını doldur ya da hazır tarif seç (Kod geldi, Kazandık, Bol şans, Az kaldı). Üstündeki kısa yazıyı {b('Sticker üstü yazı')} kutusuna yaz: KOD GELİYOR!</>,
+              <>{b('Konu')} ve {b('Karakter')} alanlarını doldur ya da hazır tarif seç (Kod geldi, Kazandık, Bol şans, Az kaldı). Üstündeki kısa yazıyı {b('Sticker üstü yazı')} kutusuna yaz: KOD GELİYOR! Sticker yazısını yapay zeka çizer (yazı çizimin parçasıdır); Türkçe harfsiz yazdıysan harfleri düzeltilip modele harf harf verilir. Yine de uzun yazıda harf hatası çıkabilir, kısa tut.</>,
               <>{b('Beyaz kenar çizgisi ekle')} açıkken stickerın çevresine her yerde aynı kalınlıkta beyaz kenar basılır. Kutuyu kapatırsan beyaz kenar basılmaz, çizim olduğu gibi çıkar; bu durumda koyu renkli yazı Telegram&apos;ın koyu temasında zor okunur. Revizede stickerın kenarı neyse o kalır: kenarlı sticker kenarlı, kenarsız sticker kenarsız döner.</>,
               <>Sticker şeffaf arka planla, Telegram ölçüsünde (512 px) ve sıkıştırılmadan çıkar; arkası damalı görünür, bu normaldir. {b('İndir (Telegram)')} bu dosyayı verir; {b('HD indir (PNG)')} aynı stickerın 1024 px&apos;lik büyük halidir (afiş, site, sosyal medya için).</>,
               <>Model stickerı görselin kenarından taşırıp kesik çizerse sistem bunu fark eder ve aynı stickerı küçültüp tam haliyle bir kez daha çizdirir. Bu durumda o üretim iki görsel ücreti tutar ve kartta &quot;bir kez yeniden çizildi&quot; yazar.</>,

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import useSWR, { mutate as refreshShared } from 'swr'
 import { Clock, Coins, Percent, Star, Target } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getMyMarketDeals, getMyMarketRequests } from '@/app/actions/market'
+import { getMyMarketAccounts, getMyMarketDeals, getMyMarketRequests } from '@/app/actions/market'
 import type { MarketProduct } from '@/lib/market'
 import { productImage } from '@/lib/market-image'
 import { FEATURED_SLOTS, MARKET_CATEGORIES, dealShown, isMarketCategory, payable, rewardText, type MarketCategory } from '@/lib/market-shared'
@@ -59,6 +59,8 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
   const [stock, setStock] = useState<Record<string, number>>(() => Object.fromEntries(items.map((i) => [i.id, i.stock])))
   const { data: mine, mutate } = useSWR(member ? ['market-mine', member.id] : null, () => getMyMarketRequests())
   const { data: doneTasks } = useSWR(member ? ['market-deals', member.id] : null, () => getMyMarketDeals())
+  // Undefined until the answer arrives; the purchase form waits for it rather than asking for a name it will not use.
+  const { data: accounts } = useSWR(member ? ['market-accounts', member.id] : null, () => getMyMarketAccounts())
 
   // Task rewards and the in-table theme picker still link to /market#masa-temalari from before themes had their own tab.
   useEffect(() => {
@@ -251,7 +253,7 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
             <>
               {shown === 'sponsor' && inCategory('sponsor').length > 0 && (
                 <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
-                  Sponsor ödülleri sponsorun sitesindeki hesabına yüklenir. Talep ederken o sitedeki kullanıcı adını doğru yaz; ekip onaylayınca ödül oraya eklenir.
+                  Sponsor ödülleri sponsorun sitesindeki hesabına yüklenir. O sponsorda hesabını bağladıysan kullanıcı adın bağlı hesabından alınır; bağlamadıysan talep ederken o sitedeki kullanıcı adını doğru yaz. Ekip onaylayınca ödül oraya eklenir.
                 </p>
               )}
               {inCategory(shown).length === 0 ? (
@@ -340,6 +342,8 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
           item={asking}
           pay={payOf(asking)}
           taskDone={taskDoneOf(asking)}
+          account={asking.kind === 'sponsor' && asking.sponsorSlug ? (accounts?.[asking.sponsorSlug] ?? null) : null}
+          checking={Boolean(member) && asking.kind === 'sponsor' && accounts === undefined}
           points={points}
           error={flash && !flash.ok ? flash.text : null}
           onClose={() => {

@@ -58,21 +58,25 @@ function luminance(hex: string) {
   return rgbLuminance((n >> 16) & 255, (n >> 8) & 255, n & 255)
 }
 
-function wrappedLines(words: string[], size: number, boxWidth: number) {
-  let lines = 1
+/** The headline's words, line by line, as they wrap at this size. */
+function wrappedRows(words: string[], size: number, boxWidth: number) {
+  const rows: string[][] = [[]]
   let used = 0
   for (const word of words) {
     const width = word.length * GLYPH_WIDTH * size
     const next = used === 0 ? width : used + WORD_GAP * size + width
     if (used > 0 && next > boxWidth) {
-      lines++
+      rows.push([word])
       used = width
     } else {
+      rows[rows.length - 1].push(word)
       used = next
     }
   }
-  return lines
+  return rows
 }
+
+const wrappedLines = (words: string[], size: number, boxWidth: number) => wrappedRows(words, size, boxWidth).length
 
 // Average advance of a Montserrat Bold letter in running text, as a fraction of the font size.
 const TEXT_GLYPH = 0.6
@@ -90,8 +94,11 @@ function fitHeadline(text: string, boxWidth: number, base: number) {
   let size = base
   while (size > base * (long ? 0.22 : 0.4) && wrappedLines(words, size, boxWidth) > target) size *= 0.96
   size = Math.round(size)
-  return { size, lines: wrappedLines(words, size, boxWidth) }
+  const rows = wrappedRows(words, size, boxWidth)
+  return { size, lines: rows.length, rows }
 }
+
+const NUMBERED = /[\d%]/
 
 /** `clearTop` is where the logo ends; the wide layout starts its text column below it. */
 async function textLayer(width: number, height: number, texts: StudioTexts, colors: string[], clearTop = 0) {
@@ -125,6 +132,11 @@ async function textLayer(width: number, height: number, texts: StudioTexts, colo
   let fit = sized(1)
   for (let scale = 0.92; fit.blockHeight > room && scale > 0.2; scale *= 0.92) fit = sized(scale)
   const { head, sub, button, gap, ctaLines, blockHeight } = fit
+  // Numbers and percentages carry the accent. A headline without any gets it on its closing line,
+  // so a two-line slogan still reads as designed rather than as one block of white.
+  const numbered = NUMBERED.test(texts.headline)
+  const inked = (word: string, row: number) =>
+    (numbered ? NUMBERED.test(word) : head.rows.length > 1 && row === head.rows.length - 1) ? accent : PAPER
   // Eased stops: a plain two-stop ramp leaves a visible edge where the darkening begins.
   const fade = 'rgba(0,0,0,0.86) 0%, rgba(0,0,0,0.7) 36%, rgba(0,0,0,0.38) 64%, rgba(0,0,0,0.12) 86%, rgba(0,0,0,0) 100%'
   const scrim = wide
@@ -150,9 +162,8 @@ async function textLayer(width: number, height: number, texts: StudioTexts, colo
             <div
               style={{
                 display: 'flex',
-                flexWrap: 'wrap',
-                justifyContent: wide ? 'flex-start' : 'center',
-                columnGap: Math.round(head.size * WORD_GAP),
+                flexDirection: 'column',
+                alignItems: wide ? 'flex-start' : 'center',
                 fontSize: head.size,
                 fontWeight: 900,
                 lineHeight: 1.04,
@@ -160,9 +171,14 @@ async function textLayer(width: number, height: number, texts: StudioTexts, colo
                 textShadow: shadow,
               }}
             >
-              {texts.headline.split(' ').map((word, i) => (
-                <div key={i} style={{ display: 'flex', color: /[\d%]/.test(word) ? accent : PAPER }}>
-                  {word}
+              {head.rows.map((line, row) => (
+                // Still allowed to wrap: the line widths are estimates, and a line must never be clipped.
+                <div key={row} style={{ display: 'flex', flexWrap: 'wrap', justifyContent: wide ? 'flex-start' : 'center', columnGap: Math.round(head.size * WORD_GAP) }}>
+                  {line.map((word, i) => (
+                    <div key={i} style={{ display: 'flex', color: inked(word, row) }}>
+                      {word}
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>

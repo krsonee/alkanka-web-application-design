@@ -2,8 +2,9 @@
 
 import { revalidatePath } from 'next/cache'
 import { getBalance, getMember } from '@/lib/member'
-import { doneDealTasks, myRequests, requestProduct, type Delivered, type MarketRequest } from '@/lib/market'
+import { doneDealTasks, linkedSponsorAccounts, myRequests, requestProduct, type Delivered, type LinkedSponsorAccount, type MarketRequest } from '@/lib/market'
 import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
+import { shownError } from '@/lib/shown-error'
 
 type Result = { ok: true; balance: number; message: string; delivered: boolean } | { ok: false; error: string }
 
@@ -39,7 +40,7 @@ export async function requestMarketItem(itemId: string, siteUsername: string | n
         : deliveredMessage(item.delivered),
     }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Talep oluşturulamadı.' }
+    return { ok: false, error: shownError(e, 'Talep oluşturulamadı. Biraz sonra tekrar dene.', '[market] talep oluşturulamadı') }
   }
 }
 
@@ -48,6 +49,13 @@ export async function getMyMarketDeals(): Promise<number[]> {
   const member = await getMember()
   if (!member) return []
   return doneDealTasks(member.id).catch(() => [])
+}
+
+/** The member's linked sponsor accounts by sponsor slug; a sponsor reward is sent to these, not to a typed name. */
+export async function getMyMarketAccounts(): Promise<Record<string, LinkedSponsorAccount>> {
+  const member = await getMember()
+  if (!member) return {}
+  return linkedSponsorAccounts(member.id).catch(() => ({}))
 }
 
 export async function getMyMarketRequests(): Promise<MarketRequest[]> {
