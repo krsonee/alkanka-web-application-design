@@ -7,7 +7,7 @@ import { briefLabel, briefProblem, briefText, cleanBrief } from '@/lib/studio-br
 import { closeHold, holdBudget, type BudgetHold } from '@/lib/studio-budget'
 import { runGeneration } from '@/lib/studio-generate'
 import { applyOverlay, brushOf } from '@/lib/studio-overlay'
-import { stickerOnGreen } from '@/lib/studio-telegram'
+import { stickerOnGreen, whiteEdged } from '@/lib/studio-telegram'
 import { cleanTexts, imageCost, STUDIO_CATEGORIES, STUDIO_TEXT_CEILING, STUDIO_FORMATS, toImageSize, type StudioTexts } from '@/lib/studio-types'
 
 export const maxDuration = 300
@@ -80,6 +80,7 @@ export async function POST(request: NextRequest) {
     const original = parent?.cleanPathname ? await readFile(parent.cleanPathname) : parent ? await readFile(parent.pathname) : null
     // A stored sticker is transparent; the model edits it on the green it is asked to hand back.
     const revisionOf = original && kind === 'sticker' ? await stickerOnGreen(original) : original
+    const edged = original && kind === 'sticker' ? await whiteEdged(original) : false
     const result = await runGeneration({
       redraw:
         kind === 'sticker'
@@ -111,6 +112,7 @@ export async function POST(request: NextRequest) {
       palette: brief?.colors,
       caption: kind === 'sticker' ? brief?.caption : '',
       outline,
+      edged,
     })
     const redrawn = result.calls > 1
     const shown = `${brief ? briefLabel(brief) : prompt}${redrawn ? ' · kenardan taşan çizim bir kez yeniden çizildi' : ''}`

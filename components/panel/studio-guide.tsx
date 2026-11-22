@@ -210,7 +210,7 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
             items={[
               <>{b('Sticker')} türünü seç ve markayı belirle.</>,
               <>{b('Konu')} ve {b('Karakter')} alanlarını doldur ya da hazır tarif seç (Kod geldi, Kazandık, Bol şans, Az kaldı). Üstündeki kısa yazıyı {b('Sticker üstü yazı')} kutusuna yaz: KOD GELİYOR!</>,
-              <>{b('Beyaz kenar çizgisi ekle')} açıkken stickerın çevresine her yerde aynı kalınlıkta beyaz kenar basılır.</>,
+              <>{b('Beyaz kenar çizgisi ekle')} açıkken stickerın çevresine her yerde aynı kalınlıkta beyaz kenar basılır. Kutuyu kapatırsan beyaz kenar basılmaz, çizim olduğu gibi çıkar; bu durumda koyu renkli yazı Telegram&apos;ın koyu temasında zor okunur. Revizede stickerın kenarı neyse o kalır: kenarlı sticker kenarlı, kenarsız sticker kenarsız döner.</>,
               <>Sticker şeffaf arka planla, Telegram ölçüsünde (512 px) ve sıkıştırılmadan çıkar; arkası damalı görünür, bu normaldir. {b('İndir (Telegram)')} bu dosyayı verir; {b('HD indir (PNG)')} aynı stickerın 1024 px&apos;lik büyük halidir (afiş, site, sosyal medya için).</>,
               <>Model stickerı görselin kenarından taşırıp kesik çizerse sistem bunu fark eder ve aynı stickerı küçültüp tam haliyle bir kez daha çizdirir. Bu durumda o üretim iki görsel ücreti tutar ve kartta &quot;bir kez yeniden çizildi&quot; yazar.</>,
               <>{b('Revize')} sadece yazdığın şeyi değiştirir, geri kalan her şey olduğu gibi kalır. Sadece değişecek kısmı yaz: &quot;soru işareti kırmızı olsun&quot;.</>,

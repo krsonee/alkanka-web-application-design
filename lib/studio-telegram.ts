@@ -208,6 +208,32 @@ export async function stickerMaster(image: Buffer, outline: boolean) {
   return outline ? outlineSticker(image, MASTER) : (await fitted(image, MASTER)).png().toBuffer()
 }
 
+const RIM_SIDE = 256
+const RIM_REACH = 2
+
+/** True when a cut-out sticker carries a white edge all the way round, the way `outlineSticker` draws it. */
+export async function whiteEdged(image: Buffer) {
+  const { data, info } = await sharp(image)
+    .ensureAlpha()
+    .resize(RIM_SIDE, RIM_SIDE, { fit: 'inside' })
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+  const { width, height } = info
+  const clear = (x: number, y: number) => x < 0 || y < 0 || x >= width || y >= height || data[(y * width + x) * 4 + 3] < 40
+  let rim = 0
+  let white = 0
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4
+      if (data[i + 3] < 220) continue
+      if (!clear(x - RIM_REACH, y) && !clear(x + RIM_REACH, y) && !clear(x, y - RIM_REACH) && !clear(x, y + RIM_REACH)) continue
+      rim++
+      if (Math.min(data[i], data[i + 1], data[i + 2]) > 225) white++
+    }
+  }
+  return rim > 0 && white / rim > 0.75
+}
+
 const KEY_GREEN = { r: 0, g: 255, b: 0 }
 
 /** The sticker back on a flat green square, the way the image model is asked to return stickers. */

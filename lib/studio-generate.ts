@@ -29,6 +29,8 @@ type Input = {
   caption?: string
   /** Stickers: the server draws an even white edge, so the model is told to draw none. */
   outline?: boolean
+  /** Sticker revisions: the sticker being revised already has a white edge, which the model is told to keep. */
+  edged?: boolean
   /**
    * Stickers: a sticker that came back cut off by the picture's edge is drawn once more, smaller.
    * `allow` is asked before that second paid call and `billed` is called when it has answered.
@@ -102,24 +104,33 @@ const WHOLE_STICKER_RULE =
 const GREEN_RULE =
   'The background MUST be a perfectly flat solid pure green (#00FF00) with no shadows, gradients or other objects. Do not use green inside the sticker itself.'
 
+// The word "sticker" alone makes the model draw the white edge of a printed one, so a picture that must not have
+// that edge is described to the model as artwork on a green screen.
+const NO_EDGE_RULE =
+  'NO WHITE EDGE: this is NOT a printed or die-cut sticker. There is no white outline, border, stroke, halo or glow around the artwork or around its text, and no white backing shape behind it. The coloured artwork touches the green background directly, and every gap between two parts of the artwork is green, never white.'
+const asArtwork = (rule: string) => rule.replace(/\bsticker\b/g, 'artwork')
+
 function stickerPrompt({ prompt, brand, mascot, style, palette, caption, outline }: Input) {
+  const worded = outline ? (rule: string) => rule : asArtwork
   return [
-    'A single bold die-cut sticker illustration for a Telegram sticker pack.',
+    outline
+      ? 'A single bold die-cut sticker illustration for a Telegram sticker pack.'
+      : 'A single bold illustration isolated on a green screen, to be cut out by chroma key.',
+    outline ? '' : NO_EDGE_RULE,
     BRIEF_RULE,
     `Brief:\n${prompt}`,
     caption
-      ? `The sticker carries exactly this text, in Turkish, spelled exactly, complete, in a chunky readable font: "${caption}". No other text.`
+      ? worded(`The sticker carries exactly this text, in Turkish, spelled exactly, complete, in a chunky readable font: "${caption}". No other text.`)
       : 'Any text asked for above must be in Turkish, spelled exactly, complete, in a chunky readable font. Otherwise draw no text.',
     WHOLE_STICKER_RULE,
-    outline
-      ? 'Do NOT draw any outline, border or stroke around the sticker; a clean outline is added afterwards.'
-      : 'Draw a thick white outline around the whole sticker.',
+    outline ? 'Do NOT draw any outline, border or stroke around the sticker; a clean outline is added afterwards.' : '',
     stylePrompt(style ?? 'auto') || 'Vibrant, glossy, cartoon/3D mascot style.',
     'Expressive, high contrast, readable at a small size.',
     brand?.colors.length ? `Accent colors: ${brand.colors.join(', ')}.` : '',
     palette ? `Colors asked for by the client: ${palette}.` : '',
-    GREEN_RULE,
+    worded(GREEN_RULE),
     mascot ? MASCOT_RULE : 'If reference images are provided, use their character faithfully.',
+    outline ? '' : 'Final check before you draw: no white outline anywhere, only the artwork on flat green.',
   ]
     .filter(Boolean)
     .join('\n')
@@ -136,7 +147,9 @@ function revisionPrompt(input: Input) {
       ? "The second image is the brand's official mascot; keep the mascot in the design looking exactly like it."
       : '',
     sticker
-      ? `Keep the white outline around the sticker. ${GREEN_RULE} ${WHOLE_STICKER_RULE}`
+      ? input.edged
+        ? `Keep the white outline around the sticker exactly as it is. ${GREEN_RULE} ${WHOLE_STICKER_RULE}`
+        : `${NO_EDGE_RULE} The image has no white outline now and must not get one. ${asArtwork(GREEN_RULE)} ${WHOLE_STICKER_RULE}`
       : `${logoRule(input.brand)} ${FULL_BLEED_RULE}`,
     !sticker && input.texts ? NO_TEXT_RULE : '',
   ]
