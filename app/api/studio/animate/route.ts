@@ -6,6 +6,7 @@ import { addJob, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
 import { makeGif, makeMotionSticker, makeVideo, videoToGif } from '@/lib/studio-animate'
 import { cleanMotion, motionLabel } from '@/lib/studio-brief'
 import { closeHold, holdBudget } from '@/lib/studio-budget'
+import { faultMessage, studioFault } from '@/lib/studio-fault'
 import { brushOf } from '@/lib/studio-overlay'
 import { makeStickerIcon, makeVideoSticker, videoStickerFacts } from '@/lib/studio-telegram'
 import { GIF_DURATIONS, gifCost, STICKER_MOTION_COST, toMotionQuality, VIDEO_DURATIONS, videoCost } from '@/lib/studio-types'
@@ -59,7 +60,8 @@ export async function POST(request: NextRequest) {
         : mode === 'tgmotion'
           ? STICKER_MOTION_COST
           : 0
-  const held = await holdBudget(paid, await isPanelOwner())
+  const owner = await isPanelOwner()
+  const held = await holdBudget(paid, owner)
   if (held.error !== null) return NextResponse.json({ error: held.error }, { status: 409 })
   const hold = held.hold
   const onBilled = () => {
@@ -122,16 +124,19 @@ export async function POST(request: NextRequest) {
     console.error('Studio animation failed:', error)
     await closeHold(hold, 'failed', `Hareketli içerik kaydedilemedi (kaynak #${source.id}, ${mode})`)
     const message = error instanceof Error ? error.message : ''
-    const blocked = /safety|policy|blocked|refus/i.test(message)
+    const fault = studioFault(error)
+    const known = faultMessage(fault, { owner, video: paid > 0 })
     return NextResponse.json(
       {
-        error: blocked
-          ? 'Model bu görseli hareketlendirmeyi reddetti. Farklı bir görselle dene.'
-          : telegram && /sticker|dönüştürücü/i.test(message)
-            ? message
-            : 'Hareketlendirme başarısız oldu, tekrar dene.',
+        error:
+          known ??
+          (fault === 'blocked'
+            ? 'Model bu görseli hareketlendirmeyi reddetti. Farklı bir görselle dene.'
+            : telegram && /sticker|dönüştürücü/i.test(message)
+              ? message
+              : 'Hareketlendirme başarısız oldu, tekrar dene.'),
       },
-      { status: 500 },
+      { status: fault === 'funds' ? 402 : 500 },
     )
   }
 }
