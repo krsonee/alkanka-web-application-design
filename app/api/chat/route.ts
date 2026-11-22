@@ -1,12 +1,13 @@
-import { getMember } from '@/lib/member'
-import { getFeed, getLink, isGroupMember } from '@/lib/telegram-chat'
+import { getMemberForRead } from '@/lib/member'
+import { getLink, isGroupMember } from '@/lib/telegram-chat'
+import { readChatFeed } from '@/lib/chat-feed-read'
 import { isChatModerator } from '@/lib/chat-mod'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const [feed, member] = await Promise.all([getFeed(), getMember()])
+    const [feed, member] = await Promise.all([readChatFeed(), getMemberForRead()])
     const link = member ? await getLink(member.id) : null
     const joined = member && link && feed.configured ? await isGroupMember(member.id) : false
     const mod = member && joined ? await isChatModerator(member.id).catch(() => false) : false
