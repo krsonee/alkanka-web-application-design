@@ -65,8 +65,37 @@ function readVolume() {
   return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1
 }
 
+/**
+ * A running audio engine keeps the phone's sound hardware awake even in silence, which drains the battery and
+ * warms the device for as long as the page is open. It goes to sleep this long after the last sound and wakes
+ * on the next one. Longer than any single clip, so nothing is cut off.
+ */
+const SLEEP_AFTER_MS = 30_000
+let sleepTimer: number | undefined
+/** Looping beds (the stadium murmur) keep the engine awake for as long as they play. */
+let loops = 0
+
+function sleepWhenSilent() {
+  window.clearTimeout(sleepTimer)
+  sleepTimer = window.setTimeout(() => {
+    if (ctx && loops === 0 && ctx.state === 'running') void ctx.suspend()
+  }, SLEEP_AFTER_MS)
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (!ctx) return
+    if (document.hidden) {
+      if (ctx.state === 'running') void ctx.suspend()
+    } else if (loops > 0) {
+      void ctx.resume()
+    }
+  })
+}
+
 function audio() {
   if (typeof window === 'undefined') return null
+  if (ctx) sleepWhenSilent()
   if (!ctx) {
     const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
     if (!AC) return null
@@ -89,8 +118,9 @@ function audio() {
     wet.gain.value = 0.22
     room.connect(verb).connect(wet).connect(master)
     loadSamples(ctx)
+    sleepWhenSilent()
   }
-  if (ctx.state === 'suspended') void ctx.resume()
+  if (ctx.state !== 'running' && !document.hidden) void ctx.resume()
   return ctx
 }
 
@@ -647,7 +677,10 @@ export function startCrowdAmbience(level = 0.05) {
   src.start()
   swell.start()
   startBed()
+  loops++
   return () => {
+    loops = Math.max(0, loops - 1)
+    sleepWhenSilent()
     clearInterval(bedTry)
     listeners.delete(apply)
     g.gain.setTargetAtTime(0.0001, ac.currentTime, 0.3)

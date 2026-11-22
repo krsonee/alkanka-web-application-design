@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { kdSound } from '../karadelik/kd-sound'
+import { pacedFrames } from '@/lib/paced-frames'
 import {
   SV_GOAL_DEPTH as DEPTH,
   SV_HH as HH,
@@ -529,10 +530,10 @@ export function SurvivalCanvas({ players, duration, winners, teams: teamsOpt, ru
     const t0 = performance.now()
     let simClock = 0
     let lastFrame = t0
-    let raf = 0
+    const frames = pacedFrames()
 
     const frame = (nowMs: number) => {
-      raf = requestAnimationFrame(frame)
+      frames.request(frame)
       const dt = Math.min(0.05, (nowMs - lastFrame) / 1000)
       lastFrame = nowMs
 
@@ -731,11 +732,11 @@ export function SurvivalCanvas({ players, duration, winners, teams: teamsOpt, ru
         }
       }
     }
-    raf = requestAnimationFrame(frame)
+    frames.request(frame)
     snd?.music.start('survival')
     const groove = setTimeout(() => snd?.music.setIntensity(1), 5000)
     return () => {
-      cancelAnimationFrame(raf)
+      frames.cancel()
       ro.disconnect()
       clearTimeout(groove)
       snd?.music.stop(0.6)

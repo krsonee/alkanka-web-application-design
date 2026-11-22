@@ -23,6 +23,38 @@ export async function getMember(): Promise<Member | null> {
   }
 }
 
+const READ_MEMO_MS = 10_000
+const READ_MEMO_MAX = 5_000
+const readMemo = new Map<string, { at: number; member: Member | null }>()
+
+function sessionCookie(cookie: string | null): string | null {
+  if (!cookie) return null
+  for (const part of cookie.split(';')) {
+    const at = part.indexOf('=')
+    if (at > 0 && part.slice(0, at).trim().endsWith('session_token')) return part.slice(at + 1).trim() || null
+  }
+  return null
+}
+
+/**
+ * The signed-in member, for lists that every open page polls every few seconds (chat feed, lobby, live tables).
+ * Each poll used to cost a session query and a ban query before any work; the answer is now reused for ten
+ * seconds per session cookie, on this server instance.
+ *
+ * Only for showing shared lists. A sign-out or a ban reaches this up to ten seconds late, so anything that moves
+ * coins, takes a seat, sends a message or writes at all must keep using getMember / requireMember.
+ */
+export async function getMemberForRead(): Promise<Member | null> {
+  const token = sessionCookie((await headers()).get('cookie'))
+  if (!token) return getMember()
+  const hit = readMemo.get(token)
+  if (hit && Date.now() - hit.at < READ_MEMO_MS) return hit.member
+  const member = await getMember()
+  if (readMemo.size >= READ_MEMO_MAX) readMemo.clear()
+  readMemo.set(token, { at: Date.now(), member })
+  return member
+}
+
 export async function requireMember(): Promise<Member> {
   const m = await getMember()
   if (!m) throw new Error('Bu işlem için giriş yapmalısın.')
@@ -30,6 +62,10 @@ export async function requireMember(): Promise<Member> {
 }
 
 export async function getBalance(userId: string): Promise<number> {
+  // Read first. The upsert below rewrites the wallet row even when nothing changes, and the top bar asks for the
+  // balance every 30 seconds for every open page: that was a database write per visitor per poll.
+  const have = await rows<{ balance: number }>(sql`SELECT balance FROM wallets WHERE user_id = ${userId}`)
+  if (have[0]) return Number(have[0].balance)
   const bonus = await getSignupBonus().catch(() => SIGNUP_BONUS)
   const r = await rows<{ balance: number; created: boolean }>(sql`
     INSERT INTO wallets (user_id, balance) VALUES (${userId}, ${bonus})

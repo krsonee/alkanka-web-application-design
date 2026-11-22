@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { TableBrand } from './table-brand'
 import type { DuelLink } from './duel-link'
 import { playSound, startCrowdAmbience } from '@/lib/sound'
+import { pacedFrames } from '@/lib/paced-frames'
 import {
   CHARACTERS,
   FOOT,
@@ -303,7 +304,7 @@ function HeadEngineGame({ sport, mode, onEnd, onRematch, names = ['Sen', 'Bot'],
       return mode === 'bot' && n[1] === 'Bot' ? [n[0], `${charAt(p2.ch).name} Bot`] : n
     }
 
-    let raf = 0
+    const frames = pacedFrames()
     let last = performance.now()
     let acc = 0
     let ended = false
@@ -637,16 +638,16 @@ function HeadEngineGame({ sport, mode, onEnd, onRematch, names = ['Sen', 'Bot'],
         return
       }
       if (ended) return
-      raf = requestAnimationFrame(frame)
+      frames.request(frame)
     }
     const onVis = () => {
       last = performance.now()
       k1.current = noKeys()
     }
     document.addEventListener('visibilitychange', onVis)
-    raf = requestAnimationFrame(frame)
+    frames.request(frame)
     return () => {
-      cancelAnimationFrame(raf)
+      frames.cancel()
       quietCrowd()
       document.removeEventListener('visibilitychange', onVis)
       setViewHeight(H)

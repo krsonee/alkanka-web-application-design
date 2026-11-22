@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getMember } from '@/lib/member'
+import { getMember, getMemberForRead } from '@/lib/member'
 import { okeyBotDueMs } from '@/lib/pvp/rules'
 import { notifyTable } from '@/lib/pvp/table-events'
 import { enforceTurnClock, enterTournamentTable, getTableRow, kickIdlePlayers, pausedClock, tableView } from '@/lib/pvp/tables'
@@ -8,8 +8,11 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const [row, m] = await Promise.all([getTableRow(id), getMember()])
+  const [row, reader] = await Promise.all([getTableRow(id), getMemberForRead()])
   if (!row) return NextResponse.json({ error: 'Masa bulunamadı.' }, { status: 404 })
+  // An ordinary table poll only shows the asker their own seat, so the remembered sign-in is enough. A tournament
+  // table seats whoever asks, which is a write: that one checks the session and the ban list every time.
+  const m = row.tournamentId ? await getMember() : reader
   const kicked = await kickIdlePlayers(row).catch(() => false)
   const fresh = kicked ? ((await getTableRow(id)) ?? row) : row
   // A tournament table first seats whoever is asking and applies the deadline for sitting down.

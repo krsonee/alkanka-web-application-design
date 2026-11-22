@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { RED, WHEEL, rouletteClock, RL_SPIN_MS } from '@/lib/casino'
+import { pacedFrames } from '@/lib/paced-frames'
 
 const SEG = 360 / WHEEL.length
 const C = 200
@@ -70,7 +71,7 @@ export function RouletteWheel({ clockOffset, number, highlight }: { clockOffset:
   numberRef.current = number
 
   useEffect(() => {
-    let raf = 0
+    const frames = pacedFrames()
     const tick = () => {
       const { wheel, ball } = pose(Date.now() + clockOffset, numberRef.current)
       wheelRef.current?.setAttribute('transform', `rotate(${wheel} ${C} ${C})`)
@@ -82,10 +83,10 @@ export function RouletteWheel({ clockOffset, number, highlight }: { clockOffset:
           b.style.opacity = '1'
         } else b.style.opacity = '0'
       }
-      raf = requestAnimationFrame(tick)
+      frames.request(tick)
     }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
+    frames.request(tick)
+    return () => frames.cancel()
   }, [clockOffset])
 
   const dimmed = (n: number) => highlight !== null && highlight !== n

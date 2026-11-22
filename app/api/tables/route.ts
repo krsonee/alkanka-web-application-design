@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getMember } from '@/lib/member'
+import { getMemberForRead } from '@/lib/member'
+import { sharedRead } from '@/lib/shared-read'
 import { listMyActiveTables, listOpenTables, sweepIdleTables, tableView } from '@/lib/pvp/tables'
 import { myMatches } from '@/lib/tournaments'
 import { AMBIENT_DEFAULTS, ambientTables, getAmbientSettings } from '@/lib/ambient-tables'
@@ -8,10 +9,11 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
   const game = new URL(req.url).searchParams.get('game') ?? undefined
-  const m = await getMember()
+  const m = await getMemberForRead()
   await sweepIdleTables().catch((e) => console.error('[tables] sweep failed', e))
   const [open, mine, tour] = await Promise.all([
-    listOpenTables(game),
+    // The open tables of a game are the same for everyone in its lobby: one read a second serves them all.
+    sharedRead(`open-tables:${game ?? ''}`, 1_000, () => listOpenTables(game)),
     m ? listMyActiveTables(m.id) : Promise.resolve([]),
     m ? myMatches(m.id) : Promise.resolve([]),
   ])

@@ -2,6 +2,7 @@
 
 import { getMember } from '@/lib/member'
 import { createLinkCode, sendFromSite, unlink } from '@/lib/telegram-chat'
+import { chatFeedChanged } from '@/lib/chat-feed-read'
 import { sendChannelComment } from '@/lib/telegram-channels'
 import { isBroadcastSlug } from '@/lib/telegram-channels-shared'
 import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
@@ -17,6 +18,7 @@ export async function sendChatMessage(text: string): Promise<Result> {
   if (await hitRateLimit(`chat:${member.id}`, 6, 15)) return { ok: false, message: RATE_LIMIT_MESSAGE }
   try {
     await sendFromSite(member.id, text)
+    chatFeedChanged()
     return { ok: true }
   } catch (error) {
     return { ok: false, message: errorText(error) }
@@ -31,7 +33,11 @@ export async function moderateChat(messageId: number, action: ChatModAction, min
   if (await hitRateLimit(`chatmod:${member.id}`, 30, 60)) return { ok: false, message: RATE_LIMIT_MESSAGE }
   try {
     const id = Number(messageId)
-    if (action === 'delete') return { ok: true, message: await mod.modDeleteMessage(member, id) }
+    if (action === 'delete') {
+      const message = await mod.modDeleteMessage(member, id)
+      chatFeedChanged()
+      return { ok: true, message }
+    }
     if (action === 'mute') return { ok: true, message: await mod.modMute(member, id, Number(minutes)) }
     if (action === 'unmute') return { ok: true, message: await mod.modUnmute(member, id) }
     return { ok: false, message: 'Bilinmeyen işlem.' }
