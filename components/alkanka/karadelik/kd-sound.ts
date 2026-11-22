@@ -24,8 +24,33 @@ function applyMute() {
   out.gain.setTargetAtTime(muted() ? 0.0001 : 0.8, ctx.currentTime, 0.08)
 }
 
+/** A running audio engine keeps the phone's sound hardware awake in silence; it sleeps once the music is off and nothing has played for this long. */
+const SLEEP_AFTER_MS = 30_000
+let sleepTimer: number | undefined
+
+function sleepWhenSilent() {
+  window.clearTimeout(sleepTimer)
+  sleepTimer = window.setTimeout(() => {
+    if (!ctx || ctx.state !== 'running') return
+    if (musicOn) sleepWhenSilent()
+    else void ctx.suspend()
+  }, SLEEP_AFTER_MS)
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (!ctx) return
+    if (document.hidden) {
+      if (ctx.state === 'running') void ctx.suspend()
+    } else if (musicOn) {
+      void ctx.resume()
+    }
+  })
+}
+
 function ensure() {
   if (typeof window === 'undefined') return null
+  sleepWhenSilent()
   if (!ctx) {
     const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
     if (!Ctor) return null
@@ -69,7 +94,7 @@ function ensure() {
 
     onSoundMuteChange(applyMute)
   }
-  if (ctx.state === 'suspended') void ctx.resume()
+  if (ctx.state !== 'running' && !document.hidden) void ctx.resume()
   return ctx
 }
 

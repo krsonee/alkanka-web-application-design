@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import { ARENA, STEP, createSim, mulberry, stepSim, type SimState } from '@/lib/cember-sim'
 import type { Participant } from '@/lib/cember-shared'
 import { kdSound } from '../karadelik/kd-sound'
+import { pacedFrames } from '@/lib/paced-frames'
 
 // Canvas can't read Tailwind tokens; these mirror the pitch + site palette (grass, chalk, gold, ruby, live green).
 const C = {
@@ -405,7 +406,7 @@ export function CemberArena({ participants, seed, startAt, now, meId, onEvent }:
       ctx.fillText(text, x, y + size * 0.04)
     }
 
-    let raf = 0
+    const frames = pacedFrames()
     const draw = () => {
       const target = Math.floor((nowRef.current() - startAt) / 1000 / STEP)
       let guard = 0
@@ -507,11 +508,11 @@ export function CemberArena({ participants, seed, startAt, now, meId, onEvent }:
         if (p > 0.5) label(w === meIndex ? 'SEN' : participants[w].name, x, y + rr + R * 0.08, C.gold, Math.max(12, R * 0.06))
       }
 
-      raf = requestAnimationFrame(draw)
+      frames.request(draw)
     }
-    raf = requestAnimationFrame(draw)
+    frames.request(draw)
     return () => {
-      cancelAnimationFrame(raf)
+      frames.cancel()
       ro.disconnect()
       if (groove) clearTimeout(groove)
       kdSound.music.stop(0.6)

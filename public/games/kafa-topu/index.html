@@ -1169,10 +1169,14 @@ let last = performance.now(), acc = 0;
 const STEP = 1/240;
 let ftAvg = 16, perfT = 0;
 function frame(now){
+  // 120 Hz screens: skip every other vsync so the match draws at 60 fps instead of doubling GPU work and heat.
+  // Menus and the pause screen have nothing in motion worth more than 30.
+  const quiet = !game || game.phase === 'paused' || game.phase === 'menu';
+  if (now >= last && now - last < (quiet ? 29 : 10)) { requestAnimationFrame(frame); return; }
   const ms = now - last;
   const dt = Math.min(.05, ms/1000); last = now;
   // Adaptive quality: if frames run long for a few seconds, switch to lite effects. Resolution stays sharp.
-  if (ms < 200) { ftAvg += (ms - ftAvg)*.05; perfT += dt; }
+  if (ms < 200 && !quiet) { ftAvg += (ms - ftAvg)*.05; perfT += dt; }
   if (!lowQ && perfT > 2.5 && ftAvg > 21) lowQ = true;
   if (parts.length > 240) parts.splice(0, parts.length - 240);
   if (game && game.phase !== 'paused' && game.phase !== 'menu') {

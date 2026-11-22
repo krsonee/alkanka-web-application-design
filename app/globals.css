@@ -2101,7 +2101,32 @@
   .sd-cta::before, .ending-card::before, .ending-art, .ending-sheen,
   .ending-bar-fill::after, .mini-card[data-ready='true']::before, .mini-jako,
   .mini-halo, .stage-rays, .stage-spot, .stage-bubble, .stage-coin,
-  .step-cycle, .app-trophy, .animate-glow {
+      .step-cycle, .app-trophy, .animate-glow, .border-flow::before {
+    animation: none !important;
+  }
+}
+
+/*
+  The same budget for an iPad with a trackpad or keyboard attached: it reports a fine pointer, so the query
+  above misses it, yet it is the same fanless tablet. The root layout marks phones and tablets with data-touch.
+*/
+html[data-touch] {
+  *, *::before, *::after {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .blur-3xl { display: none; }
+
+  .tier-shine::after, .kp-card::after, .kp-crown, .kp-glow, .kp-flame,
+  .podium-halo, .podium-crown, .podium-spark, .counter-sheen,
+  .animate-radio-idle, .badge-glint, .bonus-aura::before, .bonus-aura::after,
+  .bonus-aura .bonus-sheen, .sponsor-strip-art, .coupon-art, .tg-cta::after,
+  .tg-cta-avatar, .sd-hero::before, .sd-logo, .sd-logo-sheen, .sd-tier,
+  .sd-cta::before, .ending-card::before, .ending-art, .ending-sheen,
+  .ending-bar-fill::after, .mini-card[data-ready='true']::before, .mini-jako,
+  .mini-halo, .stage-rays, .stage-spot, .stage-bubble, .stage-coin,
+  .step-cycle, .app-trophy, .animate-glow, .border-flow::before {
     animation: none !important;
   }
 }

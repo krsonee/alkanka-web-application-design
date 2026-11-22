@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { BOARD, type Group, type MonopolyState } from "@/lib/games/monopoly";
+import { pacedFrames } from "@/lib/paced-frames";
 
 export type MoneyDelta = { id: number; values: number[] } | null;
 export type Playback = {
@@ -1466,7 +1467,7 @@ function createEngine(
     floats.add(fl);
   }
 
-  let raf = 0;
+  const frames = pacedFrames();
   let last = performance.now();
   const frame = (now: number) => {
     const dt = Math.min(0.05, (now - last) / 1000);
@@ -1543,7 +1544,7 @@ function createEngine(
       anchorEl.style.top = `${THREE.MathUtils.clamp(ay, 60, Math.max(60, h - 70))}px`;
     }
     renderer.render(scene, camera);
-    raf = requestAnimationFrame(frame);
+    frames.request(frame);
   };
 
   const resize = () => {
@@ -1587,7 +1588,7 @@ function createEngine(
   resize();
   cam.pos.copy(overview.pos);
   cam.look.copy(overview.look);
-  raf = requestAnimationFrame(frame);
+  frames.request(frame);
 
   /* ---------- public API ---------- */
   return {
@@ -1776,7 +1777,7 @@ function createEngine(
       }
     },
     dispose() {
-      cancelAnimationFrame(raf);
+      frames.cancel();
       timers.forEach((id) => window.clearTimeout(id));
       disposers.forEach((d) => d());
       renderer.domElement.removeEventListener("pointerdown", onDown);

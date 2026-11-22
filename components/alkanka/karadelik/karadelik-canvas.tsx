@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { kdSound } from './kd-sound'
+import { pacedFrames } from '@/lib/paced-frames'
 import {
   KD_BAR_IN as BAR_IN,
   KD_BAR_OUT as BAR_OUT,
@@ -677,7 +678,7 @@ export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, see
       }
     }
 
-    let raf = 0
+    const frames = pacedFrames()
     let last = performance.now()
     let acc = 0
 
@@ -789,14 +790,14 @@ export function KaraDelikCanvas({ players, duration, winners, prizePool = 0, see
 
       if (finished) drawVictory(now)
 
-      raf = requestAnimationFrame(frame)
+      frames.request(frame)
     }
-    raf = requestAnimationFrame(frame)
+    frames.request(frame)
     kdSound.music.start('karadelik')
     const groove = setTimeout(() => kdSound.music.setIntensity(1), 5000)
 
     return () => {
-      cancelAnimationFrame(raf)
+      frames.cancel()
       ro.disconnect()
       clearTimeout(groove)
       kdSound.music.stop(0.6)

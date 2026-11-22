@@ -8,6 +8,7 @@ import type { BilardoState } from '@/lib/pvp/rules'
 import type { GameApi } from './stake-gate'
 import type { Remote } from './remote'
 import { playSound } from '@/lib/sound'
+import { canvasScale, pacedFrames } from '@/lib/paced-frames'
 import { TableBrand } from './table-brand'
 import { ThemeDecor, useTableTheme } from './table-theme'
 import { themeLogo, type TableTheme } from '@/lib/table-themes'
@@ -854,7 +855,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
   useEffect(() => {
     const canvas = canvasRef.current!
     const ctx = canvas.getContext('2d')!
-    const dpr = Math.min(window.devicePixelRatio || 1, 3)
+    const dpr = canvasScale(CW, 3)
     canvas.width = CW * dpr
     canvas.height = CH * dpr
     const painted = paintTable(dpr, null, themeRef.current)
@@ -871,7 +872,24 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
       bg = paintTable(dpr, logoReady ? logoImg : null, themeRef.current).canvas
     }
     logoImg.src = logoSrcRef.current
-    let raf = 0
+    // The table moves 60 steps a second whatever the screen refreshes at: one step per frame ran the balls
+    // at double speed on 120 Hz screens and in slow motion on a phone that dropped frames.
+    const STEP_MS = 1000 / 60
+    let lastStep = 0
+    let owed = 0
+    let touchedAt = 0
+    const touched = () => {
+      touchedAt = performance.now()
+    }
+    const INPUTS = ['pointerdown', 'pointermove', 'keydown'] as const
+    INPUTS.forEach((name) => window.addEventListener(name, touched, { passive: true }))
+    // A table nobody is touching and where nothing rolls is redrawn half as often.
+    const frames = pacedFrames(() => {
+      const g = game.current
+      const now = performance.now()
+      const busy = g.moving || g.preview || g.strike || drops.current.length > 0 || now < shakeUntil.current || now - touchedAt < 1500
+      return busy ? 60 : 30
+    })
     let lastHitSound = 0
     let lastRailSound = 0
     let lastAimSent = { t: 0, a: 0, back: 0, x: 0, y: 0 }
@@ -933,19 +951,30 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         g.moving = true
       }
       if (g.moving) {
-        const prev = list.map((b) => [b.x, b.y])
-        stepShot(list, g.spin, g.ev, hooks)
-        list.forEach((b, i) => {
-          const dx = b.x - prev[i][0]
-          const dy = b.y - prev[i][1]
-          const d = Math.hypot(dx, dy)
-          if (d > 0.01 && !b.in) {
-            const r = rollOf(b.id)
-            r.n = rotate(r.n, -dy / d, dx / d, d / R)
-            r.m = rotate(r.m, -dy / d, dx / d, d / R)
-          }
-        })
-        if (isStill(list)) settle()
+        const gap = lastStep ? Math.min(100, now - lastStep) : STEP_MS
+        lastStep = now
+        // A 60 Hz screen delivers frames a hair early or late; those still count as exactly one step.
+        owed += Math.abs(gap - STEP_MS) < 2 ? STEP_MS : gap
+        for (let n = 0; g.moving && owed >= STEP_MS - 0.01 && n < 4; n++) {
+          owed -= STEP_MS
+          const prev = list.map((b) => [b.x, b.y])
+          stepShot(list, g.spin, g.ev, hooks)
+          list.forEach((b, i) => {
+            const dx = b.x - prev[i][0]
+            const dy = b.y - prev[i][1]
+            const d = Math.hypot(dx, dy)
+            if (d > 0.01 && !b.in) {
+              const r = rollOf(b.id)
+              r.n = rotate(r.n, -dy / d, dx / d, d / R)
+              r.m = rotate(r.m, -dy / d, dx / d, d / R)
+            }
+          })
+          if (isStill(list)) settle()
+        }
+        if (owed >= STEP_MS) owed = 0
+      } else {
+        lastStep = 0
+        owed = 0
       }
 
       const shaking = now < shakeUntil.current ? (shakeUntil.current - now) / 280 : 0
@@ -1132,10 +1161,13 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         ctx.globalAlpha = 1
       }
 
-      raf = requestAnimationFrame(draw)
+      frames.request(draw)
     }
-    raf = requestAnimationFrame(draw)
-    return () => cancelAnimationFrame(raf)
+    frames.request(draw)
+    return () => {
+      frames.cancel()
+      INPUTS.forEach((name) => window.removeEventListener(name, touched))
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [landscape])
 

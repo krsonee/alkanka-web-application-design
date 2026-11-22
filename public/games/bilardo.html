@@ -404,9 +404,9 @@
     }
     function decode(data) { return new Promise((ok, no) => { const p = ac.decodeAudioData(data, ok, no); if (p && p.then) p.then(ok, no); }); }
     function init() {
-      if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+      if (ac) { if (ac.state !== 'running') ac.resume(); nap(); return; }
       const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
-      ac = new C();
+      ac = new C(); nap();
       out = ac.createDynamicsCompressor(); out.threshold.value = -12; out.ratio.value = 4; out.connect(ac.destination);
       room = ac.createGain(); room.connect(out);
       const dl = ac.createDelay(), fb = ac.createGain(), wet = ac.createBiquadFilter();
@@ -439,7 +439,12 @@
       s.buffer = noise; f.type = type; f.frequency.value = freq; f.Q.value = q;
       env(g, t, peak, dec); s.connect(f).connect(g).connect(ac.destination); s.start(t, Math.random()*0.3); s.stop(t + dec + 0.05);
     }
-    const ok = () => on && ac && ac.state === 'running' && budget < 6;
+    // A running audio engine keeps the phone's sound hardware awake in silence. It sleeps 45 s after the last
+    // sound, which is longer than a whole turn clock, and wakes on the next touch.
+    let napT = 0;
+    const nap = () => { clearTimeout(napT); napT = setTimeout(() => { if (ac && ac.state === 'running') ac.suspend(); }, 45000); };
+    document.addEventListener('visibilitychange', () => { if (document.hidden && ac && ac.state === 'running') ac.suspend(); });
+    const ok = () => { if (!(on && ac && ac.state === 'running' && budget < 6)) return false; nap(); return true; };
     return {
       init, frame() { budget = 0; }, get on() { return on; }, set(v) { on = v; },
       strike(p) { if (!ok()) return; budget++; const f = clamp(p, 0, 1);
@@ -1376,7 +1381,14 @@
 
   /* ---------- loop ---------- */
   let last = performance.now();
+  // A still table is redrawn 30 times a second and a live one 60, whatever the screen refreshes at. A 120 Hz
+  // phone or iPad used to draw every frame twice over, and a table nobody touched was drawn as often as a break.
+  let touchedAt = 0;
+  ['pointerdown', 'pointermove', 'keydown'].forEach(t => window.addEventListener(t, () => { touchedAt = performance.now(); }, { passive:true }));
   function loop(now) {
+    requestAnimationFrame(loop);
+    const busy = S.moving || S.strike > 0 || S.aimTo || S.firing || S.charging || S.bot || now - touchedAt < 1500;
+    if (now >= last && now - last < (busy ? 16.667 : 33.333) - 4) return;
     const dt = Math.min(50, now - last); last = now;
     const k = dt/16.667;
     Snd.frame();
@@ -1399,12 +1411,12 @@
     }
     if (!S.moving && !S.over && !S.bot && !S.firing && !conf.classList.contains('open')) {
       S.timer -= dt/1000;
-      const av = S.turn === 'me' ? $('avMe') : $('avOp'), p = Math.max(0, S.timer/30);
-      av.style.setProperty('--p', p); av.style.setProperty('--c', p < 0.25 ? 'var(--red)' : p < 0.5 ? 'var(--gold)' : 'var(--green)');
+      // The ring moves in tenths of a second: writing it every frame restyled the avatar 60 times a second for a change nobody can see.
+      const av = S.turn === 'me' ? $('avMe') : $('avOp'), p = Math.round(Math.max(0, S.timer/30)*300)/300;
+      if (av.style.getPropertyValue('--p') !== String(p)) { av.style.setProperty('--p', p); av.style.setProperty('--c', p < 0.25 ? 'var(--red)' : p < 0.5 ? 'var(--gold)' : 'var(--green)'); }
       if (S.timer <= 0 && S.turn === 'me') { toastPill('Süre doldu.'); S.turn = 'op'; S.ballInHand = true; startTurn(true); }
     }
     render();
-    requestAnimationFrame(loop);
   }
 
   reset();

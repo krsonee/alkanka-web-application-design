@@ -75,11 +75,13 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="tr" className={`${inter.variable} ${spaceGrotesk.variable} bg-background`}>
+    <html lang="tr" className={`${inter.variable} ${spaceGrotesk.variable} bg-background`} suppressHydrationWarning>
       <body className="font-sans antialiased">
         <script
           dangerouslySetInnerHTML={{
             __html:
+              // Phones and tablets get the thermal budget in globals.css. An iPad reports itself as a Mac, so touch points tell them apart.
+              "if(/Android|iPhone|iPad|iPod/.test(navigator.userAgent)||(/Mac/.test(navigator.platform)&&navigator.maxTouchPoints>1))document.documentElement.setAttribute('data-touch','');" +
               "document.addEventListener('visibilitychange',function(){document.documentElement.classList.toggle('is-hidden',document.hidden)});" +
               // iOS Safari ignores user-scalable=no: block pinch gestures site-wide (double-tap is handled by touch-action in CSS).
               "['gesturestart','gesturechange','gestureend'].forEach(function(t){document.addEventListener(t,function(e){e.preventDefault()},{passive:false})});" +
