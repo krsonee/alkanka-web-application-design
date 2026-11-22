@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db'
-import { getMember } from '@/lib/member'
+import { getMember, getMemberForRead } from '@/lib/member'
 import { getTableRow } from '@/lib/pvp/tables'
 import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
 import { isSeatedAt } from '@/lib/blackjack-live'
@@ -41,7 +41,8 @@ const teamOfSeat = (seat: number) => (seat % 2 === 0 ? 'A' : 'B')
 /** The viewer's team letter at a team table, or null for spectators, solo tables and shared rooms. */
 async function viewerTeam(id: string) {
   if (SHARED_ROOMS.has(id) || BLACKJACK_ROOM.test(id)) return null
-  const [m, t] = await Promise.all([getMember(), getTableRow(id)])
+  // Read every few seconds by every seat; sending a message (POST below) still checks the session each time.
+  const [m, t] = await Promise.all([getMemberForRead(), getTableRow(id)])
   if (!m || !t || !t.options.team) return null
   const p = t.players.find((x) => x.id === m.id && !x.bot)
   return p ? teamOfSeat(p.seat) : null
