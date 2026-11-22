@@ -63,6 +63,8 @@ export type StudioJob = {
   texts: StudioTexts | null
   /** True when the text-free original is stored, so the copy can be changed without a new model call. */
   retextable: boolean
+  /** Stickers: the full-size transparent PNG behind the 512 px Telegram file; empty for older stickers. */
+  hdUrl: string
 }
 
 /** How many jobs of one brand are sent to the screen at a time. */

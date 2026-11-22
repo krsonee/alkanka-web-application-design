@@ -239,28 +239,41 @@ function TeamLine({ name, logo, goals }: { name: string; logo: string | null; go
   )
 }
 
-/** Why the coupon field is closed: no session, no account at this sponsor, or an account staff turned down. */
-export type CouponLock = 'guest' | 'none' | 'rejected'
+/**
+ * Why the coupon field is closed: no session, no account at this sponsor, an account staff has not
+ * checked yet, or one staff turned down.
+ */
+export type CouponLock = 'guest' | 'none' | 'pending' | 'rejected'
 
 const LOCK_NOTE: Record<CouponLock, (site: string) => string> = {
   guest: (site) => `Kupon numarası girmek için önce Alkanka'ya giriş yap, sonra ${site} hesabını bağla.`,
-  none: (site) => `${site} hesabını bir kez bağlarsın; sonraki maçlarda doğrudan kupon numaranı girersin.`,
+  none: (site) => `${site} hesabını bir kez bağlarsın. Ekibimiz kullanıcı adını onayladıktan sonra her maçta doğrudan kupon numaranı girersin.`,
+  pending: (site) => `${site} kullanıcı adın ekibimizin onayını bekliyor. Onaylanınca kupon alanı kendiliğinden açılır; bu sırada bir şey yapmana gerek yok.`,
   rejected: (site) => `Bağladığın ${site} hesabı onaylanmadı. Doğru kullanıcı adını bağlamadan kupon numarası girilemez.`,
 }
 
-/** The coupon field stays closed until the member's account at this sponsor is linked; this says so and leads there. */
+const stepDot = 'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold'
+
+/** The coupon field stays closed until the member's account at this sponsor is linked and approved; this says which step is missing. */
 function AccountLock({ site, lock, linkFieldId, canLink }: { site: string; lock: CouponLock; linkFieldId: string; canLink: boolean }) {
+  const waiting = lock === 'pending'
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-primary/40 bg-primary/5 p-3">
       <ol className="flex flex-col gap-2 text-sm">
-        <li className="flex items-center gap-2 font-semibold text-foreground">
-          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground" aria-hidden="true">
-            1
+        <li className={cn('flex items-center gap-2', waiting ? 'text-muted-foreground' : 'font-semibold text-foreground')}>
+          <span className={cn(stepDot, waiting ? 'bg-success/15 text-success' : 'bg-primary text-primary-foreground')} aria-hidden="true">
+            {waiting ? <Check className="size-3.5" /> : 1}
           </span>
-          {lock === 'guest' ? 'Giriş yap ve hesabını bağla' : `${site} hesabını bağla`}
+          {lock === 'guest' ? 'Giriş yap ve hesabını bağla' : waiting ? `${site} hesabını bağladın` : `${site} hesabını bağla`}
+        </li>
+        <li className={cn('flex items-center gap-2', waiting ? 'font-semibold text-foreground' : 'text-muted-foreground')}>
+          <span className={cn(stepDot, waiting ? 'bg-primary text-primary-foreground' : 'border border-border bg-background')} aria-hidden="true">
+            {waiting ? 2 : <Lock className="size-3" />}
+          </span>
+          {waiting ? 'Ekibimiz hesabını onaylıyor' : 'Ekibimiz hesabını onaylar'}
         </li>
         <li className="flex items-center gap-2 text-muted-foreground">
-          <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-background" aria-hidden="true">
+          <span className={cn(stepDot, 'border border-border bg-background')} aria-hidden="true">
             <Lock className="size-3" />
           </span>
           Kupon numaranı gir
@@ -272,7 +285,8 @@ function AccountLock({ site, lock, linkFieldId, canLink }: { site: string; lock:
           Giriş yap ya da kayıt ol
         </a>
       ) : (
-        canLink && (
+        canLink &&
+        !waiting && (
           <button
             type="button"
             onClick={() => {

@@ -9,7 +9,7 @@ import ffmpegPath from 'ffmpeg-static'
 import sharp from 'sharp'
 import { motionText, type Motion } from '@/lib/studio-brief'
 import { buildOverlay, type Brush } from '@/lib/studio-overlay'
-import { clipToVideoSticker, stickerGreenFrame, STICKER_FRAME, stickerShape } from '@/lib/studio-telegram'
+import { clipToVideoSticker, stickerGreenFrame, STICKER_FRAME } from '@/lib/studio-telegram'
 import { STICKER_CLIP_SECONDS, type MotionQuality } from '@/lib/studio-types'
 
 const run = promisify(execFile)
@@ -86,8 +86,8 @@ export async function makeGif(image: Buffer) {
 }
 
 const GIF_SHAPE = {
-  sd: { fps: 14, width: 540, colors: 192 },
-  hd: { fps: 16, width: 720, colors: 224 },
+  sd: { fps: 15, width: 560, colors: 256 },
+  hd: { fps: 18, width: 720, colors: 256 },
 } as const
 
 export async function videoToGif(video: Buffer, quality: MotionQuality = 'sd') {
@@ -103,7 +103,7 @@ export async function videoToGif(video: Buffer, quality: MotionQuality = 'sd') {
       '-i',
       input,
       '-vf',
-      `fps=${shape.fps},scale=${shape.width}:-2:flags=lanczos,split[a][b];[a]palettegen=max_colors=${shape.colors}:stats_mode=diff[p];[b][p]paletteuse=dither=sierra2_4a`,
+      `fps=${shape.fps},scale=${shape.width}:-2:flags=lanczos,split[a][b];[a]palettegen=max_colors=${shape.colors}:stats_mode=full[p];[b][p]paletteuse=dither=sierra2_4a`,
       '-loop',
       '0',
       output,
@@ -239,7 +239,7 @@ export async function makeVideo({
     prompt: {
       image: new Uint8Array(frame),
       text: [
-        'Animate this advertising key visual into a short, premium, eye-catching promo clip.',
+        'Animate this advertising key visual into a short, premium, eye-catching promo clip. It is the first frame; the picture itself (its characters, objects and layout) stays what it is.',
         motionText(motion, padded),
         padded
           ? 'Only the sharp square in the middle is the picture; the soft areas on both sides are padding that is cut off afterwards. Keep the camera locked on that square: no panning, no tilting, no zooming out.'
@@ -271,12 +271,15 @@ export async function makeMotionSticker(image: Buffer, motion: Motion, onBilled?
     prompt: {
       image: new Uint8Array(await stickerGreenFrame(image)),
       text: [
-        'Animate this sticker character in place, as a short, lively, looping reaction sticker.',
-        motionText(motion, true),
-        'The background is a green screen: it MUST stay perfectly flat, solid pure green (#00FF00) in every frame, edge to edge. No shadows on the background, no floor, no gradients, no new objects.',
-        'Nothing may appear on the green: no words, letters, titles or banners, no copies of the writing on the sticker, no lightning, sparks, glow, smoke, confetti or particles. Only the sticker itself moves.',
-        'The sticker stays the same size, in the same place in the middle of the frame, and moves only slightly within its own outline: small gestures, blinking, breathing, a nod. No jumping, sliding or zooming. Keep the outline around it.',
-        'Any writing that is part of the sticker stays exactly where it is, unchanged and readable.',
+        'This is a sticker on a green screen. Animate the sticker itself, as a short, lively reaction sticker.',
+        motion.action
+          ? motionText(motion, true)
+          : 'The character blinks, breathes and makes one small, friendly gesture.\nThe camera is locked off and does not move.',
+        'Every part of the sticker stays in the picture, whole, for the entire clip: the character, every object next to it, its outline and all of its writing. Nothing fades out, disappears, melts, gets cut off or turns into something else.',
+        'The sticker keeps its size and stays in the middle. It must stay completely inside the frame and never touch the frame edges; there is free green space around it for the movement.',
+        'Any writing on the sticker keeps the same letters in the same place and stays readable in every frame.',
+        'The background is a green screen: it MUST stay perfectly flat, solid pure green (#00FF00) in every frame, edge to edge. No shadows on the background, no floor, no gradients.',
+        'Nothing new may appear on the green: no words, letters, titles or banners, no copies of the writing on the sticker, no lightning, sparks, glow, smoke, confetti, particles or new objects.',
       ].join('\n'),
     },
     resolution: `${STICKER_FRAME.width}x${STICKER_FRAME.height}`,
@@ -284,5 +287,5 @@ export async function makeMotionSticker(image: Buffer, motion: Motion, onBilled?
     generateAudio: false,
   })
   onBilled?.()
-  return clipToVideoSticker(Buffer.from(video.uint8Array), await stickerShape(image))
+  return clipToVideoSticker(Buffer.from(video.uint8Array), image)
 }

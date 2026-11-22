@@ -231,7 +231,8 @@ function Accounts({ accounts, names }: { accounts: SponsorAccount[]; names: Reco
       <div className="flex flex-col gap-1">
         <h2 className="font-display text-lg font-bold text-foreground">Sponsor hesap onayı ({pendingList.length} bekliyor)</h2>
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Üyeler sponsor sitedeki kullanıcı adını profilinden bağlar. Affiliate panelinde referansınla kayıtlıysa onayla. Sadece onaylı hesaplar çevrim sıralamasına girer.
+          Üyeler sponsor sitedeki kullanıcı adını profilinden ya da sponsor etkinliğinden bağlar. Affiliate panelinde referansınla kayıtlıysa onayla. Sadece onaylı hesaplar çevrim sıralamasına girer ve
+          sponsor etkinliklerinde kupon numarası girebilir. Üye yazdığı kullanıcı adını kendisi değiştiremez: yanlışsa reddet (ya da onayı kaldır), üye doğrusunu yeniden yazar.
         </p>
       </div>
       <Note msg={msg} />
@@ -270,9 +271,29 @@ function Accounts({ accounts, names }: { accounts: SponsorAccount[]; names: Reco
                   </button>
                 </div>
               ) : (
-                <span className={cn('rounded-full px-2.5 py-1 text-xs font-semibold', a.status === 'approved' ? 'bg-primary/15 text-primary' : 'bg-destructive/15 text-destructive')}>
-                  {a.status === 'approved' ? 'Onaylı' : 'Reddedildi'}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={cn('rounded-full px-2.5 py-1 text-xs font-semibold', a.status === 'approved' ? 'bg-primary/15 text-primary' : 'bg-destructive/15 text-destructive')}>
+                    {a.status === 'approved' ? 'Onaylı' : 'Reddedildi'}
+                  </span>
+                  {a.status === 'approved' && (
+                    <button
+                      type="button"
+                      disabled={pending}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-foreground disabled:opacity-50"
+                      onClick={() =>
+                        void askReason('Onay kaldırılacak. Üye bu sponsorda kupon giremez; kullanıcı adını yeniden yazıp onaya gönderebilir. Sebebi üye kendi ekranında görür.', {
+                          label: 'Sebep',
+                          initial: 'Kullanıcı adı düzeltilecek',
+                          maxLength: 200,
+                          confirm: 'Onayı kaldır',
+                          presets: ['Kullanıcı adı düzeltilecek', 'Referansımızla kayıtlı değil', 'Bu hesap başka bir üyeye ait'],
+                        }).then((note) => note !== null && run(() => reviewSponsorAccountAction(a.userId, a.siteId, false, note)))
+                      }
+                    >
+                      <X className="size-4" aria-hidden="true" /> Onayı kaldır
+                    </button>
+                  )}
+                </div>
               )}
             </li>
           ))}

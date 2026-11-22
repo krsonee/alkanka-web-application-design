@@ -4,9 +4,10 @@ import { logPanel } from '@/lib/panel-log'
 import { rejectCrossSite } from '@/lib/same-origin'
 import { addJob, assetsByIds, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
 import { briefLabel, briefProblem, briefText, cleanBrief } from '@/lib/studio-brief'
-import { closeHold, holdBudget } from '@/lib/studio-budget'
+import { closeHold, holdBudget, type BudgetHold } from '@/lib/studio-budget'
 import { runGeneration } from '@/lib/studio-generate'
 import { applyOverlay, brushOf } from '@/lib/studio-overlay'
+import { stickerOnGreen } from '@/lib/studio-telegram'
 import { cleanTexts, imageCost, STUDIO_CATEGORIES, STUDIO_TEXT_CEILING, STUDIO_FORMATS, toImageSize, type StudioTexts } from '@/lib/studio-types'
 
 export const maxDuration = 300
@@ -44,9 +45,12 @@ export async function POST(request: NextRequest) {
   if (problem) return NextResponse.json({ error: problem }, { status: 400 })
   // A revised sticker already carries its edge, so a second one is never drawn on top of it.
   const outline = kind === 'sticker' && !parent && body.outline !== false
-  const held = await holdBudget(retext ? 0 : imageCost(size), await isPanelOwner())
+  const owner = await isPanelOwner()
+  const held = await holdBudget(retext ? 0 : imageCost(size), owner)
   if (held.error !== null) return NextResponse.json({ error: held.error }, { status: 409 })
   const hold = held.hold
+  // A sticker that comes back cut off is drawn a second time; that call gets its own share of the cap.
+  const second: { hold: BudgetHold | null } = { hold: null }
 
   try {
     if (retext && parent) {
@@ -73,8 +77,23 @@ export async function POST(request: NextRequest) {
       .slice(0, 3)
     const assetRefs = await Promise.all((await assetsByIds(assetIds)).map(readFile))
     const references = mascot ? [mascot, ...assetRefs] : assetRefs
-    const revisionOf = parent?.cleanPathname ? await readFile(parent.cleanPathname) : parent ? await readFile(parent.pathname) : null
+    const original = parent?.cleanPathname ? await readFile(parent.cleanPathname) : parent ? await readFile(parent.pathname) : null
+    // A stored sticker is transparent; the model edits it on the green it is asked to hand back.
+    const revisionOf = original && kind === 'sticker' ? await stickerOnGreen(original) : original
     const result = await runGeneration({
+      redraw:
+        kind === 'sticker'
+          ? {
+              allow: async () => {
+                const more = await holdBudget(imageCost(size), owner)
+                second.hold = more.hold
+                return more.error === null
+              },
+              billed: () => {
+                if (second.hold) second.hold.billed = true
+              },
+            }
+          : undefined,
       onBilled: () => {
         hold.billed = true
       },
@@ -93,7 +112,8 @@ export async function POST(request: NextRequest) {
       caption: kind === 'sticker' ? brief?.caption : '',
       outline,
     })
-    const shown = brief ? briefLabel(brief) : prompt
+    const redrawn = result.calls > 1
+    const shown = `${brief ? briefLabel(brief) : prompt}${redrawn ? ' · kenardan taşan çizim bir kez yeniden çizildi' : ''}`
     const folder = kind === 'sticker' ? 'stickers' : 'banners'
     const [pathname, clean] = await Promise.all([
       storeFile(folder, result.data, result.contentType, result.ext),
@@ -107,15 +127,17 @@ export async function POST(request: NextRequest) {
       prompt: shown,
       pathname,
       parentId: parent?.id ?? null,
-      cost: imageCost(size),
+      cost: imageCost(size) * result.calls,
       texts,
     })
     await closeHold(hold, 'recorded')
+    if (second.hold) await closeHold(second.hold, redrawn ? 'recorded' : 'failed')
     await logPanel('studio', 'Görsel üretildi', brand?.name || null, `Görsel #${job.id} · ${shown.slice(0, 200)}`)
     return NextResponse.json({ job: { ...job, brandName: brand?.name ?? '' } })
   } catch (error) {
     console.error('Studio generation failed:', error)
     await closeHold(hold, 'failed', `Görsel kaydedilemedi (${kind}, ${size})`)
+    if (second.hold) await closeHold(second.hold, 'failed', `Yeniden çizilen sticker kaydedilemedi (${size})`)
     const message = error instanceof Error ? error.message : ''
     const blocked = /safety|policy|blocked|refus/i.test(message)
     return NextResponse.json(

@@ -109,6 +109,8 @@ export function briefLabel(raw: Brief) {
   return [brief.subject, brief.character, brief.scene].filter(Boolean).join(' · ').slice(0, 400)
 }
 
+const MOTION_RULE =
+  'Motion direction from the client. It may be written in Turkish. Do exactly and completely what it describes, and nothing it does not describe: no other actions, no scene changes, no cuts, no new characters or objects.'
 const DEFAULT_ACTION = 'Subtle premium motion: light sweeps and glints, drifting particles, the main character moves slightly and naturally.'
 
 /**
@@ -118,7 +120,7 @@ const DEFAULT_ACTION = 'Subtle premium motion: light sweeps and glints, drifting
 export function motionText(raw: Motion, fixedCamera = false) {
   const motion = cleanMotion(raw)
   const camera = CAMERA_MOVES.find((c) => c.id === (fixedCamera ? 'still' : motion.camera)) ?? CAMERA_MOVES[0]
-  return [motion.action ? `What moves: ${motion.action}` : DEFAULT_ACTION, camera.prompt].join('\n')
+  return [motion.action ? `${MOTION_RULE}\n${motion.action}` : DEFAULT_ACTION, camera.prompt].join('\n')
 }
 
 export function motionLabel(raw: Motion) {

@@ -67,7 +67,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const image = await readFile(source.pathname)
+    // A sticker is animated from its full-size copy, not from the 512 px Telegram file made from it.
+    const image = await readFile(telegram && source.cleanPathname ? source.cleanPathname : source.pathname)
     // With the text-free original at hand, the model animates that and the logo and copy are printed
     // on the finished clip. Older jobs without it are animated as they are.
     const clip = async (seconds: number, sound: boolean) => {

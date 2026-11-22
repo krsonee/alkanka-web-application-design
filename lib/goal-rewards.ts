@@ -448,6 +448,8 @@ export async function submitGoalCoupon(user: { id: string; name: string }, match
   const account = (await mySponsorAccounts(user.id)).find((a) => a.siteId === m.site_slug)
   if (!account) throw new Error(`Önce ${site} hesabını Alkanka'ya bağla.`)
   if (account.status === 'rejected') throw new Error(`${site} hesabın onaylanmadı. Doğru kullanıcı adıyla yeniden bağla.`)
+  // A username nobody has checked proves nothing: the coupon field opens once staff approved the account.
+  if (account.status !== 'approved') throw new Error(`${site} hesabın henüz onaylanmadı. Ekibimiz kullanıcı adını doğrulayınca kupon numaranı girebilirsin.`)
 
   const siteId = Number(m.site_id)
   const client = await pool.connect()
@@ -469,12 +471,14 @@ export async function submitGoalCoupon(user: { id: string; name: string }, match
        SELECT m.id, $2::text, $3::text, 'all', $4::text, $5::text, 'pending'
        FROM goal_matches m JOIN goal_events e ON e.id = m.event_id
        WHERE m.id = $1::int AND m.status = 'open' AND m.kickoff > now() AND e.active AND e.category = 'sponsor'
+         AND EXISTS (SELECT 1 FROM sponsor_accounts a WHERE a.user_id = $2::text AND a.site_id = e.site_slug AND a.status = 'approved' AND a.username = $4::text)
        ON CONFLICT (match_id, user_id) DO UPDATE SET coupon = EXCLUDED.coupon, site_username = EXCLUDED.site_username, created_at = now()
          WHERE goal_picks.approval = 'pending'
        RETURNING match_id`,
       [key, user.id, user.name.slice(0, 40), account.username, coupon.value],
     )
-    if (!saved.rowCount) throw new Error(`${CLOSED} Kupon numarası maç başlayana kadar girilir.`)
+    // The match closed, or the account stopped being approved, between the checks above and this write.
+    if (!saved.rowCount) throw new Error(`${CLOSED} Kupon numarası maç başlayana kadar ve onaylı ${site} hesabıyla girilir.`)
     await client.query('COMMIT')
     return mine.rows[0] ? 'updated' : 'saved'
   } catch (error) {

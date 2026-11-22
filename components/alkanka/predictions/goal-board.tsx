@@ -87,11 +87,12 @@ function AccountBox({ event, account, fieldId }: { event: GoalEventView; account
       <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border bg-background px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
         <Link2 className="size-3.5 shrink-0 text-success" aria-hidden="true" />
         <span>
-          Bağlı {site} hesabın: <b className="text-foreground">{account.username}</b> ({ACCOUNT_STATE[account.status]}). Taleplerine bu kullanıcı adı eklenir.
+          Bağlı {site} hesabın: <b className="text-foreground">{account.username}</b> ({ACCOUNT_STATE[account.status]}).{' '}
+          {account.status === 'approved'
+            ? 'Taleplerine bu kullanıcı adı eklenir.'
+            : 'Ekibimiz onaylayınca kupon numaranı girebilirsin.'}{' '}
+          Kullanıcı adı sonradan değiştirilemez; yanlışsa destekle iletişime geç.
         </span>
-        <Link href="/profil" className="font-semibold text-primary underline-offset-2 hover:underline">
-          Değiştir
-        </Link>
       </p>
     )
   }
@@ -125,7 +126,7 @@ function AccountBox({ event, account, fieldId }: { event: GoalEventView; account
           {pending ? 'Bağlanıyor...' : 'Hesabı bağla'}
         </button>
       </div>
-      <span className="text-xs leading-relaxed text-muted-foreground">Bir kez bağlarsın; kupon girdiğinde kullanıcı adın talebine kendiliğinden eklenir. Ödül bu hesaba tanımlanır, yanlış yazılan hesaba ödül gönderilemez.</span>
+      <span className="text-xs leading-relaxed text-muted-foreground">Bir kez bağlarsın ve sonradan değiştiremezsin; dikkatle yaz. Ekibimiz kullanıcı adını onaylayınca kupon alanı açılır ve kullanıcı adın talebine kendiliğinden eklenir. Ödül bu hesaba tanımlanır.</span>
       <StatusLine status={status} />
     </form>
   )
@@ -134,10 +135,10 @@ function AccountBox({ event, account, fieldId }: { event: GoalEventView; account
 function EventBlock({ event, now, me }: { event: GoalEventView; now: number; me: GoalMe | null }) {
   const sponsor = event.category === 'sponsor'
   const account = sponsor && event.siteSlug ? (me?.accounts[event.siteSlug] ?? null) : null
-  const usable = account && account.status !== 'rejected' ? account.username : null
+  const usable = account?.status === 'approved' ? account.username : null
   const blocked = me?.flag?.state === 'blocked'
-  // The coupon field opens only for the account linked at this very sponsor; an account elsewhere does not count.
-  const lock: CouponLock | null = !me ? 'guest' : !account ? 'none' : account.status === 'rejected' ? 'rejected' : null
+  // The coupon field opens only for the account linked at this very sponsor, and only once staff approved it.
+  const lock: CouponLock | null = !me ? 'guest' : !account ? 'none' : account.status === 'approved' ? null : account.status
   const linkFieldId = `gol-hesap-${event.id}`
   return (
     <section aria-label={event.title} className="flex flex-col gap-3">
