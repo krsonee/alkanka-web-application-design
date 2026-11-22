@@ -11,7 +11,20 @@ export type StudioBrand = {
   notes: string
 }
 
-export type StudioAsset = { id: number; provider: string; game: string; pathname: string; url: string }
+import type { AssetRole } from '@/lib/studio-refs'
+
+/** `role` is empty until the picture is labelled; `pinned` puts it first when its game is named. */
+export type StudioAsset = {
+  id: number
+  provider: string
+  game: string
+  pathname: string
+  url: string
+  role: AssetRole | ''
+  score: number
+  note: string
+  pinned: boolean
+}
 
 export type StudioKind = 'banner' | 'sticker' | 'gif' | 'video' | 'tgsticker' | 'tgicon'
 

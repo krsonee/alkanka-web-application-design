@@ -76,7 +76,7 @@ const HINTS: Record<Exclude<Section, 'guide'>, { title: string; body: string }> 
   },
   library: {
     title: 'Kütüphane ne işe yarar?',
-    body: 'Sağlayıcı portallarından aldığın oyun karakterleri ve arka planlar burada durur. Üretirken en fazla 3 tanesini referans seçersen yapay zeka o tarza yakın üretir.',
+    body: 'Sağlayıcı portallarından aldığın oyun klasörleri burada durur. Her görselin türü eklenirken belirlenir; üretimde oyunun adını yazdığında en iyi karakter, logo ve arka plan kendiliğinden seçilir.',
   },
 }
 
@@ -176,9 +176,12 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
             items={[
               <>{b('Sağlayıcı kütüphanesi')} sekmesine geç.</>,
               <>{b('Sağlayıcı')} adını yaz (örn. Pragmatic Play). Daha önce yazdıkların listede çıkar.</>,
-              <>İstersen {b('Oyun')} adını da yaz (örn. Gates of Olympus). Bulması kolaylaşır.</>,
-              <>{b('Dosya seç')} ile tek seferde 20 görsele kadar yükle, ya da portaldaki görsellerin linklerini kopyalayıp {b('Linklerden ekle')} kutusuna her satıra bir link gelecek şekilde yapıştır.</>,
-              <>Üretim ekranında {b('Referans görsel seç')} bölümünden en fazla 3 tanesini işaretle. Yapay zeka karakteri ve tarzı bunlara göre çizer.</>,
+              <>{b('Oyun adı')}nı portaldaki gibi yaz (örn. Big Bass Halloween Splash 1000). Otomatik seçim bu adla çalışır; ad yazılmayan görseller sadece elle seçilir.</>,
+              <>Oyunun klasörünü olduğu gibi ekle: {b('Dosyaları seç')} ile hepsini işaretle, {b('Klasör seç')} ile klasörü ver ya da görselleri kutuya sürükle. Sayı sınırı yok, parça parça yüklenir ve kaçıncı görselde olduğu yazar. Linkleri {b('Linklerden ekle')} kutusuna her satıra bir link gelecek şekilde de yapıştırabilirsin.</>,
+              <>Her görsel eklenirken bir kez incelenir ve türü yazılır: {b('Karakter')}, {b('Oyun logosu')}, {b('Arka plan')}, {b('Sembol')}, {b('Nesne')}, {b('Diğer')}. Yanına 1-10 arası bir puan düşer; harf sembolleri, logonun beyaz kopyası ve boş çerçeveler düşük puan alır. Bu inceleme görsel başına 1 sentin altındadır ve aylık harcamaya eklenir.</>,
+              <>Üstünde {b('Otomatik')} yazan görseller, o oyunun adı üretim formunda geçtiğinde kendiliğinden kullanılacak olanlardır: en iyi karakter, renkli logo ve arka plan. Tür yanlışsa listeden değiştir; başka bir görselin kullanılmasını istiyorsan yıldıza bas, yıldızlı görsel öne geçer.</>,
+              <>Türü belirlenemeyen görsel olursa oyunun satırında {b('Etiketle')} düğmesi çıkar. Etiketsiz görsel otomatik seçilmez, elle seçilebilir.</>,
+              <>Üretim formunda oyunun adını yazınca seçilen görseller formun içinde görünür. {b('Kendim seçeyim')} ile değiştirir, {b('Kullanma')} ile o üretimde hiç kullanmazsın. {b('Referans görseli elle seç')} bölümünden en fazla 3 görseli kendin de işaretleyebilirsin.</>,
             ]}
           />
           <p className="flex gap-2 rounded-xl bg-secondary p-3 text-xs leading-relaxed text-muted-foreground">
@@ -202,7 +205,7 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
               <>Formu doldur: {b('Konu')} (zorunlu), {b('Sahne ve arka plan')}, {b('Karakter ya da ana nesne')}, {b('Stil')} (Otomatik, 3D, Çizgi, Gerçekçi) ve istersen {b('Renkler')}. Bu alanlara yazı yazma; yazılar kendi kutularına girer.</>,
               <>Sıfırdan yazmak istemezsen {b('Hazır tarifler')}den birine bas (freespin, maç günü, canlı casino, turnuva); alanlar dolar, sonra kendine göre değiştirirsin.</>,
               <>Kısa yazdıysan {b('İsteği geliştir')} düğmesi alanları daha ayrıntılı hale getirir. Görsel üretmez; sonucu okuyup düzeltirsin.</>,
-              <>Formda bir oyunun ya da sağlayıcının adı geçiyorsa ve kütüphanede görseli varsa, tek tıkla referans olarak ekleme düğmesi çıkar.</>,
+              <>Formda kütüphanedeki bir oyunun adı geçiyorsa o oyunun en iyi karakteri, logosu ve arka planı kendiliğinden kullanılır; seçilenler formda görünür. Oyun logosu görsele olduğu gibi konur, karakter aynı kalır, sahne oyunun arka planında kurulur.</>,
               <>{b('Üret')} butonuna bas. Butonda tahmini maliyet yazar. 15-40 saniyede sağ tarafta çıkar.</>,
             ]}
           />

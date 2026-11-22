@@ -12,7 +12,6 @@ import {
   GalleryHorizontal,
   Globe,
   ImagePlus,
-  Link2,
   Loader2,
   Palette,
   RefreshCw,
@@ -23,7 +22,6 @@ import {
   Wand2,
 } from 'lucide-react'
 import {
-  deleteAssetAction,
   deleteBrandAction,
   deleteJobAction,
   extractBrandAction,
@@ -35,7 +33,9 @@ import {
 import { ALL_KINDS, AreaBar, AreaHead, areaOf, areaTotal, inKindGroup, startArea, writeArea, type StudioArea } from '@/components/panel/studio-areas'
 import { BriefFields, MotionFields } from '@/components/panel/studio-brief-form'
 import { StudioGuide, StudioHint } from '@/components/panel/studio-guide'
+import { AutoReferences, ReferencePicker, StudioLibrary } from '@/components/panel/studio-library'
 import { amountInput } from '@/lib/amount'
+import { bestAssets } from '@/lib/studio-refs'
 import {
   briefProblem,
   EMPTY_BRIEF,
@@ -252,7 +252,7 @@ export function Studio({ brands, assets, jobs, totals, initialArea, spend, budge
       ) : view === 'brands' ? (
         <BrandKits brands={brands} />
       ) : view === 'library' ? (
-        <Library assets={assets} />
+        <StudioLibrary assets={assets} />
       ) : null}
     </div>
   )
@@ -287,6 +287,7 @@ function Creator({
   const [category, setCategory] = useState<string>(STUDIO_CATEGORIES[0])
   const [brief, setBrief] = useState<Brief>(EMPTY_BRIEF)
   const [picked, setPicked] = useState<number[]>([])
+  const [autoPick, setAutoPick] = useState(true)
   const [running, setRunning] = useState(0)
   const [error, setError] = useState('')
   const [results, setResults] = useState<StudioJob[]>([])
@@ -327,7 +328,11 @@ function Creator({
     motion,
     quality,
   })
-  const suggested = matchAssets(`${brief.subject} ${brief.scene} ${brief.character}`, assets).filter((id) => !picked.includes(id))
+  const named = `${brief.subject} ${brief.scene} ${brief.character}`
+  // The best pictures of the game the form names. They are used unless staff picked by hand or switched them off.
+  const autoFound = bestAssets(named, assets, flow === 'sticker' ? 'sticker' : 'banner')
+  const references = picked.length ? picked : autoPick ? autoFound : []
+  const suggested = autoFound.length ? [] : matchAssets(named, assets).filter((id) => !picked.includes(id))
 
   function applyRecipe(recipe: Recipe) {
     setBrief({ ...EMPTY_BRIEF, ...recipe.brief })
@@ -389,7 +394,7 @@ function Creator({
     const baseKind = flow === 'sticker' ? 'sticker' : 'banner'
     await Promise.all(
       runs.map(async (format) => {
-        const made = await generate({ kind: baseKind, format, category, brief, brandId, assetIds: picked, useMascot, size, texts, outline })
+        const made = await generate({ kind: baseKind, format, category, brief, brandId, assetIds: references, useMascot, size, texts, outline })
         if (made && followUp) await animate(made, motionOptions(followUp))
       }),
     )
@@ -587,6 +592,9 @@ function Creator({
         ) : null}
 
         <BriefFields flow={flow} brief={brief} onBrief={setBrief} motion={motion} onMotion={setMotion} onRecipe={applyRecipe} />
+        {autoFound.length && !picked.length ? (
+          <AutoReferences assets={assets} ids={autoFound} on={autoPick} onToggle={setAutoPick} onEdit={() => setPicked(autoFound)} />
+        ) : null}
         {suggested.length && picked.length < 3 ? (
           <button type="button" onClick={() => setPicked((p) => [...p, ...suggested].slice(0, 3))} className={ghostBtn}>
             {`Kütüphanede adı geçen ${suggested.length} görsel var · referans olarak ekle`}
@@ -654,32 +662,7 @@ function Creator({
           </div>
         ) : null}
 
-        {assets.length ? (
-          <details className="rounded-xl border border-border p-3">
-            <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
-              Referans görsel seç ({picked.length}/3)
-            </summary>
-            <div className="mt-3 grid max-h-56 grid-cols-4 gap-2 overflow-y-auto">
-              {assets.map((a) => {
-                const on = picked.includes(a.id)
-                return (
-                  <button
-                    key={a.id}
-                    type="button"
-                    aria-pressed={on}
-                    title={`${a.provider} ${a.game}`}
-                    onClick={() =>
-                      setPicked((p) => (on ? p.filter((x) => x !== a.id) : p.length < 3 ? [...p, a.id] : p))
-                    }
-                    className={cn('overflow-hidden rounded-lg border-2', on ? 'border-primary' : 'border-transparent')}
-                  >
-                    <img src={a.url || '/placeholder.svg'} alt={`${a.provider} ${a.game}`} className="aspect-square w-full object-cover" />
-                  </button>
-                )
-              })}
-            </div>
-          </details>
-        ) : null}
+        {assets.length ? <ReferencePicker assets={assets} picked={picked} onPicked={setPicked} /> : null}
 
         <button type="button" onClick={start} disabled={running + videoRuns > 0 || overCap(plannedCost)} className={primaryBtn}>
           {running + videoRuns > 0 ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
@@ -1378,132 +1361,6 @@ function BrandKits({ brands }: { brands: StudioBrand[] }) {
           </div>
         ))}
       </div>
-    </div>
-  )
-}
-
-function Library({ assets }: { assets: StudioAsset[] }) {
-  const router = useRouter()
-  const [provider, setProvider] = useState('')
-  const [game, setGame] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('')
-  const [, start] = useTransition()
-  const providers = [...new Set(assets.map((a) => a.provider))]
-
-  const [links, setLinks] = useState('')
-
-  async function upload(files: FileList | null, urls = '') {
-    if (!provider.trim()) return setMessage('Önce sağlayıcı adını yaz.')
-    setBusy(true)
-    setMessage('')
-    const form = new FormData()
-    form.set('provider', provider)
-    form.set('game', game)
-    if (urls) form.set('urls', urls)
-    for (const f of Array.from(files ?? [])) form.append('file', f)
-    const res = await fetch('/api/studio/upload', { method: 'POST', body: form })
-    const data = await res.json().catch(() => ({ error: 'Yükleme zaman aşımına uğradı.' }))
-    setBusy(false)
-    if (res.ok) {
-      setMessage(`${data.pathnames.length} görsel eklendi.${data.failed?.length ? ` Eklenemeyen: ${data.failed.length}` : ''}`)
-      setLinks('')
-      router.refresh()
-    } else setMessage(data.error)
-  }
-
-  return (
-    <div className="flex flex-col gap-6">
-      <div className={card}>
-        <div className="flex items-center gap-2">
-          <ImagePlus className="size-5 text-primary" aria-hidden />
-          <h2 className="font-display text-xl font-bold uppercase text-foreground">Görsel ekle</h2>
-        </div>
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          Sağlayıcı portallarından aldığın oyun karakterleri, logolar ve arka planlar. Üretimde referans olarak seçilir.
-        </p>
-        <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-          <label className={label}>
-            Sağlayıcı
-            <input value={provider} onChange={(e) => setProvider(e.target.value)} list="studio-providers" placeholder="Pragmatic Play" className={input} />
-            <datalist id="studio-providers">
-              {providers.map((p) => (
-                <option key={p} value={p} />
-              ))}
-            </datalist>
-          </label>
-          <label className={label}>
-            Oyun (opsiyonel)
-            <input value={game} onChange={(e) => setGame(e.target.value)} placeholder="Gates of Olympus" className={input} />
-          </label>
-          <label className={cn(primaryBtn, 'cursor-pointer self-end')}>
-            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Upload className="size-4" aria-hidden />}
-            Dosya seç (20&apos;ye kadar)
-            <input
-              type="file"
-              multiple
-              accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif"
-              className="sr-only"
-              onChange={(e) => e.target.files?.length && upload(e.target.files)}
-            />
-          </label>
-        </div>
-        <label className={label}>
-          <span className="flex items-center gap-1.5">
-            <Link2 className="size-3.5" aria-hidden /> Veya görsel linklerini yapıştır (her satıra bir link, en fazla 30)
-          </span>
-          <textarea
-            value={links}
-            onChange={(e) => setLinks(e.target.value)}
-            rows={3}
-            placeholder="https://.../gates-of-olympus-character.png"
-            className={cn(input, 'resize-y font-mono text-xs')}
-          />
-        </label>
-        <button
-          type="button"
-          disabled={busy || !links.trim()}
-          onClick={() => upload(null, links)}
-          className={cn(ghostBtn, 'self-start')}
-        >
-          {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Link2 className="size-3.5" aria-hidden />}
-          Linklerden ekle
-        </button>
-        {message ? (
-          <p role="status" className="text-sm text-muted-foreground">
-            {message}
-          </p>
-        ) : null}
-      </div>
-
-      {providers.map((p) => (
-        <section key={p} className="flex flex-col gap-3">
-          <h3 className="font-display text-lg font-bold uppercase text-foreground">{p}</h3>
-          <div className="grid grid-cols-3 gap-3 sm:grid-cols-5 lg:grid-cols-8">
-            {assets
-              .filter((a) => a.provider === p)
-              .map((a) => (
-                <div key={a.id} className="group relative overflow-hidden rounded-xl border border-border bg-secondary">
-                  <img src={a.url || '/placeholder.svg'} alt={`${a.provider} ${a.game}`} loading="lazy" className="aspect-square w-full object-cover" />
-                  {a.game ? <p className="truncate px-2 py-1 text-xs text-muted-foreground">{a.game}</p> : null}
-                  <button
-                    type="button"
-                    aria-label="Görseli sil"
-                    onClick={() =>
-                      void askConfirm('Bu görsel kütüphaneden kalıcı olarak silinsin mi? Geri alınamaz.').then((ok) => ok && start(async () => {
-                        await deleteAssetAction(a.id)
-                        router.refresh()
-                      }))
-                    }
-                    className="absolute right-1 top-1 rounded-md bg-card/90 p-1 text-destructive opacity-0 group-hover:opacity-100 focus:opacity-100"
-                  >
-                    <Trash2 className="size-3.5" aria-hidden />
-                  </button>
-                </div>
-              ))}
-          </div>
-        </section>
-      ))}
     </div>
   )
 }

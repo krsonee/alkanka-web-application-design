@@ -59,6 +59,7 @@ const SETTINGS: ({ title: string; words?: string; query?: string; anyOf?: PanelM
   { title: 'Stüdyo aylık tavanı', words: 'harcama bütçe limit', row: 'studio', owner: true },
   { title: 'Telegram bot tokenı ve gizli cron adresi', words: 'bot ekle token botfather anahtarı yenile otomatik kontrol adresi cron', row: 'telegram', query: 's=mirror', owner: true },
   { title: 'Sosyal medya API anahtarları', words: 'api key bearer token youtube twitch x doğrulama bağlantısı', row: 'social', owner: true },
+  { title: 'Stüdyo sağlayıcı kütüphanesi', words: 'oyun görselleri asset toplu yükleme klasör karakter logo arka plan sembol otomatik seçim referans etiket', row: 'studio' },
   { title: 'Stüdyo marka alanları', words: 'sponsor site ayrı sayfa üretimler arşiv liste tür süzgeç karışmasın', row: 'studio' },
   { title: 'Stüdyo görselini slider\'a ekle', words: 'banner slayt gönder aktar', row: 'studio' },
   { title: 'Stüdyo hazır tarifler ve isteği geliştir', words: 'form konu sahne karakter stil tarif şablon prompt talimat', row: 'studio' },
