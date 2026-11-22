@@ -204,6 +204,26 @@ export async function doneDealTasks(userId: string): Promise<number[]> {
   return linked.map((r) => Number(r.id)).filter((id) => done.has(id))
 }
 
+export type LinkedSponsorAccount = { username: string; status: 'pending' | 'approved' }
+
+/**
+ * The sponsor accounts this member has linked (waiting for staff or approved), by sponsor slug. An
+ * account staff turned down is not linked. Before any member has linked one the table does not exist
+ * yet, which simply means nobody has an account; any other failure stops the purchase.
+ */
+export async function linkedSponsorAccounts(userId: string): Promise<Record<string, LinkedSponsorAccount>> {
+  const found = await rows<{ site_id: string; username: string; status: string }>(
+    sql`SELECT site_id, username, status FROM sponsor_accounts WHERE user_id = ${userId} AND status <> 'rejected'`,
+  ).catch((error) => {
+    const e = error as { code?: string; cause?: { code?: string } }
+    if ((e?.code ?? e?.cause?.code) === '42P01') return []
+    throw error
+  })
+  return Object.fromEntries(
+    found.filter((r) => String(r.username).trim()).map((r) => [String(r.site_id), { username: String(r.username), status: r.status === 'approved' ? 'approved' : 'pending' }]),
+  )
+}
+
 async function withSponsorSlugs(items: MarketProduct[]) {
   const { listSites } = await import('@/lib/sites')
   const sites = await listSites()
@@ -363,8 +383,12 @@ async function requestProductLocked(member: Member, itemId: string, siteUsername
   await ensure()
   const found = await rows<ItemRow>(sql`SELECT * FROM market_items WHERE id = ${itemId} AND active`)
   if (!found[0]) throw new Error('Ürün bulunamadı.')
-  const [item] = await priced([toProduct(found[0])], true)
-  const username = clean(siteUsername, 60)
+  // The sponsor's slug is what a linked account is filed under; a stored product row does not carry it.
+  const [item] = await withSponsorSlugs(await priced([toProduct(found[0])], true))
+  // A sponsor reward goes to the account the member linked at that sponsor. The form's own field is read
+  // only when there is none, so a typo cannot send the reward to somebody else's account.
+  const linked = item.kind === 'sponsor' && item.sponsorSlug ? (await linkedSponsorAccounts(member.id))[item.sponsorSlug] : undefined
+  const username = linked?.username ?? clean(siteUsername, 60)
   if (item.needsUsername && username.length < 2) throw new Error('Site kullanıcı adını yazmalısın.')
 
   const used = await rows<{ c: string }>(sql`SELECT count(*) AS c FROM market_requests
@@ -413,7 +437,7 @@ async function requestProductLocked(member: Member, itemId: string, siteUsername
   const { notifyApproval } = await import('@/lib/telegram-bots')
   await notifyApproval('market', {
     uye: member.name,
-    detay: `${item.name} (${price} KC${viaTask ? ', görev fiyatı' : item.sale ? `, ${item.sale.name} %${item.sale.pct}` : ''}${pct ? `, %${pct} indirimli` : ''})${username ? ` · Site kullanıcı adı: ${username}` : ''}`,
+    detay: `${item.name} (${price} KC${viaTask ? ', görev fiyatı' : item.sale ? `, ${item.sale.name} %${item.sale.pct}` : ''}${pct ? `, %${pct} indirimli` : ''})${username ? ` · Site kullanıcı adı: ${username}${linked ? ` (bağlı hesap, ${linked.status === 'approved' ? 'onaylı' : 'onay bekliyor'})` : ''}` : ''}`,
   }).catch(() => {})
   return { ...item, price, delivered }
 }

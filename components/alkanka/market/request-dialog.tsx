@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Check, Coins, X } from 'lucide-react'
+import { Check, Coins, UserCheck, X } from 'lucide-react'
 import { requestMarketItem } from '@/app/actions/market'
-import type { MarketProduct } from '@/lib/market'
+import type { LinkedSponsorAccount, MarketProduct } from '@/lib/market'
 import { dealShown, rewardText } from '@/lib/market-shared'
 import { useEscape } from '@/lib/use-escape'
 import { formatAC } from '../points-context'
@@ -15,6 +15,8 @@ export function RequestDialog({
   item,
   pay,
   taskDone,
+  account,
+  checking,
   points,
   error,
   onClose,
@@ -24,6 +26,10 @@ export function RequestDialog({
   /** The price on screen; the server refuses the purchase if it would charge more than this. */
   pay: number
   taskDone: boolean
+  /** The account the member linked at this product's sponsor; the reward goes to it and no name is typed. */
+  account: LinkedSponsorAccount | null
+  /** True while the member's linked accounts are still being read. */
+  checking: boolean
   points: number
   error: string | null
   onClose: () => void
@@ -39,7 +45,7 @@ export function RequestDialog({
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
-    startTransition(async () => onDone(await requestMarketItem(item.id, item.needsUsername ? username : null, pay)))
+    startTransition(async () => onDone(await requestMarketItem(item.id, item.needsUsername && !account ? username : null, pay)))
   }
 
   return (
@@ -64,7 +70,27 @@ export function RequestDialog({
           </button>
         </div>
 
-        {item.needsUsername && (
+        {item.needsUsername && account ? (
+          <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-background px-3 py-2.5 text-sm">
+            <span className="font-medium text-foreground">{`${item.sponsorName} hesabın`}</span>
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+              <span className="flex min-w-0 items-start gap-2">
+                <UserCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+                <span className="min-w-0 break-all font-display font-bold text-foreground">{account.username}</span>
+              </span>
+              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${account.status === 'approved' ? 'bg-success/15 text-success' : 'bg-primary/15 text-primary'}`}>
+                {account.status === 'approved' ? 'Onaylı hesap' : 'Onay bekliyor'}
+              </span>
+            </span>
+            <span className="text-xs leading-relaxed text-muted-foreground">
+              Ödül bu hesaba yüklenir. Kullanıcı adın bağladığın hesaptan alınır, burada yazılmaz ve değiştirilmez.
+            </span>
+          </div>
+        ) : item.needsUsername && checking ? (
+          <p role="status" className="rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-muted-foreground">
+            Bağlı hesabın kontrol ediliyor...
+          </p>
+        ) : item.needsUsername ? (
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-foreground">{item.kind === 'sponsor' ? `${item.sponsorName} kullanıcı adın` : 'Kullanıcı adın'}</span>
             <input
@@ -77,9 +103,20 @@ export function RequestDialog({
               placeholder="Sitedeki kullanıcı adını yaz"
               className="h-11 rounded-lg border border-border bg-background px-3 text-foreground outline-none focus:border-primary"
             />
-            <span className="text-xs leading-relaxed text-muted-foreground">Bonus bu kullanıcı adına yüklenecek. Yanlış yazılan taleplerde iade yapılır.</span>
+            <span className="text-xs leading-relaxed text-muted-foreground">
+              Bonus bu kullanıcı adına yüklenecek. Yanlış yazılan taleplerde iade yapılır.
+              {item.kind === 'sponsor' && (
+                <>
+                  {' Bu sponsordaki hesabını '}
+                  <Link href="/profil" className="font-semibold text-primary underline-offset-2 hover:underline">
+                    profilinden bağlarsan
+                  </Link>
+                  {' kullanıcı adın bir daha sorulmaz.'}
+                </>
+              )}
+            </span>
           </label>
-        )}
+        ) : null}
 
         <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
           {auto && item.reward
@@ -124,7 +161,7 @@ export function RequestDialog({
 
         <button
           type="submit"
-          disabled={pending || short > 0}
+          disabled={pending || short > 0 || (item.needsUsername && checking)}
           className="flex h-11 items-center justify-center gap-2 rounded-lg bg-primary text-xs font-bold uppercase tracking-wider text-primary-foreground disabled:opacity-50"
         >
           <Check className="size-4" aria-hidden="true" />
