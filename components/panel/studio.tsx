@@ -643,7 +643,10 @@ function Creator({
               {`Hareketlisini de üret (Telegram video sticker) · ~${usd(STICKER_MOTION_COST)}`}
             </label>
             <p className="font-normal leading-relaxed">
-              Sticker şeffaf arka planla, Telegram ölçüsünde (512 px) çıkar. Hareketlisini sonradan sticker kartındaki düğmeyle de üretebilirsin.
+              Sticker şeffaf arka planla, Telegram ölçüsünde (512 px) çıkar. Hareketlisini sonradan sticker kartındaki düğmeyle de üretebilirsin.{' '}
+              {outline
+                ? 'Beyaz kenar her yerde aynı kalınlıkta basılır.'
+                : 'Beyaz kenar basılmaz, çizim olduğu gibi çıkar; koyu renkli yazı Telegram’ın koyu temasında zor okunur.'}
             </p>
           </div>
         ) : null}
