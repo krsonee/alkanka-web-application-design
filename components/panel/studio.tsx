@@ -50,6 +50,7 @@ import {
   budgetState,
   usd,
   DEFAULT_IMAGE_SIZE,
+  DIRECTION_COST,
   EMPTY_TEXTS,
   GIF_DURATIONS,
   gifCost,
@@ -317,7 +318,7 @@ function Creator({
   const followUp: AnimateMode | null =
     flow === 'video' ? 'video' : flow === 'gif' ? (gifReal ? 'aigif' : 'gif') : flow === 'sticker' && stickerMoves ? 'tgmotion' : null
   const followCost = followUp === 'video' ? clipCost : followUp === 'aigif' ? realGifCost : followUp === 'tgmotion' ? STICKER_MOTION_COST : 0
-  const unitCost = imageCost(flow === 'sticker' ? '1K' : size) + followCost
+  const unitCost = imageCost(flow === 'sticker' ? '1K' : size) + DIRECTION_COST + followCost
   const animCost = animFlow === 'gif' ? realGifCost : clipCost
   const motionOptions = (mode: AnimateMode): AnimateOptions => ({
     mode,
@@ -340,7 +341,7 @@ function Creator({
   // The server refuses these too; the buttons close first so nobody waits for a refusal.
   const overCap = (cost: number) => left != null && cost > left + 1e-9
   const plannedCost = unitCost * runs.length
-  const revisionCost = revising && !retextOnly ? imageCost(revising.kind === 'sticker' ? '1K' : size) : 0
+  const revisionCost = revising && !retextOnly ? imageCost(revising.kind === 'sticker' ? '1K' : size) + DIRECTION_COST : 0
 
   async function post(url: string, body: Record<string, unknown>): Promise<StudioJob | null> {
     try {
@@ -550,8 +551,8 @@ function Creator({
               </div>
             </fieldset>
             <fieldset className={label}>
-              <legend className="mb-1.5">Çözünürlük</legend>
-              <div className="grid grid-cols-2 gap-2">
+              <legend className="mb-1.5">Kalite</legend>
+              <div className="grid grid-cols-3 gap-2">
                 {IMAGE_SIZES.map((s) => (
                   <button
                     key={s.id}
@@ -563,13 +564,15 @@ function Creator({
                       size === s.id ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground',
                     )}
                   >
-                    <span className="font-bold">
-                      {s.label} · {s.hint}
-                    </span>
+                    <span className="font-bold">{s.label}</span>
+                    <span className="text-center">{s.hint}</span>
                     <span>~{usd(s.cost)}</span>
                   </button>
                 ))}
               </div>
+              <p className="mt-1.5 text-xs font-normal leading-relaxed text-muted-foreground">
+                En yüksek, daha büyük modelle çizilir: ışık, doku ve ayrıntı belirgin biçimde iyileşir, görsel başına ücret artar. Her üretimde isteğin önce ayrıntılı sahne tarifine çevrilir (~{usd(DIRECTION_COST)}).
+              </p>
             </fieldset>
             <label className={label}>
               Kategori
@@ -887,7 +890,7 @@ function TextFields({ value, onChange }: { value: StudioTexts; onChange: (texts:
         </label>
       ))}
       <p className="text-xs leading-relaxed text-muted-foreground">
-        Buraya yazdıkların yapay zekaya çizdirilmez, gerçek fontla birebir basılır; Türkçe harf hatası ya da tekrar olmaz. Rakam ve % içeren kelimeler marka rengiyle vurgulanır. Doldurduysan konu ve sahne alanlarına yazı yazma.
+        Buraya yazdıkların yapay zekaya çizdirilmez, gerçek fontla birebir basılır; Türkçe harf hatası ya da tekrar olmaz. Rakam ve % içeren kelimeler marka rengiyle vurgulanır. Türkçe harfsiz yazdıysan (HOS GELDIN) harfler düzeltilip basılır (HOŞ GELDİN), kelimelerin değişmez. Bu alanları boş bırakıp konuya &quot;üstünde ... yazsın&quot; dersen o yazı da ayıklanıp aynı şekilde basılır; yazı istemediysen görsel yazısız çıkar. Basılan yazıyı sonradan ücretsiz değiştirebilirsin.
       </p>
     </fieldset>
   )

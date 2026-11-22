@@ -5,10 +5,11 @@ import { rejectCrossSite } from '@/lib/same-origin'
 import { addJob, assetsByIds, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
 import { briefLabel, briefProblem, briefText, cleanBrief } from '@/lib/studio-brief'
 import { closeHold, holdBudget, type BudgetHold } from '@/lib/studio-budget'
+import { direct } from '@/lib/studio-direct'
 import { runGeneration } from '@/lib/studio-generate'
 import { applyOverlay, brushOf } from '@/lib/studio-overlay'
 import { stickerOnGreen, whiteEdged } from '@/lib/studio-telegram'
-import { cleanTexts, imageCost, STUDIO_CATEGORIES, STUDIO_TEXT_CEILING, STUDIO_FORMATS, toImageSize, type StudioTexts } from '@/lib/studio-types'
+import { cleanTexts, DIRECTION_COST, imageCost, STUDIO_CATEGORIES, STUDIO_TEXT_CEILING, STUDIO_FORMATS, toImageSize, type StudioTexts } from '@/lib/studio-types'
 
 export const maxDuration = 300
 
@@ -51,6 +52,8 @@ export async function POST(request: NextRequest) {
   const hold = held.hold
   // A sticker that comes back cut off is drawn a second time; that call gets its own share of the cap.
   const second: { hold: BudgetHold | null } = { hold: null }
+  // The art-direction step is a paid call of its own, so it has its own share of the cap.
+  const planning: { hold: BudgetHold | null } = { hold: null }
 
   try {
     if (retext && parent) {
@@ -81,7 +84,18 @@ export async function POST(request: NextRequest) {
     // A stored sticker is transparent; the model edits it on the green it is asked to hand back.
     const revisionOf = original && kind === 'sticker' ? await stickerOnGreen(original) : original
     const edged = original && kind === 'sticker' ? await whiteEdged(original) : false
+    // The note is worked out in English and the copy settled before anything is drawn. When this
+    // step cannot run, the picture is drawn from the note alone.
+    const planned = await holdBudget(DIRECTION_COST, owner)
+    planning.hold = planned.hold
+    const direction =
+      planned.error === null
+        ? await direct({ kind, revision: Boolean(parent), brief: prompt, format, category, texts, caption: kind === 'sticker' ? (brief?.caption ?? '') : '', mascot: Boolean(mascot) })
+        : null
+    if (direction && planning.hold) planning.hold.billed = true
+    const printed = direction ? direction.texts : texts
     const result = await runGeneration({
+      scene: direction?.scene,
       redraw:
         kind === 'sticker'
           ? {
@@ -101,16 +115,16 @@ export async function POST(request: NextRequest) {
       kind,
       format,
       category,
-      prompt,
+      prompt: direction ? direction.note : prompt,
       brand,
       references,
       revisionOf,
       mascot: Boolean(mascot),
-      texts,
+      texts: printed,
       size,
       style: brief?.style,
       palette: brief?.colors,
-      caption: kind === 'sticker' ? brief?.caption : '',
+      caption: kind === 'sticker' ? direction?.caption || brief?.caption : '',
       outline,
       edged,
     })
@@ -129,17 +143,19 @@ export async function POST(request: NextRequest) {
       prompt: shown,
       pathname,
       parentId: parent?.id ?? null,
-      cost: imageCost(size) * result.calls,
-      texts,
+      cost: imageCost(size) * result.calls + (direction ? DIRECTION_COST : 0),
+      texts: printed,
     })
     await closeHold(hold, 'recorded')
     if (second.hold) await closeHold(second.hold, redrawn ? 'recorded' : 'failed')
+    if (planning.hold) await closeHold(planning.hold, direction ? 'recorded' : 'failed')
     await logPanel('studio', 'Görsel üretildi', brand?.name || null, `Görsel #${job.id} · ${shown.slice(0, 200)}`)
     return NextResponse.json({ job: { ...job, brandName: brand?.name ?? '' } })
   } catch (error) {
     console.error('Studio generation failed:', error)
     await closeHold(hold, 'failed', `Görsel kaydedilemedi (${kind}, ${size})`)
     if (second.hold) await closeHold(second.hold, 'failed', `Yeniden çizilen sticker kaydedilemedi (${size})`)
+    if (planning.hold) await closeHold(planning.hold, 'failed', 'Sahne tarifi yazıldı, görsel kaydedilemedi')
     const message = error instanceof Error ? error.message : ''
     const blocked = /safety|policy|blocked|refus/i.test(message)
     return NextResponse.json(

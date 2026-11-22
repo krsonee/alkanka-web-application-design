@@ -90,14 +90,20 @@ export const STUDIO_CATEGORIES = [
 ] as const
 
 // Prices are the AI Gateway list prices for the models in studio-generate.ts and studio-animate.ts.
+// `pro` is drawn by the larger image model: finer detail and lighting, at a higher price per picture.
 export const IMAGE_SIZES = [
-  { id: '1K', label: 'Standart', hint: '1024 px', cost: 0.067 },
-  { id: '2K', label: 'Yüksek', hint: '2048 px', cost: 0.101 },
+  { id: '1K', label: 'Standart', hint: '1024 px', cost: 0.067, px: '1K', pro: false },
+  { id: '2K', label: 'Yüksek', hint: '2048 px', cost: 0.101, px: '2K', pro: false },
+  { id: 'PRO', label: 'En yüksek', hint: 'Pro model · 2048 px', cost: 0.14, px: '2K', pro: true },
 ] as const
 export type ImageSize = (typeof IMAGE_SIZES)[number]['id']
 export const DEFAULT_IMAGE_SIZE: ImageSize = '2K'
 export const toImageSize = (value: unknown): ImageSize => IMAGE_SIZES.find((s) => s.id === value)?.id ?? DEFAULT_IMAGE_SIZE
 export const imageCost = (size: ImageSize) => IMAGE_SIZES.find((s) => s.id === size)?.cost ?? IMAGE_SIZES[0].cost
+export const imageRender = (size: ImageSize) => IMAGE_SIZES.find((s) => s.id === size) ?? IMAGE_SIZES[0]
+
+/** The short text-model call that works the brief out before a picture is drawn. */
+export const DIRECTION_COST = 0.01
 
 export const usd = (n: number) => `$${n.toFixed(2)}`
 
