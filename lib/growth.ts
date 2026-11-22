@@ -266,6 +266,8 @@ export type SponsorAccount = {
 }
 
 const USERNAME_TAKEN = 'Bu kullanıcı adı başka bir üyeye bağlı. Hata olduğunu düşünüyorsan şikâyet aç.'
+const accountFixed = (username: string) =>
+  `Bu sponsorda "${username}" kullanıcı adın kayıtlı ve sonradan değiştirilemez. Yanlış yazdıysan destekle iletişime geç; ekibimiz kaydı reddedince doğrusunu yazabilirsin.`
 
 /** The database refused a second member for the same sponsor username (`sponsor_accounts_username`). */
 function usernameClash(error: unknown) {
@@ -291,28 +293,40 @@ export async function linkSponsorAccount(userId: string, siteId: string, rawUser
   const taken = await rows(sql`SELECT 1 FROM sponsor_accounts WHERE site_id = ${siteId} AND lower(username) = lower(${username})
     AND user_id <> ${userId} AND status <> 'rejected'`)
   if (taken.length) throw new Error(USERNAME_TAKEN)
-  // Sending the same approved username again changes nothing; only a different username goes back to staff.
-  await rows(sql`INSERT INTO sponsor_accounts (user_id, site_id, username) VALUES (${userId}, ${siteId}, ${username})
-    ON CONFLICT (user_id, site_id) DO UPDATE SET username = EXCLUDED.username,
-      status = CASE WHEN lower(sponsor_accounts.username) = lower(EXCLUDED.username) AND sponsor_accounts.status = 'approved' THEN 'approved' ELSE 'pending' END,
-      note = CASE WHEN lower(sponsor_accounts.username) = lower(EXCLUDED.username) AND sponsor_accounts.status = 'approved' THEN sponsor_accounts.note ELSE NULL END,
-      updated_at = now()`).catch((error) => {
+  // A username is written once: the request staff is checking must not change under them, and an
+  // approved account must not turn into another one. Only an account staff turned down is written again.
+  // The condition sits in the write itself, so two requests sent at the same moment cannot both pass.
+  const saved = await rows(sql`INSERT INTO sponsor_accounts (user_id, site_id, username) VALUES (${userId}, ${siteId}, ${username})
+    ON CONFLICT (user_id, site_id) DO UPDATE SET username = EXCLUDED.username, status = 'pending', note = NULL, updated_at = now()
+      WHERE sponsor_accounts.status = 'rejected'
+    RETURNING username`).catch((error) => {
     // Another member took the name between the check above and this write.
     if (usernameClash(error)) throw new Error(USERNAME_TAKEN)
     throw error
   })
+  if (!saved.length) {
+    const [mine] = await rows(sql`SELECT username FROM sponsor_accounts WHERE user_id = ${userId} AND site_id = ${siteId}`)
+    const kept = String(mine?.username ?? '')
+    // Sending the name that is already on record is not a change.
+    if (kept.toLowerCase() === username.toLowerCase()) return
+    throw new Error(accountFixed(kept))
+  }
   // Coupon requests still waiting for staff carry the member's one linked account, not the name it had before.
   const { followSponsorAccount } = await import('@/lib/goal-rewards')
   await followSponsorAccount(userId, siteId, username)
 }
 
+/** Only an account staff turned down can be taken off; a waiting or approved one stays as it was written. */
 export async function removeSponsorAccount(userId: string, siteId: string) {
   await ensureGrowth()
+  const [mine] = await rows(sql`SELECT username, status FROM sponsor_accounts WHERE user_id = ${userId} AND site_id = ${siteId}`)
+  if (!mine) return
+  if (mine.status !== 'rejected') throw new Error(accountFixed(String(mine.username)))
   const { openSponsorRequests } = await import('@/lib/goal-rewards')
   if ((await openSponsorRequests(userId, siteId)) > 0) {
     throw new Error('Bu sponsorda kontrol bekleyen kupon talebin var; talep sonuçlanana kadar hesap kaldırılamaz. Kullanıcı adın yanlışsa doğrusunu yazıp yeniden bağla.')
   }
-  await rows(sql`DELETE FROM sponsor_accounts WHERE user_id = ${userId} AND site_id = ${siteId}`)
+  await rows(sql`DELETE FROM sponsor_accounts WHERE user_id = ${userId} AND site_id = ${siteId} AND status = 'rejected'`)
 }
 
 /** The accounts these members linked at one sponsor; the panel shows them next to coupon requests. */

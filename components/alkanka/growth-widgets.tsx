@@ -63,10 +63,15 @@ const STATUS: Record<Account['status'], [string, string]> = {
 }
 
 export function SponsorAccountsCard({ accounts, sites }: { accounts: Account[]; sites: { id: string; name: string }[] }) {
-  const [siteId, setSiteId] = useState(sites[0]?.id ?? '')
+  const [picked, setPicked] = useState(sites[0]?.id ?? '')
   const [username, setUsername] = useState('')
   const { pending, status, run } = useAction()
   const names = Object.fromEntries(sites.map((s) => [s.id, s.name]))
+  // A username is written once. A sponsor that already has a waiting or approved account is not offered
+  // again; one staff turned down is, so the right name can be written.
+  const fixed = new Set(accounts.filter((a) => a.status !== 'rejected').map((a) => a.siteId))
+  const open = sites.filter((s) => !fixed.has(s.id))
+  const siteId = open.some((s) => s.id === picked) ? picked : (open[0]?.id ?? '')
 
   return (
     <div className="@container flex flex-col gap-4 rounded-2xl border border-border bg-card p-5">
@@ -76,9 +81,11 @@ export function SponsorAccountsCard({ accounts, sites }: { accounts: Account[]; 
           Sponsor hesaplarım
         </h3>
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Sponsor sitedeki kullanıcı adını bağla. Onaylandıktan sonra çevrimin aylık sıralamaya girer ve ödüllerden pay alırsın.
+          Sponsor sitedeki kullanıcı adını bağla. Onaylandıktan sonra çevrimin aylık sıralamaya girer, ödüllerden pay alırsın ve sponsor etkinliklerinde kupon girebilirsin.
+          Kullanıcı adı bir kez yazılır ve sonradan değiştirilemez; dikkatle yaz.
         </p>
       </div>
+      {open.length > 0 && (
       <form
         className="flex flex-col gap-2 @lg:flex-row"
         onSubmit={(e) => {
@@ -89,10 +96,10 @@ export function SponsorAccountsCard({ accounts, sites }: { accounts: Account[]; 
         <select
           aria-label="Sponsor site"
           value={siteId}
-          onChange={(e) => setSiteId(e.target.value)}
+          onChange={(e) => setPicked(e.target.value)}
           className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground @lg:w-44"
         >
-          {sites.map((s) => (
+          {open.map((s) => (
             <option key={s.id} value={s.id}>{s.name}</option>
           ))}
         </select>
@@ -111,6 +118,7 @@ export function SponsorAccountsCard({ accounts, sites }: { accounts: Account[]; 
           Bağla
         </button>
       </form>
+      )}
       <StatusLine status={status} />
       {accounts.length > 0 && (
         <ul className="flex flex-col divide-y divide-border rounded-xl border border-border">
@@ -124,18 +132,25 @@ export function SponsorAccountsCard({ accounts, sites }: { accounts: Account[]; 
                 </span>
               </div>
               <span className={cn('rounded-full px-2.5 py-1 text-xs font-semibold', STATUS[a.status][1])}>{STATUS[a.status][0]}</span>
-              <button
-                type="button"
-                aria-label={`${names[a.siteId] ?? a.siteId} hesabını kaldır`}
-                disabled={pending}
-                onClick={() => run(() => removeSponsorAccountAction(a.siteId))}
-                className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
-              >
-                <Trash2 className="size-4" aria-hidden="true" />
-              </button>
+              {a.status === 'rejected' && (
+                <button
+                  type="button"
+                  aria-label={`${names[a.siteId] ?? a.siteId} hesabını kaldır`}
+                  disabled={pending}
+                  onClick={() => run(() => removeSponsorAccountAction(a.siteId))}
+                  className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                </button>
+              )}
             </li>
           ))}
         </ul>
+      )}
+      {fixed.size > 0 && (
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Onay bekleyen ya da onaylı bir kullanıcı adı değiştirilemez ve kaldırılamaz. Yanlış yazdıysan destekle iletişime geç; ekibimiz kaydı reddedince doğrusunu yazabilirsin.
+        </p>
       )}
     </div>
   )
