@@ -139,7 +139,7 @@ export function GuestGate() {
         'fixed z-30 flex justify-center px-4',
         hard
           ? 'inset-x-0 top-16 bottom-0 items-center bg-background/70 backdrop-blur-md lg:left-[var(--sidebar-w)] xl:right-80'
-          : 'inset-x-0 bottom-[calc(5rem+var(--app-banner-h,0px))] lg:bottom-[calc(1.5rem+var(--app-banner-h,0px))] lg:left-[var(--sidebar-w)] xl:right-80',
+          : 'inset-x-0 bottom-[calc(7rem+var(--app-banner-h,0px))] lg:bottom-[calc(1.5rem+var(--app-banner-h,0px))] lg:left-[var(--sidebar-w)] xl:right-80',
       )}
     >
       <div ref={cardRef} className="relative w-full max-w-md overflow-hidden rounded-2xl border border-primary/30 bg-card shadow-2xl animate-pop">

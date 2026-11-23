@@ -80,7 +80,7 @@ export function KpHeartbeat() {
   if (grant) {
     const upcoming = nextReward({ enabled: true, graceMinutes: grant.status.graceMinutes, tiers: grant.status.tiers, extra: grant.status.extra }, grant.status.minutes)
     return (
-      <div role="status" className="fixed inset-x-4 bottom-24 z-50 mx-auto flex max-w-sm animate-pop flex-col gap-3 overflow-hidden rounded-2xl border border-primary/40 bg-card p-4 shadow-2xl lg:bottom-6">
+      <div role="status" className="fixed inset-x-4 bottom-28 z-50 mx-auto flex max-w-sm animate-pop flex-col gap-3 overflow-hidden rounded-2xl border border-primary/40 bg-card p-4 shadow-2xl lg:bottom-6">
         <div className="flex items-center gap-3">
           <span className="flex size-12 shrink-0 flex-col items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <span className="font-display text-lg font-bold leading-none tabular-nums">{grant.tier.hour}</span>
@@ -110,7 +110,7 @@ export function KpHeartbeat() {
 
   if (!levelUp) return null
   return (
-    <div role="status" className="fixed inset-x-4 bottom-24 z-50 mx-auto flex max-w-sm animate-pop items-center gap-4 rounded-2xl border border-primary/40 bg-card p-4 shadow-2xl lg:bottom-6">
+    <div role="status" className="fixed inset-x-4 bottom-28 z-50 mx-auto flex max-w-sm animate-pop items-center gap-4 rounded-2xl border border-primary/40 bg-card p-4 shadow-2xl lg:bottom-6">
       <LevelEmblem level={levelUp.level} size="md" />
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="text-xs font-semibold uppercase tracking-wider text-primary">Seviye atladın</span>

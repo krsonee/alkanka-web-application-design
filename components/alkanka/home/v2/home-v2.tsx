@@ -27,7 +27,7 @@ const MINI_BY_HREF: Record<string, MiniGame> = {
 export function GuestHomeV2({ config, products, weekly, bonus }: { config: HomeV2Config; products: MarketProduct[]; weekly: Row[]; bonus: number }) {
   const primaryLabel = config.guestPrimaryCta.replace('{bonus}', String(bonus))
   return (
-    <div className="flex flex-col gap-10">
+    <div className="flex flex-col gap-10 max-sm:gap-8">
       <HeroSlider
         slides={config.slides}
         eyebrow={config.guestEyebrow}
@@ -141,19 +141,30 @@ export function MemberHomeV2Page({
 
   return (
     <div className="flex flex-col gap-8">
+      {/* Below the desktop width the two columns dissolve into one list so the balance can lead and the board can close it. */}
       <div className="grid gap-6 lg:grid-cols-[1fr_330px]">
-        <div className="flex min-w-0 flex-col gap-8">
-          <MemberHeroSlider slides={heroSlides} />
+        <div className="flex min-w-0 flex-col gap-8 max-lg:contents">
+          <div className="min-w-0 max-lg:order-2">
+            <MemberHeroSlider slides={heroSlides} />
+          </div>
           {daily.length > 0 && (
-            <section className="flex flex-col gap-4">
+            <section className="flex min-w-0 flex-col gap-4 max-lg:order-3">
               <SectionHead title={config.dailyTitle} sub={dailySub} />
               <DailyGrid items={daily} />
             </section>
           )}
         </div>
-        <aside className="flex flex-col gap-4">
-          {config.showWallet && <WalletCard balance={balance} kp={kp} weeklyRank={weeklyRank} goal={goal} picks={picks} marketHref={config.marketHref} />}
-          {config.showLeaderboard && <Leaderboard title={config.lbTitle} rows={top} me={me} meId={meId} compact />}
+        <aside className="flex flex-col gap-4 max-lg:contents">
+          {config.showWallet && (
+            <div className="min-w-0 max-lg:order-1">
+              <WalletCard balance={balance} kp={kp} weeklyRank={weeklyRank} goal={goal} picks={picks} marketHref={config.marketHref} />
+            </div>
+          )}
+          {config.showLeaderboard && (
+            <div className="min-w-0 max-lg:order-4">
+              <Leaderboard title={config.lbTitle} rows={top} me={me} meId={meId} compact />
+            </div>
+          )}
         </aside>
       </div>
       {config.games.length > 0 && (

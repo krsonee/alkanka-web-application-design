@@ -81,7 +81,7 @@ export function SectionHead({ title, sub, link }: { title: string; sub?: string;
   return (
     <div className="flex items-end justify-between gap-4">
       <div className="flex flex-col gap-1">
-        <h2 className="font-display text-2xl font-bold tracking-tight text-foreground">{title}</h2>
+        <h2 className="font-display text-2xl font-bold tracking-tight text-foreground max-sm:text-xl">{title}</h2>
         {sub && <p className="text-sm text-muted-foreground">{sub}</p>}
       </div>
       {link && (
@@ -112,43 +112,63 @@ export function NewbieCard({ title, text }: { title: string; text: string }) {
 }
 
 export function FreeGrid({ tiles }: { tiles: FreeTile[] }) {
+  // On phones the tiles are squares in two columns; an odd count opens with one wide tile so the grid closes without a hole.
+  const lead = tiles.length % 2 === 1
   return (
-    <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-      {tiles.map((t) => (
-        <li key={t.title}>
-          <Link href={t.href} className="group relative isolate flex aspect-[4/5] flex-col justify-end overflow-hidden rounded-2xl border border-border bg-card">
-            {t.image && (
-              <Image src={t.image} alt="" fill sizes="(min-width: 1024px) 190px, 45vw" className="-z-10 object-cover transition-transform duration-500 group-hover:scale-105" />
-            )}
-            <span aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-background via-background/30 to-transparent" />
-            <span className="flex min-w-0 flex-col gap-0.5 p-3">
-              <span className="truncate font-display text-base font-bold text-foreground">{t.title}</span>
-              <span className="truncate text-xs text-muted-foreground">{t.sub}</span>
-            </span>
-          </Link>
-        </li>
-      ))}
+    <ul className="grid grid-cols-2 gap-3 max-sm:gap-2.5 sm:grid-cols-3 xl:grid-cols-6">
+      {tiles.map((t, i) => {
+        const wide = lead && i === 0
+        return (
+          <li key={t.title} className={cn(wide && 'max-sm:col-span-2')}>
+            <Link
+              href={t.href}
+              className={cn(
+                'group relative isolate flex aspect-[4/5] flex-col justify-end overflow-hidden rounded-2xl border border-border bg-card transition-[scale] duration-150 active:scale-[0.98]',
+                wide ? 'max-sm:aspect-[2/1]' : 'max-sm:aspect-square',
+              )}
+            >
+              {t.image && (
+                <Image
+                  src={t.image}
+                  alt=""
+                  fill
+                  sizes={wide ? '(min-width: 1024px) 190px, 92vw' : '(min-width: 1024px) 190px, 45vw'}
+                  className="-z-10 object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+              )}
+              <span aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-background via-background/30 to-transparent" />
+              <span className="flex min-w-0 flex-col gap-0.5 p-3">
+                <span className={cn('truncate font-display text-base font-bold text-foreground', wide && 'max-sm:text-lg')}>{t.title}</span>
+                <span className="truncate text-xs text-muted-foreground max-sm:text-[0.8125rem]">{t.sub}</span>
+              </span>
+            </Link>
+          </li>
+        )
+      })}
     </ul>
   )
 }
 
+/** Phones: one row that scrolls sideways, bleeding to the screen edges. From tablets up the classes do nothing. */
+const PHONE_RAIL = 'no-scrollbar max-sm:-mx-4 max-sm:flex max-sm:snap-x max-sm:scroll-px-4 max-sm:gap-2.5 max-sm:overflow-x-auto max-sm:px-4'
+
 export function GamesGrid({ games, compact }: { games: string[]; compact?: boolean }) {
   return (
-    <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <ul className={cn('grid grid-cols-2 gap-3 lg:grid-cols-4', PHONE_RAIL)}>
       {games.map((key) => (
-        <li key={key}>
+        <li key={key} className="max-sm:w-[8.5rem] max-sm:shrink-0 max-sm:snap-start">
           <Link
             href={`/oyunlar/${key}`}
             className={cn(
-              'group relative isolate flex flex-col justify-end overflow-hidden rounded-2xl border border-border bg-card',
+              'group relative isolate flex flex-col justify-end overflow-hidden rounded-2xl border border-border bg-card transition-[scale] duration-150 active:scale-[0.98] max-sm:aspect-[3/4]',
               compact ? 'aspect-[4/3]' : 'aspect-[16/12]',
             )}
           >
             <Image src={`/images/games/${key}.png`} alt="" fill sizes="(min-width: 1024px) 280px, 50vw" className="-z-10 object-cover transition-transform duration-500 group-hover:scale-105" />
             <span aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-background/90 via-transparent to-transparent" />
-            <span className="flex items-center justify-between gap-2 p-3.5">
-              <span className="font-display text-lg font-bold text-foreground">{HOME_GAME_LABEL[key] ?? key}</span>
-              <span className="flex size-7 items-center justify-center rounded-full bg-background/70 text-foreground backdrop-blur transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+            <span className="flex items-center justify-between gap-2 p-3.5 max-sm:p-2.5">
+              <span className="font-display text-lg font-bold text-foreground max-sm:text-base">{HOME_GAME_LABEL[key] ?? key}</span>
+              <span className="flex size-7 items-center justify-center rounded-full bg-background/70 text-foreground backdrop-blur transition-colors group-hover:bg-primary group-hover:text-primary-foreground max-sm:hidden">
                 <ArrowRight className="size-4" aria-hidden="true" />
               </span>
             </span>
@@ -372,7 +392,7 @@ function untilLabel(nextAt: number) {
 
 export function DailyGrid({ items }: { items: DailyState[] }) {
   return (
-    <ul className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <ul className={cn('grid gap-3 max-sm:gap-2 sm:grid-cols-3', items.length % 3 === 0 ? 'grid-cols-3' : 'grid-cols-2')}>
       {items.map(({ tile, nextAt }) => {
         const used = nextAt !== null
         return (
@@ -380,7 +400,7 @@ export function DailyGrid({ items }: { items: DailyState[] }) {
             <Link
               href={tile.href}
               className={cn(
-                'group relative isolate flex aspect-[4/3] flex-col justify-between overflow-hidden rounded-2xl border bg-card',
+                'group relative isolate flex aspect-[4/3] flex-col justify-between overflow-hidden rounded-2xl border bg-card transition-[scale] duration-150 active:scale-[0.98] max-sm:aspect-[5/6]',
                 used ? 'border-border' : 'border-primary/40',
               )}
             >
@@ -394,8 +414,8 @@ export function DailyGrid({ items }: { items: DailyState[] }) {
                 />
               )}
               <span aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-background via-background/20 to-transparent" />
-              <span className="p-3">
-                <span className="inline-flex items-center gap-1 rounded-md bg-background/80 px-2 py-1 text-[11px] font-semibold backdrop-blur">
+              <span className="p-3 max-sm:p-2">
+                <span className="inline-flex max-w-full items-center gap-1 overflow-hidden whitespace-nowrap rounded-md bg-background/80 px-2 py-1 text-[11px] font-semibold backdrop-blur max-sm:px-1.5">
                   {nextAt !== null ? (
                     <>
                       <Clock className="size-3 text-muted-foreground" aria-hidden="true" />
@@ -409,12 +429,12 @@ export function DailyGrid({ items }: { items: DailyState[] }) {
                   )}
                 </span>
               </span>
-              <span className="flex items-center justify-between gap-2 p-3">
-                <span className="font-display text-base font-bold text-foreground">{tile.title}</span>
+              <span className="flex items-center justify-between gap-2 p-3 max-sm:flex-col max-sm:items-start max-sm:gap-1.5 max-sm:p-2">
+                <span className="font-display text-base font-bold text-foreground max-sm:text-sm max-sm:leading-tight">{tile.title}</span>
                 {used ? (
-                  <span className="rounded-md border border-border bg-background/70 px-3 py-1.5 text-xs font-semibold text-muted-foreground">Kullanıldı</span>
+                  <span className="rounded-md border border-border bg-background/70 px-3 py-1.5 text-xs font-semibold text-muted-foreground max-sm:px-2 max-sm:py-1">Kullanıldı</span>
                 ) : (
-                  <span className="rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground">{tile.action}</span>
+                  <span className="rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground max-sm:px-2 max-sm:py-1">{tile.action}</span>
                 )}
               </span>
             </Link>
@@ -504,7 +524,7 @@ export function WalletCard({
       )}
 
       {picks.length > 0 && (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 max-sm:hidden">
           <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             <span className="size-1.5 rounded-full bg-[oklch(0.72_0.17_150)]" aria-hidden="true" />
             Şimdi alabileceklerin
