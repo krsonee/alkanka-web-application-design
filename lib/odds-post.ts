@@ -50,15 +50,32 @@ export function matchOfLine(line: string) {
 
 const hasMatchLine = (text: string) => text.split('\n').some((line) => matchOfLine(line.trim()))
 
-const NUM = String.raw`\d{1,4}(?:[.,]\d{1,2})?`
-// "14,59x yerine tam 20,00x", "1.85 → 2.50"
+const NUM = String.raw`\d{1,4}(?:[.,]\d{1,3})?`
+// "14,59x yerine tam 20,00x", "1.85 → 2.50", "4,48x yerine tam 1,500x"
 const SWAP = new RegExp(String.raw`(${NUM})\s*x?\s*(?:yerine|➜|→|➡|->|>>|»)\s*(?:tam\s*)?(${NUM})\s*x?`, 'iu')
 const LIMIT = /(?:maks(?:imum)?|max)\.?\s*(?:bahis|tutar|limit)?\s*[:\-–]?\s*(\d[\d.]*\s*(?:₺|tl))/iu
 
+/** "20,00" → 20; three digits after the mark are thousands ("1,500" → 1500), as the sources write big odds. */
 const toOdd = (raw: string) => {
-  const n = Number(raw.replace(',', '.'))
-  return Number.isFinite(n) && n > 1 && n < 10_000 ? n : null
+  const n = /[.,]\d{3}$/.test(raw) ? Number(raw.replace(/[.,]/g, '')) : Number(raw.replace(',', '.'))
+  return Number.isFinite(n) && n > 1 && n < 100_000 ? n : null
 }
+
+/** Every value a written number can stand for: "1,500" is 1.5 or 1500, "20,00" is 20. */
+function writtenNumbers(text: string) {
+  const out = new Set<number>()
+  for (const token of text.match(/\d+(?:[.,]\d+)*/g) ?? []) {
+    const last = Math.max(token.lastIndexOf('.'), token.lastIndexOf(','))
+    out.add(Number(token.replace(/[.,]/g, '')))
+    if (last > 0) out.add(Number(`${token.slice(0, last).replace(/[.,]/g, '')}.${token.slice(last + 1)}`))
+  }
+  return out
+}
+
+const isMarketLine = (line: string) =>
+  line.length <= 60 && !matchOfLine(line) && !SWAP.test(line) && !LIMIT.test(line) && (/[•:|]/u.test(line) || MARKET_WORD.test(lower(line)))
+
+const marketText = (line: string) => trimSymbols(line.replace(ODD_IN_LINE, ' ').replace(/\s*[•|]\s*/g, ' - ').replace(/\s{2,}/g, ' '))
 
 /**
  * Reads a post written the usual way (a "Team - Team" line, the bet under it, an odd) without the model.
@@ -76,10 +93,21 @@ export function localOdds(text: string): ParsedOdd[] {
   for (let i = 0; i < lines.length && out.length < 12; i++) {
     const match = matchOfLine(lines[i])
     if (!match) continue
-    const next = lines[i + 1] ?? ''
-    const isMarket = Boolean(next) && next.length <= 60 && !matchOfLine(next) && !SWAP.test(next)
-    const market = isMarket ? trimSymbols(next.replace(ODD_IN_LINE, ' ').replace(/\s*[•|]\s*/g, ' - ').replace(/\s{2,}/g, ' ')) : ''
-    const own = firstOddNumber(lines[i]) ?? (isMarket ? firstOddNumber(next) : null)
+    // The bets of a match sit on the lines under it, with or without gaps between them.
+    const bets: string[] = []
+    let after = ''
+    for (let j = i + 1; j < lines.length && bets.length < 4; j++) {
+      if (!lines[j]) continue
+      if (!isMarketLine(lines[j])) {
+        after = lines[j]
+        break
+      }
+      bets.push(lines[j])
+    }
+    const market = bets.map(marketText).filter(Boolean).join(' + ').slice(0, 120)
+    // The odd is on the match line, on a bet line, or alone on the line under them ("2,10").
+    const alone = after && !/\p{L}/u.test(after) ? firstOddNumber(after) : null
+    const own = firstOddNumber(lines[i]) ?? bets.map(firstOddNumber).find((n) => n !== null) ?? alone
     const newOdd = own ?? shared?.newOdd ?? lone
     if (!newOdd) continue
     const oldOdd = own ? null : (shared?.oldOdd ?? null)
@@ -88,16 +116,24 @@ export function localOdds(text: string): ParsedOdd[] {
   return out
 }
 
+/** The line saying who can take the odd ("... yatırımı olan kullanıcılara özel"), read without the model. */
+export function localNote(text: string) {
+  const line = text.split('\n').find((l) => /yatırım/iu.test(l) && /özel|yararlan|alabilir/iu.test(l))
+  return line ? trimSymbols(line).slice(0, 200) : ''
+}
+
 const sidesOf = (match: string) =>
   lower(match)
     .split(/\s+(?:-|–|—|vs\.?)\s+/u)
     .map((side) => side.trim())
     .filter((side) => side.length > 3)
 
-/** True when the text names one of the teams of this match. */
+const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** True when the text names one of the teams of this match as a word of its own ("Inter", not "internet"). */
 export function namesMatch(text: string, match: string) {
   const hay = lower(text)
-  return sidesOf(match).some((side) => hay.includes(side))
+  return sidesOf(match).some((side) => new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegex(side)}(?![\\p{L}\\p{N}])`, 'u').test(hay))
 }
 
 /**
@@ -105,15 +141,26 @@ export function namesMatch(text: string, match: string) {
  * teams has to be named. Guards against the reader inventing a match out of a campaign post.
  */
 export function groundedOdds(text: string, odds: ParsedOdd[]): ParsedOdd[] {
-  const written = new Set((text.match(/\d+(?:[.,]\d+)?/g) ?? []).map((n) => Number(n.replace(',', '.'))))
+  // A campaign post with no "Team - Team" line in it has no odd, whatever the reader made of its numbers.
+  if (looksLikePromo(text) && !hasMatchLine(text)) return []
+  const written = writtenNumbers(text)
   return odds.filter((o) => written.has(o.newOdd) && namesMatch(text, o.match))
 }
 
 /** The post says it is an odd but names no match in its text: the match is usually on its picture. */
 export const declaresOdd = (text: string) => /oran/iu.test(text) && !looksLikePromo(text) && !hasMatchLine(text)
 
-/** A short note with nothing in it but the outcome, e.g. "Özel oranımız kazandı ✅". */
-export const isBareNote = (text: string) => text.trim().length <= 120 && !looksLikePromo(text) && !hasMatchLine(text)
+/**
+ * A short note with nothing in it but the outcome: up to three words ("KAZANDI ✅", "Limit doldu"),
+ * or a short line that says it is about the odd ("Özel oranımız kazandı ✅"). A line such as
+ * "Kazanan üyemizi tebrik ederiz" is about something else and is not one.
+ */
+export function isBareNote(text: string) {
+  const note = text.trim()
+  if (note.length > 120 || looksLikePromo(note) || hasMatchLine(note)) return false
+  const words = note.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w))
+  return words.length <= 3 || /oran|kupon/iu.test(note)
+}
 
 // --- Layout ------------------------------------------------------------------
 

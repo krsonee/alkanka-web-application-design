@@ -697,6 +697,24 @@
     <li><em>Anahtar kelime geçenler:</em> yazdığın kelimelerden biri geçen her post paylaşılır, oran olmasa da. Kelimeleri virgülle ayır.</li>
     <li><em>Hepsi:</em> kanaldaki her post paylaşılır.</li>
   </ul>
+  <p>Freespin, freebet, bonus, kod, kasa, turnuva ve çekiliş postları içinde sayı ya da "oran" kelimesi geçse bile oran sayılmaz. Oranı okuyan sistem cevap vermezse bot tahminle post atmaz: düz yazılmış oran postunu (maç satırı, altında bahis, oran) kuralla okur, okuyamadığını "Oran okunamadı" diye bu kutuda bekletir.</p>
+  <h3>Postun kanalımızdaki görünümü</h3>
+  <p>Oran postu kaynağın yazısıyla değil, kendi düzenimizle gider; böylece bütün kaynaklar kanalda aynı görünür:</p>
+  <ul>
+    <li><strong>Başlık:</strong> kalın "ÖZEL ORAN" ve site adı. Altında kaynağın etiketi ("Sponsorumuz", "Sponsor dışı · Güvenilir site" ya da kendi yazdığın etiket) eğik yazıyla.</li>
+    <li><strong>Maçlar:</strong> her maç kalın, altında bahsi. Maçlar tek kupondaysa oran altta bir kez yazılır ("4 maçlı kupon: 14,59 yerine 20,00"); her maçın kendi oranı varsa maçın altına yazılır. Eski oran üstü çizili, yeni oran kalındır.</li>
+    <li><strong>Alt bilgiler:</strong> en yüksek bahis, varsa katılım şartı, en altta alt yazın.</li>
+  </ul>
+  <p>Maçı yazıda değil sadece görselde olan oran postunda ("35 Özel Oran" gibi) maç görselden okunur. Görseli olmayan (video ya da GIF'li) böyle bir post okunamaz, atlanır; istersen bu kutudan <kbd>Yine de paylaş</kbd>. Kaynağın premium emojileri bot tarafından gönderilemediği için emojiyle yazılmış afiş satırları yazıdan çıkarılır.</p>
+  <p>Kural gereği oransız paylaşılan post (kural "Hepsi" ya da "Anahtar kelime" ise, ya da sen elle paylaştıysan) kaynağın kendi yazısıyla gider; üstüne kalın site adı ve etiket eklenir.</p>
+  <h3>Kazandı, kaybetti ve limit doldu</h3>
+  <p>Bot bir sonucu ancak kaynak post gerçekten o oranla ilgiliyse işler:</p>
+  <ul>
+    <li>Kaynak post oranın postuna <strong>cevap</strong> olarak atıldıysa ya da oranın <strong>kendi postu düzenlendiyse</strong> sadece o oran işlenir.</li>
+    <li>Cevap değilse postta açık bir oranın <strong>takım adı</strong> geçmelidir.</li>
+    <li>İkisi de yoksa post yalın bir not olmalıdır ("Kazandı", "Limit doldu", "Özel oranımız kazandı" gibi); o zaman kaynağın son oranı işlenir.</li>
+  </ul>
+  <p>İçinde "kazanan" ya da onay işareti geçen kampanya postu, başka bir posta atılmış cevap ve uzun duyurular hiçbir oranı etkilemez. Kanalımıza yazılan cevapta panelde yazdığın mesajın altına hangi oran olduğu (site, maç, bahis, oran) eklenir. Daha önce paylaşılmış bir maçın sonuç duyurusu yeni oran diye ikinci kez paylaşılmaz.</p>
   <h3>Görsel, video ve albüm</h3>
   <p>Bot kaynak postun fotoğrafını, videosunu, GIF'ini ve albümünü taşır. Dosya alınamazsa (çok büyük video, silinmiş post) ne olacağını bot ayarlarındaki <strong>Görseli, videosu ya da albümü alınamayan post</strong> alanında seçersin: <em>Yazıyla paylaşılsın</em> ya da <em>Beklesin, ben karar vereyim</em>.</p>
   <h3>Bekleyen ve atlanan postlar</h3>

@@ -314,6 +314,15 @@ const SETUP_STEPS: GuideStep[] = [
           ya da hepsi. Kurala takılan post paylaşılmaz, <b>Bekleyen ve atlanan postlar</b> kutusuna düşer; istersen oradan <b>Yine de paylaş</b>.
         </li>
         <li>
+          Oran postu kanalımıza kaynağın yazısıyla değil, kendi düzenimizle gider: kalın başlık, altında etiket, her maç ve bahsi, eski oran üstü çizili
+          yeni oran kalın, en yüksek bahis ve katılım şartı. Maçı sadece görselde yazan oran postunda maç görselden okunur. Freespin, bonus, turnuva gibi
+          kampanya postları oran sayılmaz.
+        </li>
+        <li>
+          <b>Kazandı / limit doldu</b> cevabı ancak kaynak post o oranla ilgiliyse yazılır: oranın postuna cevapsa, oranın postu düzenlendiyse, takım adı
+          geçiyorsa ya da yalın bir “Kazandı” notuysa. İçinde “kazanan” geçen kampanya postu hiçbir oranı kazandı saymaz.
+        </li>
+        <li>
           Oran botu fotoğrafı, videoyu, GIF’i ve albümü taşır. Dosya alınamazsa ne olacağını <b>Görseli, videosu ya da albümü alınamayan post</b> alanında seç: yazıyla
           paylaşılsın ya da beklesin.
         </li>

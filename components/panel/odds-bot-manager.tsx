@@ -145,6 +145,11 @@ function SetupCard({ config, bots, status }: { config: OddsBotConfig; bots: Mirr
               <input type="checkbox" name="postResults" defaultChecked={config.postResults} className="size-4 accent-primary" />
               Sonuçları kanalımızda orijinal posta yanıt olarak paylaş
             </label>
+            <p className={cn(hint, 'md:col-span-2')}>
+              Bu kelimeler tek başına bir oranı kapatmaz. Bot bir sonucu ancak kaynak post o oranın postuna cevap olarak atıldıysa, oranın kendi postu
+              düzenlendiyse, postta o oranın takımlarından biri geçiyorsa ya da post “Kazandı” gibi yalın bir notsa işler. İçinde “kazanan” ya da onay
+              işareti geçen kampanya postu hiçbir oranı etkilemez. Mesajın altına hangi oran olduğu (site, maç, oran) kendiliğinden yazılır.
+            </p>
           </div>
         </details>
         <div className="flex flex-wrap items-center gap-3">

@@ -249,14 +249,19 @@ export function entitiesToCleanText(text: string, entities: { type: string; offs
 }
 
 // Two or more premium emoji in a row: a word or banner drawn with them. Without the premium pack only stand-in faces are left.
-const EMOJI_RUN = /(?:<tg-emoji[^>]*>[\s\S]*?<\/tg-emoji>[ \t]*){2,}/gi
+const EMOJI_RUN = /(?:<tg-emoji[^>]*>(?:(?!<\/?tg-emoji)[\s\S])*<\/tg-emoji>[ \t]*){2,}/gi
+/** A digit drawn as a keycap emoji ("1⃣"). Sources write numbers this way, so these are text, not ornament. */
+export const KEYCAP_DIGIT = /(\d)\uFE0F?\u20E3/g
+const hasKeycap = (s: string) => /\d\uFE0F?\u20E3/.test(s)
 
 /**
  * Plain text of a scraped t.me/s post with hidden-link labels and their ornament rows removed.
- * `dropEmojiRuns` also removes rows of premium emoji, which a bot cannot send and which read as noise.
+ * `dropEmojiRuns` also removes rows of premium emoji, which a bot cannot send and which read as noise,
+ * and turns keycap digits into plain ones.
  */
 export function scrapedHtmlToCleanText(html: string, options: { dropEmojiRuns?: boolean } = {}) {
-  const marked = (options.dropEmojiRuns ? html.replace(EMOJI_RUN, ' ') : html)
+  const source = options.dropEmojiRuns ? html.replace(EMOJI_RUN, (run) => (hasKeycap(run) ? run : ' ')) : html
+  const marked = source
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<i class="emoji"[^>]*>\s*<b>([\s\S]*?)<\/b>\s*<\/i>/gi, '$1')
     .replace(/<tg-emoji[^>]*>([\s\S]*?)<\/tg-emoji>/gi, '$1')
@@ -265,7 +270,8 @@ export function scrapedHtmlToCleanText(html: string, options: { dropEmojiRuns?: 
       if (href.startsWith('?q=') || /^(https?:\/\/|www\.)\S+$/i.test(plain) || /^@\w+$/.test(plain)) return label
       return DEAD_LINK
     })
-  return stripTags(dropDeadLinks(marked))
+  const text = stripTags(dropDeadLinks(marked))
+  return (options.dropEmojiRuns ? text.replace(KEYCAP_DIGIT, '$1') : text)
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim()

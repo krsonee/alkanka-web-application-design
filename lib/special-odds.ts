@@ -3,6 +3,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto'
 import type { SQL } from 'drizzle-orm'
 import { rows, sql } from '@/lib/db'
 import {
+  KEYCAP_DIGIT,
   MediaError,
   botToken,
   callBot,
@@ -645,7 +646,7 @@ async function replyInChannel(config: OddsBotConfig, ourMsg: number | null, note
     chat_id: config.channelId,
     ...textFields(note),
     link_preview_options: { is_disabled: true },
-    ...(ourMsg ? { reply_parameters: { message_id: ourMsg, allow_sending_without_reply: true } } : {}),
+    ...(ourMsg ? { reply_parameters: { message_id: Number(ourMsg), allow_sending_without_reply: true } } : {}),
   }).catch((error) => console.error('[odds-bot] channel reply failed', error))
 }
 
@@ -676,9 +677,10 @@ async function targetRows(source: OddsSource, incoming: Incoming, where: 'open' 
   )
   const named = candidates.filter((c) => namesMatch(incoming.text, c.match))
   if (named.length) {
-    // One post, one reply: a note naming a team of a coupon settles that coupon as a whole.
-    const post = named[0].source_msg
-    return candidates.filter((c) => c.source_msg === post)
+    // A coupon wins or loses as a whole; matches with their own odds are settled one by one.
+    const post = candidates.filter((c) => c.source_msg === named[0].source_msg)
+    const coupon = post.length > 1 && post.every((c) => Number(c.new_odd) === Number(post[0].new_odd))
+    return coupon ? post : named.filter((c) => c.source_msg === named[0].source_msg)
   }
   if (!candidates.length || !isBareNote(incoming.text)) return []
   const latest = candidates[0].source_msg
@@ -807,8 +809,10 @@ function blankEmojiRuns(text: string, entities: Entity[]) {
   const emoji = entities.filter((e) => e.type === 'custom_emoji').sort((a, b) => a.offset - b.offset)
   const chars = [...text.split('')]
   let run: Entity[] = []
+  // Numbers are written with keycap emoji ("1⃣5⃣"): those rows are text and stay.
+  const isNumber = (e: Entity) => /^\d/.test(text.slice(e.offset, e.offset + e.length))
   const flush = () => {
-    if (run.length > 1) for (const e of run) chars.fill(' ', e.offset, e.offset + e.length)
+    if (run.length > 1 && !run.some(isNumber)) for (const e of run) chars.fill(' ', e.offset, e.offset + e.length)
     run = []
   }
   for (const e of emoji) {
@@ -827,7 +831,11 @@ function toIncoming(m: MediaMessage, edited: boolean, album: AlbumPart[]): Incom
     chatId: String(m.chat.id),
     messageId: m.message_id,
     replyTo: m.reply_to_message?.message_id ?? null,
-    text: entitiesToCleanText(blankEmojiRuns(raw, entities), entities),
+    text: entitiesToCleanText(blankEmojiRuns(raw, entities), entities)
+      .replace(KEYCAP_DIGIT, '$1')
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/[ \t]+\n/g, '\n')
+      .trim(),
     photo: m.photo?.length ? m.photo[m.photo.length - 1].file_id : null,
     edited,
     hasMedia: Boolean(m.photo?.length || m.video || m.animation || m.document),
@@ -1082,11 +1090,15 @@ function mapOdd(r: Record<string, unknown>): SpecialOdd {
   }
 }
 
+/**
+ * The day's odds as members see them. Posts stored without a read odd (campaign posts an earlier
+ * version shared by their first line) are left out; the panel list still shows them so they can be removed.
+ */
 export async function listOddsByDay(day: string) {
   try {
     await expireStaleOdds()
     const r = await rows(sql`SELECT * FROM special_odds WHERE (opened_at AT TIME ZONE 'Europe/Istanbul')::date = ${day}::date
-      ORDER BY opened_at DESC LIMIT 300`)
+      AND new_odd IS NOT NULL ORDER BY opened_at DESC LIMIT 300`)
     return r.map(mapOdd)
   } catch (error) {
     console.error('[special-odds] gün listesi okunamadı', error)

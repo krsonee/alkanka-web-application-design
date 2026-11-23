@@ -1,7 +1,7 @@
 import 'server-only'
 import { generateText } from 'ai'
 import type { ParsedOdd } from '@/lib/deal-types'
-import { declaresOdd, groundedOdds, localOdds } from '@/lib/odds-post'
+import { declaresOdd, groundedOdds, localNote, localOdds } from '@/lib/odds-post'
 
 const PARSE_MODEL = 'google/gemini-3.5-flash'
 const ANSWER_LIMIT_MS = 20_000
@@ -24,7 +24,7 @@ export type OddsImage = { data: Uint8Array; mediaType: string }
 
 const toNumber = (v: unknown) => {
   const n = typeof v === 'number' ? v : Number.parseFloat(String(v ?? '').replace(',', '.'))
-  return Number.isFinite(n) && n > 1 && n < 10_000 ? Math.round(n * 100) / 100 : null
+  return Number.isFinite(n) && n > 1 && n < 100_000 ? Math.round(n * 100) / 100 : null
 }
 const toText = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
 
@@ -133,7 +133,7 @@ export async function readOddsPost(text: string, picture?: () => Promise<OddsIma
   const read = await ask([{ type: 'text', text: task(text, false) }])
   if (!read) {
     const odds = localOdds(text)
-    return { odds, failed: !odds.length, kind: odds.length ? 'oran' : 'diger', coupon: null, note: '' }
+    return { odds, failed: !odds.length, kind: odds.length ? 'oran' : 'diger', coupon: null, note: odds.length ? localNote(text) : '' }
   }
   const odds = groundedOdds(text, read.odds)
   if (odds.length) return { ...read, odds, failed: false }
