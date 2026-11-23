@@ -16,7 +16,7 @@ export async function imageDataUrl(src: string, origin: string): Promise<string 
     }
   }
   try {
-    const res = await fetch(new URL(src, origin), { cache: 'force-cache' })
+    const res = await fetch(new URL(src, origin), { cache: 'force-cache', signal: AbortSignal.timeout(8000) })
     if (!res.ok) return null
     const type = res.headers.get('content-type') ?? 'image/png'
     if (!type.startsWith('image/') || type.includes('svg')) return null

@@ -1,3 +1,4 @@
+import { fetchStartingWithin } from '@/lib/fetch-limit'
 import { chatMediaSource } from '@/lib/telegram-chat'
 
 export const dynamic = 'force-dynamic'
@@ -10,7 +11,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   try {
     const source = await chatMediaSource(id)
     if (!source) return new Response('Bulunamadı', { status: 404 })
-    const file = await fetch(source.url)
+    const file = await fetchStartingWithin(source.url, 15_000)
     if (!file.ok || !file.body) return new Response('Medya alınamadı', { status: 502 })
     return new Response(file.body, {
       headers: {

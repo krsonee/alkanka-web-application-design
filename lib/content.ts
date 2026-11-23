@@ -1,5 +1,15 @@
-import { neon } from '@neondatabase/serverless'
+import { neon, neonConfig } from '@neondatabase/serverless'
 import { trackedSetting } from '@/lib/panel-log-shared'
+
+/** Longest a settings query may wait for its answer. */
+const READ_LIMIT_MS = 20_000
+
+// These queries travel over HTTP and `fetch` has no time limit of its own: a request the database never
+// answered kept the page waiting until the platform killed it five minutes later.
+neonConfig.fetchFunction = (input: RequestInfo | URL, init?: RequestInit) => {
+  const limit = AbortSignal.timeout(READ_LIMIT_MS)
+  return fetch(input, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, limit]) : limit })
+}
 
 const sql = neon(process.env.DATABASE_URL!)
 
@@ -43,13 +53,20 @@ async function recordContentChange(key: string, before: unknown, after: unknown)
   }
 }
 
+// A Neon HTTP query is sent again every time it is awaited, so the stored value has to be a real
+// promise: keeping the query itself made every read send the table setup first.
 let ready: Promise<unknown> | null = null
 function ensureTable() {
-  ready ??= sql`CREATE TABLE IF NOT EXISTS site_content (
-    key text PRIMARY KEY,
-    value jsonb NOT NULL,
-    updated_at timestamptz NOT NULL DEFAULT now()
-  )`
+  ready ??= (async () => {
+    await sql`CREATE TABLE IF NOT EXISTS site_content (
+      key text PRIMARY KEY,
+      value jsonb NOT NULL,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`
+  })().catch((error) => {
+    ready = null
+    throw error
+  })
   return ready
 }
 

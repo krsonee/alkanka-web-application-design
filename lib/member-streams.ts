@@ -59,7 +59,7 @@ type Live = { title: string | null; viewers: number | null; avatar: string | nul
 
 async function kickLive(slug: string): Promise<Live | null> {
   try {
-    const res = await fetch(`https://kick.com/api/v2/channels/${encodeURIComponent(slug)}`, { headers: { 'User-Agent': UA }, next: { revalidate: 120 } })
+    const res = await fetch(`https://kick.com/api/v2/channels/${encodeURIComponent(slug)}`, { headers: { 'User-Agent': UA }, next: { revalidate: 120 }, signal: AbortSignal.timeout(8000) })
     if (!res.ok) return null
     const json = (await res.json()) as {
       livestream?: { session_title?: string; viewer_count?: number } | null
@@ -87,6 +87,7 @@ async function twitchLive(logins: string[]): Promise<Map<string, Live>> {
       headers: { 'Client-Id': TWITCH_WEB_CLIENT_ID, 'Content-Type': 'application/json', 'User-Agent': UA },
       body: JSON.stringify({ query }),
       next: { revalidate: 120 },
+      signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) return live
     const json = (await res.json()) as {

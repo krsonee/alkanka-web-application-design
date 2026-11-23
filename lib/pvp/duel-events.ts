@@ -61,7 +61,14 @@ function drop() {
 
 async function connect() {
   // LISTEN needs a session, so it cannot go through the transaction pooler.
-  const client = new Client({ connectionString: process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL })
+  const client = new Client({
+    connectionString: process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL,
+    // On a connection that died without closing, the keepalive statement was never answered and never failed
+    // either, so the streams kept waiting on a listener that could no longer deliver anything.
+    connectionTimeoutMillis: 10_000,
+    query_timeout: 10_000,
+    keepAlive: true,
+  })
   client.on('error', drop)
   client.on('end', drop)
   client.on('notification', (n) => {
