@@ -248,7 +248,10 @@ const MOD_STEPS: GuideStep[] = [
           Her silme ve susturma, kimin yaptığıyla birlikte <b>Telegram Merkezi → Kayıtlar</b>’a yazılır.
         </li>
         <li>
-          Üye siteden yazınca mesajı Telegram grubuna iki satır düşer: üstte kalın adı, altında mesajı. Rolü varsa (Moderatör, Sponsor Destek…) adının yanında simgesiyle rolü, yoksa taktığı rozet yazar: <span className={code}>Ahmet · Moderatör</span>
+          Üye siteden yazınca mesajı Telegram grubuna iki parça düşer: üstte kalın adı ve <span className={code}>siteden</span> notu, altında alıntı kutusunda mesajı. Rolü varsa (Moderatör, Sponsor Destek…) adının yanında simgesiyle rolü, yoksa taktığı rozet yazar: <span className={code}>Ahmet · Moderatör · siteden</span>
+        </li>
+        <li>
+          Jako’nun etkinlik hatırlatması gruba <b>Canlı izle</b> butonuyla düşer; buton siteyi açar. Sitedeki sohbet akışında aynı duyuru düz yazıyla görünür.
         </li>
       </ul>
     ),
@@ -329,6 +332,11 @@ const SETUP_STEPS: GuideStep[] = [
         <li>
           <b>Değiştirme kuralları</b>: kaynağın <b>Metin ve linkleri düzenle</b> kutusunda satır satır kural eklenir (kelime, kullanıcı adı, link, alan adı, buton
           linki). Bütün kaynaklarda geçerli olacak kuralı <b>Ortak değiştirme kuralları</b>’na yaz; aynı şey için kaynağın kendi kuralı varsa o geçerlidir.
+        </li>
+        <li>
+          <b>Bonus ve kampanya postları</b>: oran botunun oransız paylaştığı post ve Post Paylaşım’ın sponsor grubundan aldığı post kanala aynı düzende gider: kalın
+          başlık, altında site adı ve etiketi, şartlar liste hâlinde, kod dokununca kopyalanan yazıyla. Şartların sözleri değişmez. Kaynağın kendi postunda işleyen
+          emoji çağrıları (“Emojileri döktür”, “50 emoji gerekiyor”) kanala taşınmaz. Post Paylaşım’da sponsor adı <b>Destek</b> ayarındaki sponsor listesinden okunur.
         </li>
         <li>
           <b>Butonlar</b>: kanal aktarımında ve oran botunda kaynak başına, Post Paylaşım’da sponsor başına post altı butonu eklenir. Kaynak postun kendi butonları da

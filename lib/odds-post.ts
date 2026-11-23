@@ -4,6 +4,7 @@
  * post itself, and telling a bare result note ("Kazandı ✅") from a post that only carries the word.
  */
 import type { ParsedOdd } from '@/lib/deal-types'
+import { campaignPost } from '@/lib/promo-post'
 import { firstOddNumber } from '@/lib/special-odds-shared'
 import { bold, italic, plainLines, strike, tgLines, type TgLine } from '@/lib/tg-format'
 
@@ -218,22 +219,8 @@ export function oddsPost(input: OddsPostInput): OddsPostText {
   return asPost([...lines, ...footLines(input)])
 }
 
-/** Rows of ornament (emoji banners, divider lines) carry nothing once the premium emoji are gone. */
-export function tidyBody(text: string) {
-  return text
-    .split('\n')
-    .map((line) => line.replace(/[ \t]{2,}/g, ' ').trim())
-    .filter((line) => line === '' || /[\p{L}\p{N}]/u.test(line))
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
-
-/** A post shared without an odd (the source's rule lets everything through, or the panel sent it): the source's own words under our headline. */
-export function carriedPost(input: Head & { body: string }): OddsPostText {
-  const body = tidyBody(input.body)
-  return asPost([...headLines(input, ''), ...(body ? ['', ...body.split('\n')] : []), ...footLines(input)])
-}
+/** A post shared without an odd (the source's rule lets everything through, or the panel sent it): a campaign, laid out as one. */
+export const carriedPost = (input: Head & { body: string }): OddsPostText => campaignPost(input)
 
 export type SettledOdd = { match: string; market: string; newOdd: number | null }
 
