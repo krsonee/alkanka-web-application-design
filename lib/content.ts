@@ -43,13 +43,20 @@ async function recordContentChange(key: string, before: unknown, after: unknown)
   }
 }
 
+// A Neon HTTP query is sent again every time it is awaited, so the stored value has to be a real
+// promise: keeping the query itself made every read send the table setup first.
 let ready: Promise<unknown> | null = null
 function ensureTable() {
-  ready ??= sql`CREATE TABLE IF NOT EXISTS site_content (
-    key text PRIMARY KEY,
-    value jsonb NOT NULL,
-    updated_at timestamptz NOT NULL DEFAULT now()
-  )`
+  ready ??= (async () => {
+    await sql`CREATE TABLE IF NOT EXISTS site_content (
+      key text PRIMARY KEY,
+      value jsonb NOT NULL,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`
+  })().catch((error) => {
+    ready = null
+    throw error
+  })
   return ready
 }
 
