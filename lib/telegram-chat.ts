@@ -2,7 +2,8 @@ import 'server-only'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
 import { botToken, callBot, ensureTables, entitiesToCleanText } from '@/lib/telegram-mirror'
-import { TG_HTML, escapeHtml, noticePlain, tgMemberMessage, tgNotice, type TgMark, type TgNotice } from '@/lib/tg-format'
+import { SITE_URL } from '@/lib/seo'
+import { TG_HTML, escapeHtml, noticeMarkup, noticePlain, tgMemberMessage, tgNotice, type TgMark, type TgNotice } from '@/lib/tg-format'
 
 export type ChatMessage = {
   id: number
@@ -475,13 +476,22 @@ export async function memberMark(userId: string): Promise<TgMark | null> {
   }
 }
 
-/** System announcement posted by the bot into the group and the on-site chat feed. */
+/**
+ * System announcement posted by the bot into the group and the on-site chat feed. A button given as
+ * a site path ("/") opens the site; the feed on the site shows the words only.
+ */
 export async function announceToChat(notice: TgNotice, author = 'Jako') {
   const config = await getChatConfig()
   if (!config) return
   await ensureChatTables()
   const token = await botToken(config.botId)
-  const sent = await callBot<{ message_id: number }>(token, 'sendMessage', { chat_id: config.chatId, text: tgNotice(notice), ...TG_HTML }).catch(() => null)
+  const button = notice.button && { ...notice.button, url: notice.button.url.startsWith('/') ? `${SITE_URL}${notice.button.url}` : notice.button.url }
+  const sent = await callBot<{ message_id: number }>(token, 'sendMessage', {
+    chat_id: config.chatId,
+    text: tgNotice(notice),
+    ...TG_HTML,
+    ...noticeMarkup({ ...notice, button }),
+  }).catch(() => null)
   await rows(sql`INSERT INTO tg_chat_messages (chat_id, tg_message_id, from_tg_id, user_id, author, text, origin)
     VALUES (${config.chatId}, ${sent?.message_id ?? null}, NULL, NULL, ${author}, ${noticePlain(notice)}, 'site')
     ON CONFLICT DO NOTHING`)

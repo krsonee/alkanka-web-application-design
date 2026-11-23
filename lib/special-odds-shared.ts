@@ -7,8 +7,8 @@ export type OddsPassMode = 'odds' | 'keyword' | 'all'
 
 export const ODDS_PASS_OPTIONS: { value: OddsPassMode; label: string; hint: string }[] = [
   { value: 'odds', label: 'Sadece oran içerenler', hint: 'Maçı ve oranı okunamayan post paylaşılmaz, "atlandı" diye kayda düşer.' },
-  { value: 'keyword', label: 'Anahtar kelime geçenler', hint: 'Yazdığın kelimelerden biri geçen her post paylaşılır, oran olmasa da.' },
-  { value: 'all', label: 'Hepsi', hint: 'Kanaldaki her post paylaşılır. Duyuru ve reklam postları da gider.' },
+  { value: 'keyword', label: 'Anahtar kelime geçenler', hint: 'Yazdığın kelimelerden biri geçen her post paylaşılır. Oranı olan özel oran kanalına, oranı olmayan (kampanya, bonus) ana kanala gider.' },
+  { value: 'all', label: 'Hepsi', hint: 'Kanaldaki her post paylaşılır. Oranı olan özel oran kanalına, oranı olmayan (kampanya, bonus, duyuru) ana kanala gider.' },
 ]
 
 export const toOddsPassMode = (v: unknown): OddsPassMode => (v === 'keyword' || v === 'all' ? v : 'odds')
@@ -68,6 +68,8 @@ export type OddsSource = {
   title: string
   siteName: string
   siteLink: string
+  /** The sponsor's own site. Campaign posts (no odd) lead here; empty until the panel sets it, and such posts wait. */
+  sponsorLink: string
   siteLogo: string | null
   replacements: string
   footer: string
@@ -100,6 +102,12 @@ export function oddsTagText(tag: OddsTag, custom: string) {
   return custom.trim() || ODDS_TAG_OPTIONS.find((o) => o.value === tag)!.defaultText
 }
 
+/** The tag as a quiet line under the post's headline: the preset in sentence case, a custom text as typed. */
+export function oddsTagLine(tag: OddsTag, custom: string) {
+  if (tag === 'none') return ''
+  return custom.trim() || ODDS_TAG_OPTIONS.find((o) => o.value === tag)!.label
+}
+
 export type OddsBotConfig = {
   enabled: boolean
   botId: number | null
@@ -129,9 +137,24 @@ export type OddsBotStatus = {
   todayTotal: number
   /** Set when the bot can no longer post to our channel (removed, demoted, posting right off). */
   channelError: string | null
+  /** Our main channel, where posts without an odd go. Null when none is registered. */
+  mainChannel: string | null
+  /** Set when the bot can not post to the main channel. */
+  mainChannelError: string | null
   /** Last failed attempt to publish an odd to our channel. Cleared by the next successful post. */
   publishError: { at: string; message: string } | null
   activeSources: number
+}
+
+export const NO_SPONSOR_LINK = 'Sponsor linki girilmemiş. Kaynağın “Sponsor linki” alanını doldur, sonra “Yine de paylaş” de'
+export const NO_MAIN_CHANNEL = 'Ana kanal kayıtlı değil. Telegram bölümünde Duyuru kanalını kaydet, sonra “Yine de paylaş” de'
+
+/** A link the panel typed for a sponsor's site. Empty is allowed and means "not set yet". */
+export function sponsorLinkError(link: string) {
+  const value = link.trim()
+  if (!value) return null
+  if (!/^https?:\/\/[^\s/]+\.[^\s/]+/i.test(value) || /\s/.test(value)) return 'Sponsor linki http(s):// ile başlayan tam bir adres olmalı'
+  return null
 }
 
 export const EMPTY_ODDS_STATUS: OddsBotStatus = {
@@ -142,6 +165,8 @@ export const EMPTY_ODDS_STATUS: OddsBotStatus = {
   lastUpdateAt: null,
   todayTotal: 0,
   channelError: null,
+  mainChannel: null,
+  mainChannelError: null,
   publishError: null,
   activeSources: 0,
 }
@@ -157,12 +182,14 @@ export type OddsPreview = {
 
 // "1.85" or "2,10" standing alone: not part of "1.500", not money ("500,00 TL", "₺99,90") and not a percentage.
 const ODD_NUMBER = /(?<![\d.,₺$€%])\d{1,3}[.,]\d{2}(?![\d.,])(?!\s*(?:tl\b|try\b|usd\b|eur\b|bin\b|lira|₺|\$|€|%))/iu
-const MATCH_LINE = /[\p{L}\d][\p{L}\d.' ]+\s(?:-|–|—|vs\.?)\s[\p{L}\d][\p{L}\d.' ]+/iu
 
 export const hasOddNumber = (text: string) => ODD_NUMBER.test(text)
 
-/** Stand-in for the AI reader when it is unreachable: an odd-like number plus a "Team - Team" line. */
-export const looksLikeOdds = (text: string) => hasOddNumber(text) && MATCH_LINE.test(text)
+/** The first number written like an odd ("2,10"), or null. */
+export function firstOddNumber(text: string) {
+  const found = text.match(ODD_NUMBER)?.[0]
+  return found ? Number(found.replace(',', '.')) : null
+}
 
 export const DEFAULT_ODDS_BOT: OddsBotConfig = {
   enabled: false,

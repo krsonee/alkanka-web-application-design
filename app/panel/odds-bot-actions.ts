@@ -18,6 +18,7 @@ import {
   setOddsSourceActive,
   setOddsStatus,
   updateOddsSourceRule,
+  updateOddsSourceSponsorLink,
   updateOddsSourceTag,
   updateOddsSourceText,
   type QueueAction,
@@ -97,6 +98,7 @@ export async function addOddsSourceAction(_: ActionState, form: FormData): Promi
       chat: text(form, 'chat'),
       siteName: text(form, 'siteName'),
       siteLink: text(form, 'siteLink'),
+      sponsorLink: text(form, 'sponsorLink'),
       siteLogo: text(form, 'siteLogo'),
       replacements: text(form, 'replacements'),
       footer: text(form, 'footer'),
@@ -152,6 +154,23 @@ export async function updateOddsSourceTagAction(_: ActionState, form: FormData):
     await updateOddsSourceTag(Number(form.get('id')), { tag: text(form, 'tag'), tagText: text(form, 'tagText') })
     refresh()
     return logged('telegram', { ok: true, message: 'Etiket kaydedildi.' })
+  } catch (error) {
+    return { message: errorText(error) }
+  }
+}
+
+export async function updateOddsSourceSponsorLinkAction(_: ActionState, form: FormData): Promise<ActionState> {
+  if (!(await canPanel('telegram'))) return EXPIRED
+  try {
+    const link = text(form, 'sponsorLink')
+    await updateOddsSourceSponsorLink(Number(form.get('id')), link)
+    refresh()
+    return logged('telegram', {
+      ok: true,
+      message: link.trim()
+        ? 'Sponsor linki kaydedildi. Bu kaynağın kampanya ve bonus postları ana kanala bu linkle gider.'
+        : 'Sponsor linki kaldırıldı. Link girilene kadar bu kaynağın kampanya ve bonus postları paylaşılmaz, bekler.',
+    })
   } catch (error) {
     return { message: errorText(error) }
   }

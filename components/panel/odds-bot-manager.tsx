@@ -2,7 +2,7 @@
 
 import { useActionState, useState, useTransition, type FormEvent } from 'react'
 import useSWR from 'swr'
-import { Check, FlaskConical, Link2, ListChecks, Loader2, Plug, Radio, Tag, Trash2, Trophy } from 'lucide-react'
+import { Check, ExternalLink, FlaskConical, Link2, ListChecks, Loader2, Plug, Radio, Tag, Trash2, Trophy } from 'lucide-react'
 import {
   addOddsSourceAction,
   bulkOddsAction,
@@ -14,6 +14,7 @@ import {
   saveOddsBotAction,
   searchOddsAction,
   toggleOddsSourceAction,
+  updateOddsSourceSponsorLinkAction,
   updateOddsSourceTagAction,
   updateOddsSourceTextAction,
 } from '@/app/panel/odds-bot-actions'
@@ -63,8 +64,8 @@ function Flow() {
   const steps = [
     'Kaynak kanallar (site kanalları)',
     'Bot okur; kaynağın kuralına uymayan postu atlar',
-    'Linkleri bizim linkle değiştirir, görseli, videoyu ve albümü taşır',
-    'Bizim özel oran kanalımıza paylaşır, sitede listeler',
+    'Oran postunda linkleri bizim linkle, kampanya postunda sponsor linkiyle değiştirir; görseli, videoyu ve albümü taşır',
+    'Oranı özel oran kanalımıza paylaşır ve sitede listeler; kampanya ve bonus postunu ana kanalımıza paylaşır',
     '“Limit doldu” / sonuç postu gelince günceller',
   ]
   return (
@@ -86,8 +87,9 @@ function SetupCard({ config, bots, status }: { config: OddsBotConfig; bots: Mirr
   const live = Boolean(status.webhookUrl) && !status.lastError
   const blockers = [
     status.channelError,
+    status.mainChannelError,
     status.publishError
-      ? `Son oran kanala gönderilemedi (${new Date(status.publishError.at).toLocaleString('tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })}): ${status.publishError.message}`
+      ? `Son post kanala gönderilemedi (${new Date(status.publishError.at).toLocaleString('tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })}): ${status.publishError.message}`
       : null,
     status.activeSources === 0 ? 'Aktif kaynak kanal yok. Aşağıdan en az bir site kanalı eklemeden bot oran yakalayamaz.' : null,
   ].filter((text): text is string => Boolean(text))
@@ -108,9 +110,16 @@ function SetupCard({ config, bots, status }: { config: OddsBotConfig; bots: Mirr
           <label className={label}>
             Bizim özel oran kanalımız
             <input name="channel" defaultValue={config.channelUsername ? `@${config.channelUsername}` : config.channelId} placeholder="@alkankaoran" className={input} />
-            <span className={hint}>{config.channelTitle ? `Bağlı: ${config.channelTitle}` : 'Henüz bağlanmadı.'}</span>
+            <span className={hint}>{config.channelTitle ? `Bağlı: ${config.channelTitle}` : 'Henüz bağlanmadı.'} Buraya sadece oranı okunan postlar gider.</span>
           </label>
         </div>
+        <p className="rounded-xl border border-border bg-background/50 p-3 text-sm leading-relaxed text-muted-foreground">
+          <span className="font-semibold text-foreground">Kampanya ve bonus postları: </span>
+          {status.mainChannel
+            ? `oranı olmayan postlar özel oran kanalına değil ana kanalımıza (${status.mainChannel}) gider. Bot o kanalda da yönetici olmalı ve “Mesaj gönder” yetkisi açık olmalı.`
+            : 'ana kanal kayıtlı değil. Telegram bölümünde Duyuru kanalını kaydedene kadar oranı olmayan postlar hiçbir kanala gitmez, “Bekleyen ve atlanan postlar” kutusunda bekler.'}{' '}
+          Bu postların linki ve butonu, kaynağın “Sponsor linki” alanına yazdığın adrese gider.
+        </p>
         <label className={label}>
           Post altına eklenecek metin
           <input name="footer" defaultValue={config.footer} maxLength={300} className={input} />
@@ -145,6 +154,11 @@ function SetupCard({ config, bots, status }: { config: OddsBotConfig; bots: Mirr
               <input type="checkbox" name="postResults" defaultChecked={config.postResults} className="size-4 accent-primary" />
               Sonuçları kanalımızda orijinal posta yanıt olarak paylaş
             </label>
+            <p className={cn(hint, 'md:col-span-2')}>
+              Bu kelimeler tek başına bir oranı kapatmaz. Bot bir sonucu ancak kaynak post o oranın postuna cevap olarak atıldıysa, oranın kendi postu
+              düzenlendiyse, postta o oranın takımlarından biri geçiyorsa ya da post “Kazandı” gibi yalın bir notsa işler. İçinde “kazanan” ya da onay
+              işareti geçen kampanya postu hiçbir oranı etkilemez. Mesajın altına hangi oran olduğu (site, maç, oran) kendiliğinden yazılır.
+            </p>
           </div>
         </details>
         <div className="flex flex-wrap items-center gap-3">
@@ -259,14 +273,58 @@ function TagEditor({ source }: { source: OddsSource }) {
   )
 }
 
+function SponsorLinkEditor({ source }: { source: OddsSource }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(updateOddsSourceSponsorLinkAction, {})
+  const fieldId = `sponsor-link-${source.id}`
+  return (
+    <details open={!source.sponsorLink} className="w-full rounded-xl border border-border bg-background/50">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-xs font-semibold text-foreground">
+        <ExternalLink className="size-3.5" aria-hidden="true" />
+        Sponsor linki
+        {source.sponsorLink ? (
+          <span className="min-w-0 truncate font-normal text-muted-foreground">· {source.sponsorLink}</span>
+        ) : (
+          <span className="font-normal text-destructive">· girilmedi, kampanya postları bekler</span>
+        )}
+      </summary>
+      <form action={action} className="flex flex-col gap-2 border-t border-border p-3">
+        <input type="hidden" name="id" value={source.id} />
+        <label htmlFor={fieldId} className="text-xs font-semibold text-foreground">
+          {source.siteName} sitesine giden link
+        </label>
+        <input id={fieldId} name="sponsorLink" type="url" defaultValue={source.sponsorLink} placeholder="https://..." className={input} />
+        <p className={hint}>
+          Bu kaynağın kampanya ve bonus postları (oranı olmayan postlar) ana kanala bu linkle gider: postun altına “{source.siteName} giriş” butonu konur, yazıdaki
+          linkler de buraya çevrilir. Boşken bu postlar paylaşılmaz, aşağıdaki “Bekleyen ve atlanan postlar” kutusunda bekler. Oran postları bundan etkilenmez.
+        </p>
+        <div className="flex items-center gap-3">
+          <button disabled={pending} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50">
+            {pending && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}Kaydet
+          </button>
+          <Status state={state} />
+        </div>
+      </form>
+    </details>
+  )
+}
+
 function SourcesCard({ sources, links, sharedRules }: { sources: OddsSource[]; links: LinkChoice[]; sharedRules: ReplaceRule[] }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(addOddsSourceAction, {})
   return (
-    <Card icon={<Link2 className="size-4" aria-hidden="true" />} id="ob-sources" title="2. Kaynak site kanalları" desc="Her kanal bir siteye bağlanır. Bot o kanaldaki postlardaki tüm linkleri buradaki site linkiyle değiştirir. Hangi postların paylaşılacağını ve altına hangi butonların ekleneceğini kaynak kaynak sen seçersin.">
+    <Card icon={<Link2 className="size-4" aria-hidden="true" />} id="ob-sources" title="2. Kaynak site kanalları" desc="Her kanal bir siteye bağlanır. Bot oran postlarındaki linkleri buradaki site linkiyle, kampanya ve bonus postlarındaki linkleri sponsor linkiyle değiştirir. Hangi postların paylaşılacağını ve altına hangi butonların ekleneceğini kaynak kaynak sen seçersin.">
       <form action={action} className="grid gap-3 md:grid-cols-2">
         <label className={label}>Kaynak kanal<input name="chat" required placeholder="@siteozeloran" className={input} /></label>
         <label className={label}>Site adı<input name="siteName" required maxLength={40} placeholder="Örn. NovaBet" className={input} /></label>
-        <label className={label}>Bizim site linkimiz<input name="siteLink" required type="url" placeholder="https://..." className={input} /></label>
+        <label className={label}>
+          Bizim site linkimiz
+          <input name="siteLink" required type="url" placeholder="https://..." className={input} />
+          <span className={hint}>Oran postlarındaki linkler buna çevrilir.</span>
+        </label>
+        <label className={label}>
+          Sponsor linki
+          <input name="sponsorLink" type="url" placeholder="https://..." className={input} />
+          <span className={hint}>Sponsorun kendi sitesine giden link. Kampanya ve bonus postları ana kanala bu linkle gider; boşsa o postlar bekler.</span>
+        </label>
         <label className={label}>Logo adresi (isteğe bağlı)<input name="siteLogo" placeholder="https://.../logo.png" className={input} /></label>
         <TagFields />
         <RuleFields links={links} />
@@ -306,6 +364,7 @@ function SourcesCard({ sources, links, sharedRules }: { sources: OddsSource[]; l
                   <Trash2 className="size-4" aria-hidden="true" />
                 </button>
               </form>
+              <SponsorLinkEditor source={s} />
               <TagEditor source={s} />
               <RuleEditor source={s} links={links} />
               <SourceTextEditor

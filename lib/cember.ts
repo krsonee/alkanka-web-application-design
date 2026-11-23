@@ -3,6 +3,7 @@ import { randomInt } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
 import { ARENA_META, type ArenaGame } from '@/lib/arena'
 import { hasOwn } from '@/lib/has-own'
+import { bold } from '@/lib/tg-format'
 import { runSim, mulberry, STEP } from '@/lib/cember-sim'
 import { runKD, KD_STEP } from '@/lib/karadelik-sim'
 import { runSV, SV_STEP, SV_TEAM_NAMES } from '@/lib/survival-sim'
@@ -1016,6 +1017,7 @@ async function payRound(row: RoundRow) {
   }
 
   const list = winners.map((w) => w.name).join(', ')
+  const shared = (among: string) => (split && winners.length > 1 ? ` (${among} arasında bölüşüldü)` : ' (kişi başı)')
   await import('@/lib/telegram-chat')
     .then(({ announceToChat }) =>
       announceToChat({
@@ -1023,15 +1025,15 @@ async function payRound(row: RoundRow) {
         title: `${row.title} bitti`,
         lines: svTeam
           ? [
-              `${players} kanka sahaya çıktı, ${teamName} Takım kazandı: ${list}.`,
-              `Ödül: ${row.prize_text}${split && winners.length > 1 ? ' (takım arasında bölüşüldü)' : ' (kişi başı)'}`,
+              [bold(players), ' kanka sahaya çıktı, ', bold(`${teamName} Takım`), ' kazandı: ', bold(list), '.'],
+              ['🎁 Ödül: ', bold(row.prize_text), shared('takım')],
             ]
           : isKd || isSv
             ? [
-                `${players} kanka arenaya girdi, ${isSv ? 'ayakta kalanlar' : 'kara delikten sağ çıkanlar'}: ${list}.`,
-                `Ödül: ${row.prize_text}${split && winners.length > 1 ? ' (kazananlar arasında bölüşüldü)' : ' (kişi başı)'}`,
+                [bold(players), ` kanka arenaya girdi, ${isSv ? 'ayakta kalanlar' : 'kara delikten sağ çıkanlar'}: `, bold(list), '.'],
+                ['🎁 Ödül: ', bold(row.prize_text), shared('kazananlar')],
               ]
-            : [`${players} kanka çembere girdi, son kalan ${list} oldu.`, `Ödül: ${row.prize_text}`],
+            : [[bold(players), ' kanka çembere girdi, son kalan ', bold(list), ' oldu.'], ['🎁 Ödül: ', bold(row.prize_text)]],
       }),
     )
     .catch(() => {})
@@ -1147,12 +1149,21 @@ export async function sendUpcomingNotices() {
     const instant = s.ev.extraSlots.some((x) => Date.parse(x) === s.at)
     const lead = instant ? 'Anlık etkinlik! ' : ''
     const where = s.ev.game === 'cember' ? 'çemberde' : 'arenada'
+    const gameName = GAME_META[s.ev.game].label
+    // An event left with its game's own name ("Kara Delik Arenası") is not named twice.
+    const named = s.ev.title.trim().toLocaleLowerCase('tr') !== gameName.toLocaleLowerCase('tr')
     await Promise.allSettled([
       import('@/lib/telegram-chat').then(({ announceToChat }) =>
         announceToChat({
           kind: 'hatirlatma',
-          title: `${lead}${s.ev.title} (${GAME_META[s.ev.game].label}) ${mins} dakika sonra (${trClock(s.at)}) başlıyor`,
-          lines: [`Ödül: ${prize}.`, conditions && `Şartlar: ${conditions}.`, `Şu an ${ids.length} kanka ${where}, siteye gir canlı izle.`],
+          title: `${lead}${s.ev.title} ${mins} dakika sonra başlıyor`,
+          sub: [named ? gameName : '', `Saat ${trClock(s.at)}`].filter(Boolean).join(' · '),
+          lines: [
+            ['🎁 Ödül: ', bold(prize)],
+            conditions && ['📋 Şartlar: ', conditions],
+            ids.length ? ['👥 Şu an ', bold(ids.length), ` kanka ${where}`] : `👥 ${where === 'çemberde' ? 'Çemberde' : 'Arenada'} henüz kimse yok`,
+          ],
+          button: { text: 'Canlı izle', url: '/' },
         }),
       ),
       ids.length

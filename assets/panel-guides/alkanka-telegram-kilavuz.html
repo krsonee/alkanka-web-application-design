@@ -677,16 +677,17 @@
     <li>Her işlem, yapan moderatörün adıyla <span class="path">Telegram Merkezi → Kayıtlar</span>'a düşer.</li>
   </ol>
   <div class="box warn"><strong>Bot grupta yönetici değilse</strong> ya da mesaj 48 saatten eskiyse işlem yalnızca sitede geçerli olur; moderatörün ekranındaki not bunu açıkça yazar. Görevli rolündeki üyeler ve bot duyuruları susturulamaz, moderatör kendini susturamaz.</div>
-  <p><strong>Siteden gelen mesajın görünüşü:</strong> Üye siteden yazdığında mesajı gruba iki satır düşer: üstte kalın yazıyla adı, altında mesajı. Rolü varsa (Moderatör, Sponsor Destek ya da panelden açtığın başka bir rol) adının yanına simgesiyle rolü yazılır: <code>🛡 Ahmet · Moderatör</code>. Rolü yoksa taktığı rozet yazılır; rozeti de yoksa sadece adı görünür. Eski <code>Ahmet (site): mesaj</code> biçimi kalktı.</p>
+  <p><strong>Siteden gelen mesajın görünüşü:</strong> Üye siteden yazdığında mesajı gruba iki parça düşer: üstte kalın yazıyla adı ve mesajın siteden geldiğini söyleyen <code>siteden</code> notu, altında alıntı kutusunun içinde mesajı. Rolü varsa (Moderatör, Sponsor Destek ya da panelden açtığın başka bir rol) adının yanına simgesiyle rolü yazılır: <code>🛡 Ahmet · Moderatör · siteden</code>. Rolü yoksa taktığı rozet yazılır; rozeti de yoksa sadece adı görünür. Eski <code>Ahmet (site): mesaj</code> biçimi kalktı.</p>
   <p><strong>Otomatik mesajlar:</strong> Sitenin kendiliğinden gruba yazdığı mesajlar (masa daveti, kazanan duyurusu, hatırlatma, Şampiyon Kürsüsü, Haftalık Sponsor Karnesi, Ayın Güvenilir Sponsoru) aynı düzenle gider: simge ve kalın başlık, altında ayrıntılar, en altta adres. Bu mesajların metnini ayrıca biçimlendirmen gerekmez.</p>
+  <p><strong>Etkinlik hatırlatması:</strong> Jako Çemberi, Kara Delik ve Survival hatırlatmasında başlığın altında oyunun adı ve saati, sonra kalın yazıyla ödül, şartlar ve o an kaç kişinin içeride olduğu yazar. Mesajın altında siteyi açan <kbd>Canlı izle</kbd> butonu vardır. Aynı duyuru sitedeki sohbet akışına düz yazıyla düşer.</p>
 </section>
 
 <section id="oran">
   <h2><span class="n">29</span> Özel Oran Botu</h2>
   <p><span class="path">Botlar → Özel Oran Botu</span>. Sekme dört adımı sırayla gösterir:</p>
   <ol>
-    <li><strong>Bot ve kanalımız:</strong> Botu kendi özel oran kanalımıza yönetici olarak ekle. Aynı botu tüm kaynak site kanallarına da eklemen gerekir.</li>
-    <li><strong>Kaynak site kanalları:</strong> Her kanal bir siteye bağlanır. Bot o kanaldaki postlardaki tüm linkleri buradaki site linkiyle değiştirir.</li>
+    <li><strong>Bot ve kanalımız:</strong> Botu kendi özel oran kanalımıza yönetici olarak ekle. Aynı botu tüm kaynak site kanallarına da eklemen gerekir. Kampanya ve bonus postları için botu ana kanala (Duyuru kanalı) da yönetici yap.</li>
+    <li><strong>Kaynak site kanalları:</strong> Her kanal bir siteye bağlanır. Bot oran postlarındaki linkleri buradaki site linkiyle, kampanya ve bonus postlarındaki linkleri kaynağın <kbd>Sponsor linki</kbd> ile değiştirir.</li>
     <li><strong>Test et / elle ekle:</strong> Kaynak kanaldan bir post yapıştır; botun onu nasıl anladığını gör, istersen bot gibi işle.</li>
     <li><strong>Oranlar ve sonuçlar:</strong> Bot sonuç postu atmazsa buradan toplu işaretle: kutuları seç, Kazandı ya da Kaybetti'ye bas.</li>
   </ol>
@@ -697,6 +698,38 @@
     <li><em>Anahtar kelime geçenler:</em> yazdığın kelimelerden biri geçen her post paylaşılır, oran olmasa da. Kelimeleri virgülle ayır.</li>
     <li><em>Hepsi:</em> kanaldaki her post paylaşılır.</li>
   </ul>
+  <h3>Hangi post hangi kanala gider</h3>
+  <ul>
+    <li><strong>Oranı okunan post:</strong> özel oran kanalına gider ve sitede listelenir.</li>
+    <li><strong>Oranı olmayan post (kampanya, bonus, duyuru):</strong> özel oran kanalına gitmez, ana kanala (Telegram bölümünde kayıtlı Duyuru kanalı) gider. Hangi kanala gideceği <span class="path">Bot ve kanalımız</span> kutusunda yazar; bot o kanalda yönetici değilse aynı kutuda kırmızı uyarı çıkar.</li>
+    <li><strong>Sponsor linki:</strong> her kaynağın altındaki <kbd>Sponsor linki</kbd> kutusuna sponsorun kendi sitesine giden adresi yaz. Kampanya postunun altına "… giriş" butonu bu adresle konur, yazıdaki linkler de bu adrese çevrilir. Oran postları bundan etkilenmez.</li>
+    <li><strong>Eksik varsa post gitmez:</strong> sponsor linki boşsa ya da ana kanal kayıtlı değilse kampanya postu hiçbir kanala atılmaz; <kbd>Bekleyen ve atlanan postlar</kbd> kutusunda sebebiyle bekler. Eksiği giderip <kbd>Yine de paylaş</kbd> dersin.</li>
+  </ul>
+  <p>Freespin, freebet, bonus, kod, kasa, turnuva ve çekiliş postları içinde sayı ya da "oran" kelimesi geçse bile oran sayılmaz. Oranı okuyan sistem cevap vermezse bot tahminle post atmaz: düz yazılmış oran postunu (maç satırı, altında bahis, oran) kuralla okur, okuyamadığını "Oran okunamadı" diye bu kutuda bekletir.</p>
+  <h3>Postun kanalımızdaki görünümü</h3>
+  <p>Oran postu kaynağın yazısıyla değil, kendi düzenimizle gider; böylece bütün kaynaklar kanalda aynı görünür:</p>
+  <ul>
+    <li><strong>Başlık:</strong> kalın "ÖZEL ORAN" ve site adı. Altında kaynağın etiketi ("Sponsorumuz", "Sponsor dışı · Güvenilir site" ya da kendi yazdığın etiket) eğik yazıyla.</li>
+    <li><strong>Maçlar:</strong> her maç kalın, altında bahsi. Maçlar tek kupondaysa oran altta bir kez yazılır ("4 maçlı kupon: 14,59 yerine 20,00"); her maçın kendi oranı varsa maçın altına yazılır. Eski oran üstü çizili, yeni oran kalındır.</li>
+    <li><strong>Alt bilgiler:</strong> en yüksek bahis, varsa katılım şartı, en altta alt yazın.</li>
+  </ul>
+  <p>Maçı yazıda değil sadece görselde olan oran postunda ("35 Özel Oran" gibi) maç görselden okunur. Görseli olmayan (video ya da GIF'li) böyle bir post okunamaz, atlanır; istersen bu kutudan <kbd>Yine de paylaş</kbd>. Kaynağın premium emojileri bot tarafından gönderilemediği için emojiyle yazılmış afiş satırları yazıdan çıkarılır.</p>
+  <p>Kural gereği oransız paylaşılan post (kural "Hepsi" ya da "Anahtar kelime" ise, ya da sen elle paylaştıysan) bonus ve kampanya düzeniyle gider:</p>
+  <ul>
+    <li>Postun ilk kısa satırı kalın başlık olur; başına konusuna göre bir simge gelir (freespin, bonus, çekiliş, turnuva, bahis, duyuru). İlk satır uzun bir cümleyse başlığa konunun adı yazılır, cümle yazının içinde kalır.</li>
+    <li>Başlığın altında kalın site adı ve etiketi durur ("Sponsorumuz", "Sponsor dışı · güvenilir site" ya da senin yazdığın etiket).</li>
+    <li>Kaynağın her satırın başına koyduğu farklı emojilerin yerine tek tip madde işareti gelir; şartlar tek liste olur. Büyük harfle yazılmış kısa satır kalın ara başlık olur.</li>
+    <li>"PRO KASA: ..." gibi satırlarda iki noktadan önceki ad kalın yazılır. Promosyon kodu etiketiyle aynı satıra gelir ve dokununca kopyalanan yazıyla gider.</li>
+    <li>Şartların sözleri değiştirilmez, hiçbir şart atılmaz. Atılan tek şey kaynağın kendi postunda işleyen emoji çağrılarıdır ("Emojileri döktür", "Bu kasanın açılması için 50 emoji gerekiyor"): bizim kanalda tepki bırakan üyeye bir şey açılmadığı için yanıltıcı olur.</li>
+  </ul>
+  <h3>Kazandı, kaybetti ve limit doldu</h3>
+  <p>Bot bir sonucu ancak kaynak post gerçekten o oranla ilgiliyse işler:</p>
+  <ul>
+    <li>Kaynak post oranın postuna <strong>cevap</strong> olarak atıldıysa ya da oranın <strong>kendi postu düzenlendiyse</strong> sadece o oran işlenir.</li>
+    <li>Cevap değilse postta açık bir oranın <strong>takım adı</strong> geçmelidir.</li>
+    <li>İkisi de yoksa post yalın bir not olmalıdır ("Kazandı", "Limit doldu", "Özel oranımız kazandı" gibi); o zaman kaynağın son oranı işlenir.</li>
+  </ul>
+  <p>İçinde "kazanan" ya da onay işareti geçen kampanya postu, başka bir posta atılmış cevap ve uzun duyurular hiçbir oranı etkilemez. Kanalımıza yazılan cevapta panelde yazdığın mesajın altına hangi oran olduğu (site, maç, bahis, oran) eklenir. Daha önce paylaşılmış bir maçın sonuç duyurusu yeni oran diye ikinci kez paylaşılmaz.</p>
   <h3>Görsel, video ve albüm</h3>
   <p>Bot kaynak postun fotoğrafını, videosunu, GIF'ini ve albümünü taşır. Dosya alınamazsa (çok büyük video, silinmiş post) ne olacağını bot ayarlarındaki <strong>Görseli, videosu ya da albümü alınamayan post</strong> alanında seçersin: <em>Yazıyla paylaşılsın</em> ya da <em>Beklesin, ben karar vereyim</em>.</p>
   <h3>Bekleyen ve atlanan postlar</h3>
@@ -727,6 +760,7 @@
     <li>Sekmede botu, sponsor grubunu, tetikleyici kelimeyi ve hedef kanalları seç, aç ve kaydet.</li>
     <li><span class="path">Telegram Merkezi → Kurulum → Postçu → Bağla</span>; böylece paylaşımlar beklemeden anında çıkar.</li>
   </ol>
+  <p><strong>Postun görünüşü:</strong> Sponsor yetkilisinin yazdığı post kanala olduğu gibi değil, oran botundaki bonus ve kampanya düzeniyle gider (bkz. <a href="#oran">Özel Oran Botu</a>): kalın başlık, altında sponsorun adı ve "Sponsorumuz" etiketi, şartlar liste hâlinde, en altta senin yazdığın alt yazı. Sponsorun adı <span class="path">Destek</span> ayarındaki sponsor listesinden okunur; grup o listede yoksa ad satırı yazılmaz. Görselli postta görsel aynen kopyalanır, sadece yazısı yeni düzende olur. Yeni düzen görselin altına sığmayacak kadar uzunsa post sponsorun kendi biçimiyle gider. Bot gruba verdiği cevapta postun hangi kanallara gittiğini liste hâlinde yazar.</p>
   <p><strong>Sponsor başına buton:</strong> Her sponsorun satırında o sponsor için paylaşılan her postun altına eklenecek butonları yazarsın (buton yazısı ve linki). Telegram albüme buton koydurmadığı için albümde yazı ve butonlar albümün altına ayrı mesaj olarak gider.</p>
   <h3>Kanal aktarımı</h3>
   <p><span class="path">Botlar → Bağlantı &amp; Cron → Kaynak kanal</span>. Bir markanın herkese açık resmi kanalındaki yeni postları kendi kanallarına aktarır.</p>

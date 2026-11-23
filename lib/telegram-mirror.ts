@@ -66,6 +66,8 @@ export type ScrapedPost = {
   items?: MediaItem[]
   /** Link buttons under the source post. */
   buttons?: PostButton[]
+  /** The post of the same channel this one answers. */
+  replyTo?: number | null
 }
 export type Destination = { token: string; chatId: string; title: string; botId?: number }
 
@@ -246,9 +248,20 @@ export function entitiesToCleanText(text: string, entities: { type: string; offs
   return stripTags(entitiesToCleanHtml(text, entities)).trim()
 }
 
-/** Plain text of a scraped t.me/s post with hidden-link labels and their ornament rows removed. */
-export function scrapedHtmlToCleanText(html: string) {
-  const marked = html
+// Two or more premium emoji in a row: a word or banner drawn with them. Without the premium pack only stand-in faces are left.
+const EMOJI_RUN = /(?:<tg-emoji[^>]*>(?:(?!<\/?tg-emoji)[\s\S])*<\/tg-emoji>[ \t]*){2,}/gi
+/** A digit drawn as a keycap emoji ("1⃣"). Sources write numbers this way, so these are text, not ornament. */
+export const KEYCAP_DIGIT = /(\d)\uFE0F?\u20E3/g
+const hasKeycap = (s: string) => /\d\uFE0F?\u20E3/.test(s)
+
+/**
+ * Plain text of a scraped t.me/s post with hidden-link labels and their ornament rows removed.
+ * `dropEmojiRuns` also removes rows of premium emoji, which a bot cannot send and which read as noise,
+ * and turns keycap digits into plain ones.
+ */
+export function scrapedHtmlToCleanText(html: string, options: { dropEmojiRuns?: boolean } = {}) {
+  const source = options.dropEmojiRuns ? html.replace(EMOJI_RUN, (run) => (hasKeycap(run) ? run : ' ')) : html
+  const marked = source
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<i class="emoji"[^>]*>\s*<b>([\s\S]*?)<\/b>\s*<\/i>/gi, '$1')
     .replace(/<tg-emoji[^>]*>([\s\S]*?)<\/tg-emoji>/gi, '$1')
@@ -257,7 +270,8 @@ export function scrapedHtmlToCleanText(html: string) {
       if (href.startsWith('?q=') || /^(https?:\/\/|www\.)\S+$/i.test(plain) || /^@\w+$/.test(plain)) return label
       return DEAD_LINK
     })
-  return stripTags(dropDeadLinks(marked))
+  const text = stripTags(dropDeadLinks(marked))
+  return (options.dropEmojiRuns ? text.replace(KEYCAP_DIGIT, '$1') : text)
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
@@ -317,7 +331,9 @@ export async function fetchChannel(channel: string): Promise<ScrapedPost[]> {
     const video = sticker ? null : (chunk.match(/<video[^>]+src="([^"]+)"/)?.[1] ?? null)
     const thumb = sticker ? null : (chunk.match(/tgme_widget_message_video_thumb"[^>]*background-image:url\('([^']+)'\)/)?.[1] ?? null)
     const date = chunk.match(/<time[^>]+datetime="([^"]+)"/)?.[1] ?? null
-    posts.push({ id, html: text?.[1] ?? '', photos, video, thumb, date, ref, items: sticker ? [] : mediaItems(chunk), buttons: linkButtons(chunk) })
+    const answered = chunk.match(/<a[^>]*class="tgme_widget_message_reply[^"]*"[^>]*>/)?.[0].match(/href="https?:\/\/t\.me\/[^"/]+\/(\d+)"/)?.[1]
+    const replyTo = answered ? Number(answered) : null
+    posts.push({ id, html: text?.[1] ?? '', photos, video, thumb, date, ref, items: sticker ? [] : mediaItems(chunk), buttons: linkButtons(chunk), replyTo })
   }
   return posts
 }
@@ -620,7 +636,7 @@ export async function addSharedRules(text: string) {
   return added.length
 }
 
-/** A source's rules followed by the shared ones, in the stored form `buildMessage` and `rewriteText` read. */
+/** A source's rules followed by the shared ones, in the stored form `buildMessage` and `composeOddsPost` read. */
 export const withSharedRules = (replacements: string, shared: ReplaceRule[]) => serializeRules(mergeRules(parseReplacements(replacements), shared))
 
 /** Validates a rules field from a form and returns it in the stored form. Older `old => new` text is converted. */

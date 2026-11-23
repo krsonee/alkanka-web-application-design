@@ -248,7 +248,10 @@ const MOD_STEPS: GuideStep[] = [
           Her silme ve susturma, kimin yaptığıyla birlikte <b>Telegram Merkezi → Kayıtlar</b>’a yazılır.
         </li>
         <li>
-          Üye siteden yazınca mesajı Telegram grubuna iki satır düşer: üstte kalın adı, altında mesajı. Rolü varsa (Moderatör, Sponsor Destek…) adının yanında simgesiyle rolü, yoksa taktığı rozet yazar: <span className={code}>Ahmet · Moderatör</span>
+          Üye siteden yazınca mesajı Telegram grubuna iki parça düşer: üstte kalın adı ve <span className={code}>siteden</span> notu, altında alıntı kutusunda mesajı. Rolü varsa (Moderatör, Sponsor Destek…) adının yanında simgesiyle rolü, yoksa taktığı rozet yazar: <span className={code}>Ahmet · Moderatör · siteden</span>
+        </li>
+        <li>
+          Jako’nun etkinlik hatırlatması gruba <b>Canlı izle</b> butonuyla düşer; buton siteyi açar. Sitedeki sohbet akışında aynı duyuru düz yazıyla görünür.
         </li>
       </ul>
     ),
@@ -314,12 +317,32 @@ const SETUP_STEPS: GuideStep[] = [
           ya da hepsi. Kurala takılan post paylaşılmaz, <b>Bekleyen ve atlanan postlar</b> kutusuna düşer; istersen oradan <b>Yine de paylaş</b>.
         </li>
         <li>
+          Oran postu kanalımıza kaynağın yazısıyla değil, kendi düzenimizle gider: kalın başlık, altında etiket, her maç ve bahsi, eski oran üstü çizili
+          yeni oran kalın, en yüksek bahis ve katılım şartı. Maçı sadece görselde yazan oran postunda maç görselden okunur. Freespin, bonus, turnuva gibi
+          kampanya postları oran sayılmaz.
+        </li>
+        <li>
+          <b>Kazandı / limit doldu</b> cevabı ancak kaynak post o oranla ilgiliyse yazılır: oranın postuna cevapsa, oranın postu düzenlendiyse, takım adı
+          geçiyorsa ya da yalın bir “Kazandı” notuysa. İçinde “kazanan” geçen kampanya postu hiçbir oranı kazandı saymaz.
+        </li>
+        <li>
           Oran botu fotoğrafı, videoyu, GIF’i ve albümü taşır. Dosya alınamazsa ne olacağını <b>Görseli, videosu ya da albümü alınamayan post</b> alanında seç: yazıyla
           paylaşılsın ya da beklesin.
         </li>
         <li>
           <b>Değiştirme kuralları</b>: kaynağın <b>Metin ve linkleri düzenle</b> kutusunda satır satır kural eklenir (kelime, kullanıcı adı, link, alan adı, buton
           linki). Bütün kaynaklarda geçerli olacak kuralı <b>Ortak değiştirme kuralları</b>’na yaz; aynı şey için kaynağın kendi kuralı varsa o geçerlidir.
+        </li>
+        <li>
+          <b>Bonus ve kampanya postları</b>: oran botunun oransız paylaştığı post ve Post Paylaşım’ın sponsor grubundan aldığı post kanala aynı düzende gider: kalın
+          başlık, altında site adı ve etiketi, şartlar liste hâlinde, kod dokununca kopyalanan yazıyla. Şartların sözleri değişmez. Kaynağın kendi postunda işleyen
+          emoji çağrıları (“Emojileri döktür”, “50 emoji gerekiyor”) kanala taşınmaz. Post Paylaşım’da sponsor adı <b>Destek</b> ayarındaki sponsor listesinden okunur.
+        </li>
+        <li>
+          <b>Oran botunda hangi post hangi kanala gider</b>: oranı okunan post özel oran kanalına gider. Oranı olmayan post (kampanya, bonus, duyuru) özel oran
+          kanalına <b>gitmez</b>, ana kanala (Duyuru kanalı) gider; bot o kanalda da yönetici olmalı. Bu postun altına “… giriş” butonu konur ve yazıdaki linkler,
+          kaynağın <b>Sponsor linki</b> alanına yazdığın adrese çevrilir. Sponsor linki boşsa ya da ana kanal kayıtlı değilse post hiçbir kanala gitmez,{' '}
+          <b>Bekleyen ve atlanan postlar</b> kutusunda sebebiyle bekler; linki girip <b>Yine de paylaş</b> dersin.
         </li>
         <li>
           <b>Butonlar</b>: kanal aktarımında ve oran botunda kaynak başına, Post Paylaşım’da sponsor başına post altı butonu eklenir. Kaynak postun kendi butonları da

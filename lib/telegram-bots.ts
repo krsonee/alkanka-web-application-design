@@ -1,10 +1,11 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
-import { botToken, callBot, dropAutoFed, ensureTables, entitiesToCleanHtml, normalizeChat, stripTags } from '@/lib/telegram-mirror'
+import { botToken, callBot, dropAutoFed, ensureTables, entitiesToCleanHtml, entitiesToCleanText, normalizeChat, stripTags } from '@/lib/telegram-mirror'
 import { FILTER_PRESETS } from '@/lib/telegram-filters'
 import { decodeEntities } from '@/lib/html-entities'
 import type { TgMessage, TgUpdate } from '@/lib/telegram-chat'
-import { TG_HTML, tgNotice, type TgNotice } from '@/lib/tg-format'
+import { campaignPost } from '@/lib/promo-post'
+import { TG_HTML, bold, noticeMarkup, tgLines, tgNotice, type TgLine, type TgNotice } from '@/lib/tg-format'
 import { buttonError, buttonMarkup, cleanButtons, type PostButton } from '@/lib/tg-buttons'
 
 export type ApprovalKind = 'market' | 'task' | 'complaint'
@@ -101,7 +102,7 @@ const num = (v: unknown) => (Number.isInteger(Number(v)) && Number(v) > 0 ? Numb
 
 export const DEFAULT_RULE = {
   trigger: '#paylaş',
-  appendText: 'Güncel giriş ve bonuslar: alkanka.com',
+  appendText: '',
   replyText: 'Paylaşıldı:',
 }
 
@@ -398,11 +399,30 @@ function cleanBody(m: TgMessage, trigger: string) {
   return stripTrigger(html, trigger ? escapeHtml(trigger) : '')
 }
 
-/** HTML body + append text; falls back to plain text when it would need truncating mid-tag. */
-function composeShare(body: string, append: string, limit: number): { text: string; parse_mode?: 'HTML' } {
-  const tail = append ? `\n\n${escapeHtml(append)}` : ''
+/** What the share bot knows about the post besides its words. */
+type ShareLook = { sponsor: string; append: string; trigger: string }
+
+/** The sponsor behind a support group, as the support settings name it. Empty for a group that is not a sponsor's. */
+async function sponsorOf(chatId: string) {
+  try {
+    const { getHub } = await import('@/lib/tg-hub')
+    return (await getHub()).support.sponsors.find((s) => s.chatId === chatId)?.name.trim() ?? ''
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * The post in our campaign layout. A post too long for that goes out with the source's own
+ * formatting, and as plain text when even that would need cutting (a cut can break a tag).
+ */
+function composeShare(m: TgMessage, body: string, look: ShareLook, limit: number): { text: string; parse_mode?: 'HTML' } {
+  const words = stripTrigger(entitiesToCleanText(m.text ?? m.caption ?? '', m.entities ?? m.caption_entities ?? []), look.trigger)
+  const post = campaignPost({ siteName: look.sponsor, tagLine: look.sponsor ? 'Sponsorumuz' : '', footer: look.append, body: words })
+  if (post.plain.length <= limit) return { text: post.html, parse_mode: 'HTML' }
+  const tail = look.append ? `\n\n${escapeHtml(look.append)}` : ''
   if (body.length + tail.length <= limit) return { text: `${body}${tail}`.trim(), parse_mode: 'HTML' }
-  return { text: withAppend(stripTags(body), append, limit) }
+  return { text: withAppend(stripTags(body), look.append, limit) }
 }
 
 function withAppend(body: string, append: string, limit: number) {
@@ -443,26 +463,27 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
     media = hasMedia(m)
   }
   const sourceToken = await botToken(viaBotId)
-  const answer = (text: string) =>
+  const answer = (lines: TgLine[]) =>
     callBot(sourceToken, 'sendMessage', {
       chat_id: trigger.chat.id,
-      text: text.slice(0, MESSAGE_LIMIT),
+      text: tgLines(lines.slice(0, 40)),
       reply_parameters: { message_id: trigger.message_id, allow_sending_without_reply: true },
-      link_preview_options: { is_disabled: true },
+      ...TG_HTML,
     }).catch((error) => console.error('[share-bot] reply failed', error))
 
   if (!media && !body) {
-    if (share.trigger) await answer(`Paylaşmak istediğin postu yanıtlayıp ${share.trigger} yaz.`)
+    if (share.trigger) await answer([['Paylaşmak istediğin postu yanıtlayıp ', bold(share.trigger), ' yaz.']])
     return true
   }
 
   const claimed = await rows<{ id: number }>(sql`INSERT INTO tg_share_log (chat_id, message_id, status)
     VALUES (${share.sourceChat}, ${m.message_id}, 'pending') ON CONFLICT (chat_id, message_id) DO NOTHING RETURNING id`)
   if (!claimed.length) {
-    await answer('Bu post zaten paylaşıldı.')
+    await answer(['Bu post zaten paylaşıldı.'])
     return true
   }
 
+  const look: ShareLook = { sponsor: await sponsorOf(share.sourceChat), append: share.appendText, trigger: share.trigger }
   const targets = await targetsFor(share.targetIds, false)
   const markup = buttonMarkup(share.buttons)
   const links: string[] = []
@@ -497,9 +518,9 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
       let sentText: ReturnType<typeof composeShare> | null = null
       if (album.length > 1) {
         // Telegram albums can't carry buttons, so with buttons the text follows the album as its own message.
-        const below = share.buttons.length ? composeShare(body, share.appendText, MESSAGE_LIMIT) : null
+        const below = share.buttons.length ? composeShare(m, body, look, MESSAGE_LIMIT) : null
         const split = Boolean(below?.text)
-        const caption = split ? null : composeShare(body, share.appendText, CAPTION_LIMIT)
+        const caption = split ? null : composeShare(m, body, look, CAPTION_LIMIT)
         const sent = await callBot<{ message_id: number }[]>(sourceToken, 'sendMediaGroup', {
           chat_id: target.chatId,
           media: album.map((part, i) => ({
@@ -525,7 +546,7 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
       } else if (media) {
         // copyMessage only works with the bot that can see the source, so the share bot must also be admin in every target.
         try {
-          const c = composeShare(body, share.appendText, CAPTION_LIMIT)
+          const c = composeShare(m, body, look, CAPTION_LIMIT)
           const res = await callBot<{ message_id: number }>(sourceToken, 'copyMessage', {
             chat_id: target.chatId,
             from_chat_id: m.chat.id,
@@ -549,8 +570,13 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
         }
         sentIds = [sentId]
       } else {
-        sentText = composeShare(body, share.appendText, MESSAGE_LIMIT)
-        const res = await callBot<{ message_id: number }>(sourceToken, 'sendMessage', { chat_id: target.chatId, ...sentText, ...markup })
+        sentText = composeShare(m, body, look, MESSAGE_LIMIT)
+        const res = await callBot<{ message_id: number }>(sourceToken, 'sendMessage', {
+          chat_id: target.chatId,
+          ...sentText,
+          ...markup,
+          link_preview_options: { is_disabled: true },
+        })
         sentId = res.message_id
         sentIds = [sentId]
       }
@@ -577,8 +603,12 @@ export async function handleShareMessage(m: TgMessage, viaBotId: number): Promis
   const detail = failures.length ? failures.join(' | ').slice(0, 300) : null
   await rows(sql`UPDATE tg_share_log SET status = ${status}, detail = ${detail} WHERE id = ${claimed[0].id}`)
 
-  const failed = failures.length ? `\nGitmeyenler:\n${failures.join('\n')}` : ''
-  await answer(links.length ? `${share.replyText}\n${links.join('\n')}${failed}` : `Paylaşılamadı. ${detail ?? 'Hedef kanal yok'}`)
+  const failed: TgLine[] = failures.length ? ['', [bold('Gitmeyenler')], ...failures.map((f) => `• ${f}`)] : []
+  await answer(
+    links.length
+      ? [['✅ ', bold(share.replyText.trim().replace(/:$/, '') || 'Paylaşıldı')], ...links.map((l) => `• ${l}`), ...failed]
+      : [['⚠️ ', bold('Paylaşılamadı')], detail ?? 'Hedef kanal yok'],
+  )
   return true
 }
 
@@ -685,11 +715,12 @@ export async function setOddsResult(dealId: number, result: 'won' | 'lost' | nul
 export async function broadcastPodium(build: (origin: string) => TgNotice) {
   await ensureSuiteTables()
   const suite = await getBotSuite()
-  const text = tgNotice(build(suite.siteOrigin || ''))
+  const notice = build(suite.siteOrigin || '')
+  const text = tgNotice(notice)
   let posted = 0
   for (const t of await dropAutoFed(await targetsFor([], true))) {
     try {
-      await callBot(t.token, 'sendMessage', { chat_id: t.chatId, text, ...TG_HTML })
+      await callBot(t.token, 'sendMessage', { chat_id: t.chatId, text, ...TG_HTML, ...noticeMarkup(notice) })
       posted++
     } catch (error) {
       console.error('[kursu] paylaşılamadı', t.title, (error as Error).message)

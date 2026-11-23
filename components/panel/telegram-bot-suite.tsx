@@ -252,7 +252,18 @@ function ShareRuleForm({ rule, targets, links, onDone }: { rule?: ShareRule; tar
       </div>
       <label className={label}>
         Post altına eklenecek sabit metin
-        <textarea name="appendText" defaultValue={rule?.appendText ?? 'Güncel giriş ve bonuslar: alkanka.com'} maxLength={600} rows={3} className={input} />
+        <textarea
+          name="appendText"
+          defaultValue={rule?.appendText ?? ''}
+          placeholder="Örn. Güncel giriş: https://sponsorun-sitesi.com"
+          maxLength={600}
+          rows={3}
+          className={input}
+        />
+        <span className={hint}>
+          Buraya link yazacaksan sponsorun kendi sitesine giden linki yaz. Linki buton olarak vermek istersen aşağıdaki buton satırlarını kullan; boş bırakırsan
+          postun altına metin eklenmez.
+        </span>
       </label>
       <div className="flex flex-col gap-1.5">
         <ButtonRows initial={rule?.buttons} links={links} />
