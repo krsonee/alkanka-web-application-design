@@ -13,6 +13,13 @@ const TONES = {
   live: { text: 'text-live', ring: 'border-live/30', chip: 'border-live/25 bg-live/10 text-live', glow: 'oklch(0.78 0.18 150 / 0.2)', bar: 'bg-live' },
 } as const
 
+const FADE_FROM_LEFT =
+  'sm:[-webkit-mask-image:linear-gradient(to_right,transparent,#000_32%)] sm:[mask-image:linear-gradient(to_right,transparent,#000_32%)]'
+
+/**
+ * Phones get a band that runs edge to edge: the artwork fills it and fades into the page, the title sits on top.
+ * From tablets up it is the framed card with the artwork on the right.
+ */
 export function PageHero({
   eyebrow,
   title,
@@ -39,7 +46,12 @@ export function PageHero({
   const t = TONES[tone]
 
   return (
-    <header className={cn('relative isolate overflow-hidden rounded-2xl border bg-card', t.ring)}>
+    <header
+      className={cn(
+        'relative isolate overflow-hidden rounded-2xl border bg-card max-sm:-mx-4 max-sm:-mt-5 max-sm:rounded-none max-sm:border-0 max-sm:bg-transparent',
+        t.ring,
+      )}
+    >
       {image && (
         <Image
           src={image || '/placeholder.svg'}
@@ -47,76 +59,83 @@ export function PageHero({
           aria-hidden="true"
           fill
           sizes="320px"
-          className="-z-20 scale-125 object-cover object-right opacity-40 blur-3xl saturate-150"
+          className="-z-20 scale-125 object-cover object-right opacity-40 blur-3xl saturate-150 max-sm:hidden"
         />
       )}
       <div
         aria-hidden="true"
-        className="absolute inset-0 -z-10"
+        className="absolute inset-0 -z-10 max-sm:hidden"
         style={{
           backgroundImage: `radial-gradient(ellipse 60% 90% at 0% 100%, ${t.glow}, transparent 70%), radial-gradient(circle at 1px 1px, oklch(1 0 0 / 0.06) 1px, transparent 0)`,
           backgroundSize: '100% 100%, 18px 18px',
         }}
       />
-      <div aria-hidden="true" className={cn('absolute inset-x-0 top-0 h-px opacity-60', t.bar)} />
+      <div aria-hidden="true" className={cn('absolute inset-x-0 top-0 h-px opacity-60 max-sm:hidden', t.bar)} />
 
       {image && (
         <div
           className={cn(
-            '-z-10',
+            '-z-10 max-sm:absolute max-sm:inset-0',
+            FADE_FROM_LEFT,
             compact
-              ? 'absolute inset-y-0 right-0 w-[58%] opacity-45 sm:w-auto sm:max-w-[48%] sm:opacity-100 sm:aspect-[1584/672]'
-              : 'relative aspect-[1584/672] w-full sm:absolute sm:inset-y-0 sm:right-0 sm:h-full sm:w-auto sm:max-w-[68%]',
+              ? 'sm:absolute sm:inset-y-0 sm:right-0 sm:aspect-[1584/672] sm:w-auto sm:max-w-[48%]'
+              : 'sm:absolute sm:inset-y-0 sm:right-0 sm:aspect-[1584/672] sm:h-full sm:w-auto sm:max-w-[68%]',
           )}
-          style={{ maskImage: 'linear-gradient(to right, transparent, #000 32%)', WebkitMaskImage: 'linear-gradient(to right, transparent, #000 32%)' }}
         >
-          <Image src={image || '/placeholder.svg'} alt="" fill priority sizes="(min-width: 1024px) 900px, 100vw" className="object-cover object-right" />
-          {!compact && <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent sm:hidden" />}
+          <Image
+            src={image || '/placeholder.svg'}
+            alt=""
+            fill
+            priority
+            sizes="(min-width: 1024px) 900px, 100vw"
+            className="object-cover object-right max-sm:object-[50%_30%]"
+          />
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 bg-gradient-to-t from-background via-background/65 to-background/25 sm:hidden"
+          />
         </div>
       )}
       {image && compact && (
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 -z-10 bg-gradient-to-r from-card via-card/85 to-card/20 sm:via-card/70 sm:to-transparent"
-        />
+        <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-r from-card via-card/70 to-transparent max-sm:hidden" />
       )}
 
       <div
         className={cn(
-          'relative flex flex-col justify-center',
-          compact ? 'h-41 gap-4 p-4 sm:h-48 sm:p-6' : 'gap-6 p-4 sm:min-h-72 sm:p-8',
-          image && !compact && '-mt-6 pt-0 sm:mt-0 sm:pt-8',
+          'relative flex flex-col justify-center max-sm:px-4 max-sm:pb-3',
+          image ? 'max-sm:pt-24' : 'max-sm:pt-6',
+          compact ? 'gap-4 sm:h-48 sm:p-6' : 'gap-6 sm:min-h-72 sm:p-8',
         )}
       >
         <div className={cn('flex flex-col', compact ? 'gap-3 sm:max-w-[60%]' : 'gap-4 sm:max-w-[52%]')}>
-          <nav aria-label="Konum" className="flex items-center gap-1 text-xs text-muted-foreground">
+          <nav aria-label="Konum" className="flex items-center gap-1 text-xs text-muted-foreground max-sm:hidden">
             <Link href="/" className="hover:text-foreground">
               Ana sayfa
             </Link>
             <ChevronRight className="size-3" aria-hidden="true" />
             <span className={cn('font-semibold', t.text)}>{eyebrow}</span>
           </nav>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 max-sm:gap-1">
             <h1
               className={cn(
-                'font-display font-bold uppercase tracking-tight text-foreground text-balance',
-                compact ? 'text-2xl sm:text-3xl' : 'text-3xl sm:text-4xl',
+                'font-display font-bold uppercase tracking-tight text-foreground text-balance max-sm:text-3xl max-sm:normal-case max-sm:leading-9',
+                compact ? 'sm:text-3xl' : 'sm:text-4xl',
               )}
             >
               {title}
             </h1>
-            <span aria-hidden="true" className={cn('h-1 w-14 rounded-full', t.bar)} />
+            <span aria-hidden="true" className={cn('h-1 w-14 rounded-full max-sm:hidden', t.bar)} />
             <p
               className={cn(
-                'max-w-xl pt-1 text-sm font-medium leading-relaxed text-foreground/90 text-pretty [text-shadow:0_1px_8px_oklch(0_0_0/0.85)]',
-                compact ? 'line-clamp-2' : 'sm:text-base',
+                'max-w-xl text-sm leading-relaxed text-pretty [text-shadow:0_1px_8px_oklch(0_0_0/0.85)] max-sm:max-w-[34ch] max-sm:line-clamp-3 max-sm:text-foreground/80 sm:pt-1 sm:font-medium sm:text-foreground/90',
+                compact ? 'sm:line-clamp-2' : 'sm:text-base',
               )}
             >
               {description}
             </p>
           </div>
           {!compact && highlights && highlights.length > 0 && (
-            <ul className="flex flex-wrap gap-2">
+            <ul className="flex flex-wrap gap-2 max-sm:hidden">
               {highlights.map((h) => (
                 <li key={h} className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold', t.chip)}>
                   <Sparkles className="size-3" aria-hidden="true" />

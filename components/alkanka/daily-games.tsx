@@ -20,33 +20,35 @@ export function DailyGames() {
     <section aria-labelledby="gunluk-oyunlar" className="flex flex-col gap-3">
       <div className="flex items-end justify-between gap-3">
         <div className="flex flex-col gap-0.5">
-          <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-primary">Günlük haklar</span>
+          <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-primary max-sm:hidden">Günlük haklar</span>
           <h2 id="gunluk-oyunlar" className="font-display text-lg font-bold text-foreground">
             Çark, zar ve sandık
           </h2>
         </div>
-        <Link href="/oyunlar" className="text-xs font-semibold text-muted-foreground hover:text-foreground">
+        <Link href="/oyunlar" className="text-xs font-semibold text-muted-foreground hover:text-foreground max-sm:flex max-sm:h-11 max-sm:items-center">
           Tüm oyunlar
         </Link>
       </div>
-      <ul className="grid gap-3 sm:grid-cols-3">
+      {/* Phones: three square tiles side by side, the artwork fills the tile. From tablets up: the row cards. */}
+      <ul className="grid gap-3 max-sm:grid-cols-3 max-sm:gap-2.5 sm:grid-cols-3">
         {games.map((g) => (
           <li key={g.game}>
             <Link
               href={`/oyunlar/${g.game}`}
-              className="group flex items-center gap-3 rounded-xl border border-border bg-card p-2.5 transition-colors hover:border-primary/60 focus-visible:outline-2 focus-visible:outline-primary"
+              className="group flex items-center gap-3 rounded-xl border border-border bg-card p-2.5 transition-colors hover:border-primary/60 focus-visible:outline-2 focus-visible:outline-primary max-sm:relative max-sm:isolate max-sm:aspect-square max-sm:items-end max-sm:overflow-hidden max-sm:rounded-2xl max-sm:border-foreground/10 max-sm:transition-[scale] max-sm:active:scale-[0.97]"
             >
-              <span className="relative size-16 shrink-0 overflow-hidden rounded-lg bg-background">
-                <Image src={g.image || '/placeholder.svg'} alt="" fill sizes="64px" className="object-cover transition-transform duration-300 group-hover:scale-110" />
+              <span className="relative size-16 shrink-0 overflow-hidden rounded-lg bg-background max-sm:absolute max-sm:inset-0 max-sm:-z-20 max-sm:size-full max-sm:rounded-none">
+                <Image src={g.image || '/placeholder.svg'} alt="" fill sizes="(max-width: 639px) 33vw, 64px" className="object-cover transition-transform duration-300 group-hover:scale-110" />
               </span>
+              <span aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-background via-background/50 to-transparent sm:hidden" />
               <span className="flex min-w-0 flex-1 flex-col gap-1">
                 <span className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm font-bold text-foreground">{g.title}</span>
-                  <ArrowUpRight className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden="true" />
+                  <span className="truncate text-sm font-bold text-foreground max-sm:whitespace-normal max-sm:text-[13px] max-sm:leading-tight max-sm:text-balance">{g.title}</span>
+                  <ArrowUpRight className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary max-sm:hidden" aria-hidden="true" />
                 </span>
-                <span className="truncate text-xs text-muted-foreground">{g.text}</span>
-                <span className="flex items-center justify-between gap-2">
-                  <span className="truncate text-[11px] font-semibold text-primary">{g.reward}</span>
+                <span className="truncate text-xs text-muted-foreground max-sm:hidden">{g.text}</span>
+                <span className="flex items-center justify-between gap-2 max-sm:absolute max-sm:left-2 max-sm:top-2">
+                  <span className="truncate text-[11px] font-semibold text-primary max-sm:hidden">{g.reward}</span>
                   <MiniCountdown game={g.game} readyLabel="Hazır" className="px-1.5 py-0.5 text-[10px]" />
                 </span>
               </span>
