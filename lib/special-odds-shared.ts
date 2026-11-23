@@ -70,6 +70,8 @@ export type OddsSource = {
   siteLink: string
   /** The sponsor's own site. Campaign posts (no odd) lead here; empty until the panel sets it, and such posts wait. */
   sponsorLink: string
+  /** The link of the sponsor with the same name on the site's Sponsorlar list. Stands in while `sponsorLink` is empty. */
+  sponsorLinkAuto: string
   siteLogo: string | null
   replacements: string
   footer: string
@@ -146,7 +148,11 @@ export type OddsBotStatus = {
   activeSources: number
 }
 
-export const NO_SPONSOR_LINK = 'Sponsor linki girilmemiş. Kaynağın “Sponsor linki” alanını doldur, sonra “Yine de paylaş” de'
+export const NO_SPONSOR_LINK =
+  'Sponsor linki yok. Kaynağın “Sponsor linki” alanını doldur ya da siteyi aynı adla Sponsorlar listesine ekle, sonra “Yine de paylaş” de'
+
+/** Where a campaign post of this source leads: the link typed for the source, else the sponsor's link on the site's own list. */
+export const campaignLink = (source: { sponsorLink?: string; sponsorLinkAuto?: string }) => source.sponsorLink || source.sponsorLinkAuto || ''
 export const NO_MAIN_CHANNEL = 'Ana kanal kayıtlı değil. Telegram bölümünde Duyuru kanalını kaydet, sonra “Yine de paylaş” de'
 
 /** A link the panel typed for a sponsor's site. Empty is allowed and means "not set yet". */

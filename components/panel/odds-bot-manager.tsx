@@ -277,12 +277,14 @@ function SponsorLinkEditor({ source }: { source: OddsSource }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(updateOddsSourceSponsorLinkAction, {})
   const fieldId = `sponsor-link-${source.id}`
   return (
-    <details open={!source.sponsorLink} className="w-full rounded-xl border border-border bg-background/50">
+    <details open={!source.sponsorLink && !source.sponsorLinkAuto} className="w-full rounded-xl border border-border bg-background/50">
       <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-xs font-semibold text-foreground">
         <ExternalLink className="size-3.5" aria-hidden="true" />
         Sponsor linki
         {source.sponsorLink ? (
           <span className="min-w-0 truncate font-normal text-muted-foreground">· {source.sponsorLink}</span>
+        ) : source.sponsorLinkAuto ? (
+          <span className="min-w-0 truncate font-normal text-muted-foreground">· Sponsorlar listesinden: {source.sponsorLinkAuto}</span>
         ) : (
           <span className="font-normal text-destructive">· girilmedi, kampanya postları bekler</span>
         )}
@@ -292,10 +294,21 @@ function SponsorLinkEditor({ source }: { source: OddsSource }) {
         <label htmlFor={fieldId} className="text-xs font-semibold text-foreground">
           {source.siteName} sitesine giden link
         </label>
-        <input id={fieldId} name="sponsorLink" type="url" defaultValue={source.sponsorLink} placeholder="https://..." className={input} />
+        <input
+          id={fieldId}
+          name="sponsorLink"
+          type="url"
+          defaultValue={source.sponsorLink}
+          placeholder={source.sponsorLinkAuto || 'https://...'}
+          className={input}
+        />
         <p className={hint}>
           Bu kaynağın kampanya ve bonus postları (oranı olmayan postlar) ana kanala bu linkle gider: postun altına “{source.siteName} giriş” butonu konur, yazıdaki
-          linkler de buraya çevrilir. Boşken bu postlar paylaşılmaz, aşağıdaki “Bekleyen ve atlanan postlar” kutusunda bekler. Oran postları bundan etkilenmez.
+          linkler de buraya çevrilir.{' '}
+          {source.sponsorLinkAuto
+            ? `Boş bırakırsan Sponsorlar listesindeki ${source.siteName} linki kullanılır (${source.sponsorLinkAuto}); sponsorun adresi orada değişince postlar da yeni adrese gider.`
+            : `Boşken, ${source.siteName} aynı adla Sponsorlar listesinde de yoksa bu postlar paylaşılmaz, aşağıdaki “Bekleyen ve atlanan postlar” kutusunda bekler.`}{' '}
+          Oran postları bundan etkilenmez.
         </p>
         <div className="flex items-center gap-3">
           <button disabled={pending} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50">
