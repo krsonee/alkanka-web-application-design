@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import useSWR from 'swr'
-import { Award, ChevronDown, Coins, History, Link2, LogOut, Mail, Menu, MessageSquareText, Palette, Search, Send, Settings, UserRound } from 'lucide-react'
+import { Award, ChevronDown, Coins, History, Link2, LogOut, Mail, MessageSquareText, Palette, Search, Send, Settings, UserRound } from 'lucide-react'
+import { ChatButton } from './telegram-bubble'
 import { getInboxStatus, type InboxStatus } from '@/app/actions/inbox'
 import { getLookSummary, type LookSummary } from '@/app/actions/look'
 import { AvatarFace } from './member-avatar'
@@ -27,11 +28,11 @@ function PointsPill() {
     <div
       data-tour="coins"
       title="Kanka Coin bakiyen"
-      className="relative flex h-9 shrink-0 items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2 sm:gap-1.5 sm:px-2.5"
+      className="relative flex h-9 shrink-0 items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2 max-lg:order-1 max-lg:h-10 max-lg:gap-1.5 max-lg:rounded-full max-lg:border-transparent max-lg:bg-foreground/[0.08] max-lg:px-3 sm:gap-1.5 lg:px-2.5"
     >
-      <Coins className="size-3.5 text-primary" aria-hidden="true" />
+      <Coins className="size-3.5 text-primary max-lg:size-4" aria-hidden="true" />
       <span className="sr-only">Kanka Coin bakiyesi:</span>
-      <span className="font-display text-xs font-bold text-foreground tabular-nums" aria-live="polite">
+      <span className="font-display text-xs font-bold text-foreground tabular-nums max-lg:text-sm" aria-live="polite">
         {formatAC(points)}
       </span>
       <span className="hidden text-[10px] font-semibold uppercase text-muted-foreground sm:inline" aria-hidden="true">
@@ -61,7 +62,7 @@ function BadgeButton() {
     <Link
       href="/profil?sekme=rozetler"
       title="Aktif rozetin"
-      className="animate-badge-pulse relative flex h-9 shrink-0 items-center gap-1 overflow-hidden rounded-lg border border-primary/40 bg-primary/[0.08] px-1.5 transition-colors hover:border-primary sm:px-2"
+      className="animate-badge-pulse relative hidden h-9 shrink-0 items-center gap-1 overflow-hidden rounded-lg border border-primary/40 bg-primary/[0.08] px-2 transition-colors hover:border-primary sm:flex"
     >
       <span className="tier-shine pointer-events-none absolute inset-0" aria-hidden="true" />
       <MemberRank userId={member.id} className="relative" />
@@ -110,7 +111,7 @@ function AccountMenu() {
 
   if (!member) return null
   return (
-    <div ref={ref} data-tour="account" className="relative">
+    <div ref={ref} data-tour="account" className="relative max-lg:order-2">
       <button
         type="button"
         aria-haspopup="menu"
@@ -119,7 +120,7 @@ function AccountMenu() {
         aria-label={unread ? `Hesap menüsü, ${unread} okunmamış mesaj` : undefined}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'flex h-9 items-center gap-2 rounded-lg border px-1.5 text-xs font-bold text-foreground transition-colors sm:px-3',
+          'flex h-9 items-center gap-2 rounded-lg border px-1.5 text-xs font-bold text-foreground transition-colors max-sm:size-10 max-sm:justify-center max-sm:rounded-full max-sm:border-transparent max-sm:bg-foreground/[0.08] max-sm:px-0 sm:px-3',
           open ? 'border-primary/60 bg-primary/10' : 'border-border hover:border-primary/50',
         )}
       >
@@ -240,25 +241,25 @@ function AccountArea() {
   const { member, known } = usePoints()
   if (!member) {
     // Guest or member is not decided yet: hold the space instead of flashing "Giriş yap" at a member.
-    if (!known) return <span aria-hidden="true" className="h-9 w-24 shrink-0 animate-pulse rounded-lg bg-secondary sm:w-40" />
+    if (!known) return <span aria-hidden="true" className="h-9 w-24 shrink-0 animate-pulse rounded-lg bg-secondary max-lg:order-2 max-sm:h-10 max-sm:rounded-xl sm:w-40" />
     return (
       <>
         <a
           href="#giris"
-          className="hidden h-9 items-center rounded-lg border border-primary/50 px-4 text-xs font-bold uppercase tracking-wider text-primary transition-colors hover:bg-primary/10 sm:flex"
+          className="hidden h-9 items-center rounded-lg border border-primary/50 px-4 text-xs font-bold uppercase tracking-wider text-primary transition-colors hover:bg-primary/10 max-lg:order-2 sm:flex"
         >
           Giriş
         </a>
         <a
           href="#giris"
           data-tour="account"
-          className="flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg bg-primary px-3 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 sm:hidden"
+          className="order-2 flex h-10 shrink-0 items-center whitespace-nowrap rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition-[opacity,scale] duration-150 hover:opacity-90 active:scale-[0.96] sm:hidden"
         >
           Giriş yap
         </a>
         <a
           href="#kayit"
-          className="hidden h-9 shrink-0 items-center whitespace-nowrap rounded-lg bg-primary px-4 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 sm:flex"
+          className="hidden h-9 shrink-0 items-center whitespace-nowrap rounded-lg bg-primary px-4 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 max-lg:order-2 sm:flex"
         >
           Kayıt ol
         </a>
@@ -274,13 +275,17 @@ export function Topbar({
   social,
   sponsors = [],
   telegram,
+  chat = false,
 }: {
   social: SocialLinks
   sponsors?: SearchSponsor[]
   telegram: TelegramLinks
+  /** Site chat is switched on: phones and tablets get its button in the bar. */
+  chat?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const close = useCallback(() => setOpen(false), [])
+  const { member } = usePoints()
 
   useEffect(() => {
     const openMenu = () => setOpen(true)
@@ -290,24 +295,24 @@ export function Topbar({
 
   return (
     <>
-      <header className="relative z-[45] flex h-16 items-center gap-2 border-b border-border bg-background px-3 sm:gap-3 sm:px-4 lg:px-6">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          aria-label="Menüyü aç"
-          data-tour="menu-btn"
-          className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border text-foreground lg:hidden"
+      {/* On phones the bar stays on screen while the page scrolls (not on a game page, where the table needs the room).
+          Its blur also makes it the anchor for the radio and Çember panels, so they open under the bar wherever it sits. */}
+      <header
+        data-member={member ? '' : undefined}
+        className="relative z-[45] flex h-14 items-center gap-2 px-3 max-lg:sticky max-lg:top-0 max-lg:overflow-x-clip max-lg:bg-background/80 max-lg:backdrop-blur-xl max-lg:[body:has([data-game-page])_&]:relative sm:gap-3 sm:px-4 lg:h-16 lg:border-b lg:border-border lg:bg-background lg:px-6"
+      >
+        <a
+          href="/"
+          className="flex shrink-0 items-center lg:hidden max-[339px]:[&_.logo-text]:hidden max-[379px]:[header[data-member]_&_.logo-text]:hidden max-[379px]:[header:has([data-header-extra])_&_.logo-text]:hidden max-[439px]:[header[data-member]:has([data-header-extra])_&_.logo-text]:hidden"
         >
-          <Menu className="size-5" aria-hidden="true" />
-        </button>
-        <a href="/" className="flex shrink-0 items-center lg:hidden max-[459px]:[&_.logo-text]:hidden">
           <BrandLogo size="sm" />
           <span className="sr-only">AL KANKA ana sayfa</span>
         </a>
 
         <SiteSearch sponsors={sponsors} />
 
-        <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+          {chat && <ChatButton />}
           <BadgeButton />
           <PointsPill />
           <CemberButton />

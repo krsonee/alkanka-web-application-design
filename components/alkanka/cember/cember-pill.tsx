@@ -65,7 +65,7 @@ export function CemberButton() {
   const progress = me?.progress.length ? me.progress : status.conditions.map((l) => ({ label: l, done: false, value: 0, target: 0 }))
 
   return (
-    <div ref={wrapRef} className="relative">
+    <div ref={wrapRef} data-header-extra="" className="relative">
       <button
         type="button"
         aria-haspopup="dialog"
@@ -73,8 +73,8 @@ export function CemberButton() {
         aria-label={`${status.title}: ${live ? 'şu an canlı' : `${clock(status.nextSlot)} saatinde`}${eligible ? ', katıldın' : ''}`}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'relative flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2 text-foreground transition-colors sm:px-2.5',
-          live ? 'border-live/70 bg-live/10' : open || soon ? 'border-gold/60 bg-gold/10' : 'border-border hover:border-gold/50',
+          'relative flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2 text-foreground transition-colors max-lg:h-10 max-lg:min-w-10 max-lg:justify-center max-lg:rounded-full max-lg:px-2.5 lg:px-2.5',
+          live ? 'border-live/70 bg-live/10' : open || soon ? 'border-gold/60 bg-gold/10' : 'border-border hover:border-gold/50 max-lg:border-transparent max-lg:bg-foreground/[0.08]',
         )}
       >
         <OrbitIcon live={live} />
