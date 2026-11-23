@@ -84,6 +84,23 @@ async function hubTickSlot() {
   ])
 }
 
+const CHAT_SYNC_EVERY_SEC = 45
+const CHAT_SYNC_LOOK_GAP_MS = 20_000
+let lastChatSyncLook = 0
+
+/**
+ * Clears from the site chat what was deleted in the Telegram group. Rides on someone reading the site
+ * chat, so it asks nothing of Telegram or the database while nobody is looking.
+ */
+export async function runChatSync() {
+  const now = Date.now()
+  if (now - lastChatSyncLook < CHAT_SYNC_LOOK_GAP_MS) return
+  lastChatSyncLook = now
+  if (!(await claim('auto_tick_chat_sync', CHAT_SYNC_EVERY_SEC))) return
+  const { syncChatWithTelegram } = await import('@/lib/chat-sync')
+  await syncChatWithTelegram()
+}
+
 let lastPostAttempt = 0
 
 /**

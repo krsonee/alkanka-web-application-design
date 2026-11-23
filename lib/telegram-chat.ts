@@ -58,7 +58,7 @@ export type TgMessage = {
   video_chat_started?: object
   video_chat_ended?: object
 }
-export type TgUpdate = { update_id: number; message?: TgMessage; channel_post?: TgMessage }
+export type TgUpdate = { update_id: number; message?: TgMessage; edited_message?: TgMessage; channel_post?: TgMessage }
 
 const MAX_TEXT = 500
 const SEND_COOLDOWN_MS = 3000
@@ -66,7 +66,7 @@ const LINK_CODE_TTL_MIN = 15
 const MEMBER_CACHE_MS = 10 * 60 * 1000
 
 let chatReady: Promise<void> | null = null
-function ensureChatTables() {
+export function ensureChatTables() {
   chatReady ??= (async () => {
     await ensureTables()
     await rows(sql`CREATE TABLE IF NOT EXISTS tg_chat_messages (
@@ -74,6 +74,8 @@ function ensureChatTables() {
       author text NOT NULL, text text NOT NULL, origin text NOT NULL, created_at timestamptz NOT NULL DEFAULT now())`)
     await rows(sql`ALTER TABLE tg_chat_messages ADD COLUMN IF NOT EXISTS media_type text`)
     await rows(sql`ALTER TABLE tg_chat_messages ADD COLUMN IF NOT EXISTS media_file_id text`)
+    // When the bot last asked Telegram whether the message is still in the group (lib/chat-sync.ts).
+    await rows(sql`ALTER TABLE tg_chat_messages ADD COLUMN IF NOT EXISTS checked_at timestamptz`)
     await rows(sql`CREATE INDEX IF NOT EXISTS tg_chat_messages_chat_idx ON tg_chat_messages (chat_id, id DESC)`)
     await rows(sql`CREATE UNIQUE INDEX IF NOT EXISTS tg_chat_messages_tg_uniq ON tg_chat_messages (chat_id, tg_message_id)
       WHERE tg_message_id IS NOT NULL`)
@@ -249,7 +251,32 @@ export async function verifyWebhookSecret(header: string | null) {
   return a.length === b.length && timingSafeEqual(a, b)
 }
 
+/**
+ * A message edited in the group reads the same way on the site. One edited into something the bridge
+ * filter refuses leaves both places, exactly as if it had been written that way.
+ */
+async function handleEdit(m: TgMessage, config: ChatConfig) {
+  if (!m.from || m.from.is_bot || String(m.chat.id) !== config.chatId) return
+  const media = chatMedia(m)
+  const text = media ? cleanBody(m) : messageText(m)
+  if (!text && !media) return
+  const { screenMirror, dropBridgeSpam } = await import('@/lib/tg-guard')
+  const chatToken = await botToken(config.botId)
+  const spam = await screenMirror(chatToken, m).catch(() => null)
+  if (spam) {
+    await dropBridgeSpam(chatToken, m, spam).catch(() => null)
+    return
+  }
+  await rows(sql`UPDATE tg_chat_messages SET text = ${text.slice(0, 1500)}, media_type = ${media?.type ?? null}, media_file_id = ${media?.fileId ?? null}
+    WHERE chat_id = ${config.chatId} AND tg_message_id = ${m.message_id} AND origin = 'telegram'`)
+}
+
 export async function handleUpdate(update: TgUpdate) {
+  if (update.edited_message) {
+    const chat = await getChatConfig()
+    if (chat) await handleEdit(update.edited_message, chat)
+    return
+  }
   const post = update.message ?? update.channel_post
   if (!post) return
   const config = await getChatConfig()

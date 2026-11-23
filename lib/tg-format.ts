@@ -43,11 +43,11 @@ export function tgAuthor(name: string, mark?: TgMark | null): string {
 }
 
 /**
- * A member's message from the site. The first line says who wrote it and that it came from the site;
- * the words themselves sit in a quote block, so they cannot be mistaken for the bot speaking.
+ * A member's message from the site, read the way any chat message is: who wrote it on the first line,
+ * their words under it. No quote box and no "from the site" note; in a busy group they only add height.
  */
 export function tgMemberMessage(name: string, mark: TgMark | null | undefined, text: string): string {
-  return `${tgAuthor(name, mark)} · <i>siteden</i>\n<blockquote>${escapeHtml(text)}</blockquote>`
+  return `${tgAuthor(name, mark)}\n${escapeHtml(text)}`
 }
 
 export type TgSpan = string | { bold: string } | { italic: string } | { strike: string } | { code: string }

@@ -330,7 +330,11 @@ export async function dispatchUpdate(botId: number, update: HubUpdate) {
     const removed = await guardMessage(botId, m, Boolean(update.edited_message))
     if (removed) return
   }
-  if (update.edited_message) return
+  if (update.edited_message) {
+    // The site chat shows the message as it reads now.
+    if (isChat) await handleUpdate(update)
+    return
+  }
 
   if (update.channel_post && isGuard) {
     const { guardChannelPost } = await import('@/lib/tg-guard')

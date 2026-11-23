@@ -248,7 +248,12 @@ const MOD_STEPS: GuideStep[] = [
           Her silme ve susturma, kimin yaptığıyla birlikte <b>Telegram Merkezi → Kayıtlar</b>’a yazılır.
         </li>
         <li>
-          Üye siteden yazınca mesajı Telegram grubuna iki parça düşer: üstte kalın adı ve <span className={code}>siteden</span> notu, altında alıntı kutusunda mesajı. Rolü varsa (Moderatör, Sponsor Destek…) adının yanında simgesiyle rolü, yoksa taktığı rozet yazar: <span className={code}>Ahmet · Moderatör · siteden</span>
+          Üye siteden yazınca mesajı Telegram grubuna sade düşer: üst satırda kalın adı, altında mesajı. Rolü varsa (Moderatör, Sponsor Destek…) adının yanında simgesiyle rolü, yoksa taktığı rozet yazar: <span className={code}>Ahmet · Moderatör</span>
+        </li>
+        <li>
+          <b>Telegram’da silinen mesaj siteden de kalkar</b>: üye kendi mesajını ya da moderatör bir mesajı grupta silince, o mesaj site sohbetinden de
+          kaldırılır. Telegram silinen mesajı bota haber vermediği için bot, site sohbeti açıkken ekrandaki mesajları Telegram’a sorar; en yeni mesajlar
+          bir dakika içinde, daha eskiler birkaç dakika içinde kalkar. Grupta düzenlenen mesajın sitedeki yazısı da yeni haline döner.
         </li>
         <li>
           Jako’nun etkinlik hatırlatması gruba <b>Canlı izle</b> butonuyla düşer; buton siteyi açar. Sitedeki sohbet akışında aynı duyuru düz yazıyla görünür.
@@ -341,8 +346,11 @@ const SETUP_STEPS: GuideStep[] = [
         <li>
           <b>Oran botunda hangi post hangi kanala gider</b>: oranı okunan post özel oran kanalına gider. Oranı olmayan post (kampanya, bonus, duyuru) özel oran
           kanalına <b>gitmez</b>, ana kanala (Duyuru kanalı) gider; bot o kanalda da yönetici olmalı. Bu postun altına “… giriş” butonu konur ve yazıdaki linkler,
-          kaynağın <b>Sponsor linki</b> alanına yazdığın adrese çevrilir. Sponsor linki boşsa ya da ana kanal kayıtlı değilse post hiçbir kanala gitmez,{' '}
-          <b>Bekleyen ve atlanan postlar</b> kutusunda sebebiyle bekler; linki girip <b>Yine de paylaş</b> dersin.
+          kaynağın <b>Sponsor linki</b> alanına yazdığın adrese çevrilir. Alanı boş bırakırsan ve site aynı adla <b>Sponsorlar</b> listesinde açıksa oradaki
+          giriş adresi kullanılır; sponsorun adresi listede değişince postlar da yeni adrese gider. İkisi de yoksa ya da ana kanal kayıtlı değilse post
+          hiçbir kanala gitmez, <b>Bekleyen ve atlanan postlar</b> kutusunda sebebiyle bekler; linki girip <b>Yine de paylaş</b> dersin. Kampanya
+          postlarının gitmesi için kaynağın paylaşım kuralı <b>Hepsi</b> ya da <b>Anahtar kelime</b> olmalıdır; <b>Sadece oran</b> kuralında oranı olmayan
+          post atlanır.
         </li>
         <li>
           <b>Butonlar</b>: kanal aktarımında ve oran botunda kaynak başına, Post Paylaşım’da sponsor başına post altı butonu eklenir. Kaynak postun kendi butonları da

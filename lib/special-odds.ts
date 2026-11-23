@@ -32,6 +32,7 @@ import {
   DEFAULT_ODDS_BOT,
   NO_MAIN_CHANNEL,
   NO_SPONSOR_LINK,
+  campaignLink,
   ODDS_MAX,
   ODDS_PAGE,
   hasOddNumber,
@@ -311,7 +312,74 @@ async function readPublishError(): Promise<OddsBotStatus['publishError']> {
 
 // --- Sources ---------------------------------------------------------------
 
-function mapSource(r: Record<string, unknown>): OddsSource {
+/** Letters and digits only, so "Makro Bet", "MAKROBET" and "makrobet" are one name. */
+const siteKey = (name: string) =>
+  name
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ı/g, 'i')
+    .replace(/[^a-z0-9]/g, '')
+
+function webLink(value: unknown) {
+  try {
+    const target = new URL(String(value ?? '').trim())
+    return target.protocol === 'https:' || target.protocol === 'http:' ? target.toString() : ''
+  } catch {
+    return ''
+  }
+}
+
+const SPONSOR_LINKS_FRESH_MS = 60_000
+let sponsorLinkCache: { at: number; links: Map<string, string> } | null = null
+
+/**
+ * The entry links of the active sponsors on the site's own list, by name. A source of the same sponsor
+ * needs no link typed twice, and follows the list when the sponsor's address changes.
+ */
+async function sponsorLinks(): Promise<Map<string, string>> {
+  if (sponsorLinkCache && Date.now() - sponsorLinkCache.at < SPONSOR_LINKS_FRESH_MS) return sponsorLinkCache.links
+  const sites = await rows<{ name: string; url: string; entry_url: string }>(
+    sql`SELECT name, url, entry_url FROM sites WHERE active ORDER BY sort_order DESC, id DESC`,
+  ).catch(() => null)
+  // A list that could not be read is not remembered as empty.
+  if (!sites) return sponsorLinkCache?.links ?? new Map()
+  const links = new Map<string, string>()
+  for (const site of sites) {
+    const link = webLink(site.entry_url) || webLink(site.url)
+    if (link && siteKey(site.name)) links.set(siteKey(site.name), link)
+  }
+  sponsorLinkCache = { at: Date.now(), links }
+  return links
+}
+
+const RULES_RESTORED_KEY = 'odds_sponsor_rules_restored'
+let rulesRestored = false
+
+/**
+ * Sources that were here before a source had a rule of its own were handed "odds only" by the column
+ * default, which silently stopped the campaign posts they used to share. Once, the sources of
+ * sponsors on the site's list go back to sharing everything; sites that are not sponsors keep "odds only".
+ */
+async function restoreSponsorRules() {
+  if (rulesRestored) return
+  const done = await rows(sql`SELECT 1 FROM tg_settings WHERE key = ${RULES_RESTORED_KEY}`)
+  if (!done.length) {
+    const [list] = await rows<{ found: string | null }>(sql`SELECT to_regclass('sites')::text AS found`)
+    if (list?.found) {
+      // Read here, not through the cache: a list that cannot be read throws, and the fix is tried again next round.
+      const sites = await rows<{ name: string }>(sql`SELECT name FROM sites WHERE active`)
+      const sponsors = new Set(sites.map((site) => siteKey(String(site.name))))
+      const narrow = await rows<{ id: number; site_name: string }>(sql`SELECT id, site_name FROM odds_sources WHERE pass_mode = 'odds'`)
+      const ids = narrow.filter((s) => sponsors.has(siteKey(String(s.site_name)))).map((s) => Number(s.id))
+      if (ids.length) await rows(sql`UPDATE odds_sources SET pass_mode = 'all' WHERE id IN ${ids}`)
+      await rows(sql`INSERT INTO tg_settings (key, value) VALUES (${RULES_RESTORED_KEY}, ${new Date().toISOString()}) ON CONFLICT (key) DO NOTHING`)
+    }
+  }
+  rulesRestored = true
+}
+
+function mapSource(r: Record<string, unknown>, sponsors?: Map<string, string>): OddsSource {
   return {
     id: Number(r.id),
     chatId: String(r.chat_id),
@@ -319,6 +387,7 @@ function mapSource(r: Record<string, unknown>): OddsSource {
     siteName: String(r.site_name),
     siteLink: String(r.site_link),
     sponsorLink: String(r.sponsor_link ?? ''),
+    sponsorLinkAuto: sponsors?.get(siteKey(String(r.site_name))) ?? '',
     siteLogo: r.site_logo ? String(r.site_logo) : null,
     replacements: String(r.replacements ?? ''),
     footer: String(r.footer ?? ''),
@@ -337,8 +406,11 @@ function mapSource(r: Record<string, unknown>): OddsSource {
 
 export async function listOddsSources(): Promise<OddsSource[]> {
   await ensureOddsTables()
-  const r = await rows(sql`SELECT s.*, (SELECT count(*) FROM special_odds o WHERE o.source_id = s.id) AS total FROM odds_sources s ORDER BY s.id`)
-  return r.map(mapSource)
+  const [r, sponsors] = await Promise.all([
+    rows(sql`SELECT s.*, (SELECT count(*) FROM special_odds o WHERE o.source_id = s.id) AS total FROM odds_sources s ORDER BY s.id`),
+    sponsorLinks(),
+  ])
+  return r.map((row) => mapSource(row, sponsors))
 }
 
 export async function updateOddsSourceText(id: number, input: { siteLink: string; replacements: string; footer: string }) {
@@ -452,7 +524,7 @@ async function findSource(chat: TgMessage['chat']) {
   const keys = [String(chat.id), username ? `@${username}` : ''].filter(Boolean)
   const r = await rows(sql`SELECT *, 0 AS total FROM odds_sources WHERE active AND chat_id IN ${keys} LIMIT 1`)
   if (!r.length) return null
-  const source = mapSource(r[0])
+  const source = mapSource(r[0], await sponsorLinks())
   if (source.chatId !== String(chat.id)) {
     await rows(sql`UPDATE odds_sources SET chat_id = ${String(chat.id)}, title = ${chat.title ?? source.title} WHERE id = ${source.id}`).catch(() => null)
     source.chatId = String(chat.id)
@@ -521,7 +593,7 @@ async function passRule(
  */
 export function composeOddsPost(
   text: string,
-  source: Pick<OddsSource, 'siteName' | 'siteLink'> & Partial<Pick<OddsSource, 'replacements' | 'footer' | 'tag' | 'tagText' | 'sponsorLink'>>,
+  source: Pick<OddsSource, 'siteName' | 'siteLink'> & Partial<Pick<OddsSource, 'replacements' | 'footer' | 'tag' | 'tagText' | 'sponsorLink' | 'sponsorLinkAuto'>>,
   config: Pick<OddsBotConfig, 'footer'>,
   read: Read = NO_READ,
   kind: 'auto' | 'odds' = 'auto',
@@ -534,7 +606,7 @@ export function composeOddsPost(
     footer: ownFooter || config.footer,
   }
   if (!read.odds.length && kind === 'auto') {
-    return carriedPost({ ...head, footer: ownFooter, body: rewritePlain(text, rules, source.sponsorLink ?? '', 'odds') })
+    return carriedPost({ ...head, footer: ownFooter, body: rewritePlain(text, rules, campaignLink(source), 'odds') })
   }
   if (!read.odds.length) return carriedPost({ ...head, body: rewritePlain(text, rules, source.siteLink, 'odds') })
   const note = read.note ? rewritePlain(read.note, rules, source.siteLink, 'odds') : ''
@@ -565,7 +637,7 @@ export async function previewOddsPost(text: string, sourceId: number | null): Pr
   const kind = candidateKind(text)
   const rule = await passRule(source, text, kind)
   const campaign = rule.pass && !rule.odds.length && !rule.unread
-  const blocked = campaign ? (!source.sponsorLink ? NO_SPONSOR_LINK : (await mainChannel()) ? '' : NO_MAIN_CHANNEL) : ''
+  const blocked = campaign ? (!campaignLink(source) ? NO_SPONSOR_LINK : (await mainChannel()) ? '' : NO_MAIN_CHANNEL) : ''
   return {
     kind: rule.odds.length ? 'odds' : kind,
     odds: rule.odds.map((o) => ({ match: o.match, market: o.market, oldOdd: o.oldOdd, newOdd: o.newOdd })),
@@ -608,14 +680,15 @@ const oddsRoute = (config: OddsBotConfig, source: OddsSource, incoming: Incoming
 
 /** Under a campaign the first button always opens the sponsor's own site; the source's and our own buttons follow. */
 function campaignButtons(source: OddsSource, own: PostButton[] | undefined) {
-  const rest = postButtons({ link: source.sponsorLink, buttons: source.buttons, carryButtons: source.carryButtons }, own, parseReplacements(source.replacements))
-  const lead = { text: `${source.siteName} giriş`.slice(0, 40), url: source.sponsorLink }
+  const link = campaignLink(source)
+  const rest = postButtons({ link, buttons: source.buttons, carryButtons: source.carryButtons }, own, parseReplacements(source.replacements))
+  const lead = { text: `${source.siteName} giriş`.slice(0, 40), url: link }
   return [lead, ...rest.filter((b) => b.url !== lead.url)].slice(0, MAX_SENT_BUTTONS)
 }
 
 /** A campaign never falls back to the odds channel or to a link of ours: without its channel or the sponsor's link it waits in the panel. */
 async function campaignRoute(source: OddsSource, incoming: Incoming): Promise<Route | { blocked: string }> {
-  if (!source.sponsorLink) return { blocked: NO_SPONSOR_LINK }
+  if (!campaignLink(source)) return { blocked: NO_SPONSOR_LINK }
   const dest = await mainChannel()
   if (!dest) return { blocked: NO_MAIN_CHANNEL }
   return { dest, buttons: campaignButtons(source, incoming.buttons) }
@@ -987,7 +1060,7 @@ export async function ingestManual(sourceId: number, text: string) {
   const r = await rows(sql`SELECT *, 0 AS total FROM odds_sources WHERE id = ${sourceId}`)
   if (!r.length) throw new Error('Kaynak bulunamadı')
   if (text.trim().length < 10) throw new Error('Post metni çok kısa')
-  const source = mapSource(r[0])
+  const source = mapSource(r[0], await sponsorLinks())
   const messageId = -Date.now()
   return ingest(
     source,
@@ -1038,7 +1111,7 @@ export async function resolveOddsQueue(id: number, action: QueueAction) {
   if (row.state === 'sent') throw new Error('Bu post zaten paylaşıldı')
   const [sourceRow] = await rows(sql`SELECT *, 0 AS total FROM odds_sources WHERE id = ${Number(row.source_id)}`)
   if (!sourceRow) throw new Error('Bu postun kaynağı silinmiş')
-  const source = mapSource(sourceRow)
+  const source = mapSource(sourceRow, await sponsorLinks())
   const config = await getOddsBotConfig()
   if (!config.enabled || !config.botId || !config.channelId) throw new Error('Bot kapalı ya da özel oran kanalımız seçili değil')
 
@@ -1095,14 +1168,17 @@ const WEB_BATCH = 10
  * are usually run by someone else, so public sources are read from their t.me/s web page instead.
  * Message ids match the real ones, so a post arriving via both paths is stored once.
  */
+const PIN_NOTE = /tgme_widget_message_author_name[\s\S]*?<\/a>\s*pinned\b/
+
 export async function scrapeOddsSources(config?: OddsBotConfig) {
   await ensureOddsTables()
   const cfg = config ?? (await getOddsBotConfig())
   const token = cfg.botId ? await botToken(cfg.botId).catch(() => null) : null
   const sources = await rows(sql`SELECT *, 0 AS total FROM odds_sources WHERE active ORDER BY id`)
+  const sponsors = await sponsorLinks()
   let handled = 0
   for (const r of sources) {
-    const source = mapSource(r)
+    const source = mapSource(r, sponsors)
     let username = r.username ? String(r.username) : ''
     try {
       if (!username) {
@@ -1123,6 +1199,8 @@ export async function scrapeOddsSources(config?: OddsBotConfig) {
       const fresh = posts.filter((p) => p.id > last!).slice(0, WEB_BATCH)
       for (const post of fresh) {
         await rows(sql`UPDATE odds_sources SET web_last = GREATEST(COALESCE(web_last, 0), ${post.id}) WHERE id = ${source.id}`)
+        // "Kanal pinned a photo" is Telegram's own note about a pin, not a post of the source.
+        if (PIN_NOTE.test(post.html)) continue
         const text = scrapedHtmlToCleanText(post.html, { dropEmojiRuns: true })
         if (!text) continue
         const incoming: Incoming = {
@@ -1153,6 +1231,7 @@ export async function scrapeOddsSources(config?: OddsBotConfig) {
 /** Fallback for when the webhook is not set: pulls updates on each cron run. */
 export async function pollOddsBot() {
   const config = await getOddsBotConfig()
+  await restoreSponsorRules().catch((error) => console.error('[odds-bot] sponsor rules', error))
   await expireStaleOdds()
   await pruneOddsQueue().catch((error) => console.error('[odds-bot] prune', error))
   await scrapeOddsSources(config).catch((error) => console.error('[odds-bot] web sources', error))
