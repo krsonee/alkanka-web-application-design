@@ -9,8 +9,8 @@ import { Events } from './events'
 import { useCatalog } from './catalog-context'
 
 const TABS = [
-  { id: 'etkinlikler', label: 'AL KANKA etkinlikleri', icon: PartyPopper },
-  { id: 'bonuslar', label: 'Sponsor site bonusları', icon: BadgePercent },
+  { id: 'etkinlikler', label: 'AL KANKA etkinlikleri', short: 'Etkinlikler', icon: PartyPopper },
+  { id: 'bonuslar', label: 'Sponsor site bonusları', short: 'Sponsor bonusları', icon: BadgePercent },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -66,7 +66,8 @@ export function CampaignHub({ arena }: { arena?: ReactNode }) {
               )}
             >
               <Icon className="seg-icon size-4 shrink-0" aria-hidden="true" />
-              <span className="truncate">{t.label}</span>
+              <span className="truncate max-sm:hidden">{t.label}</span>
+              <span className="truncate sm:hidden">{t.short}</span>
               <span
                 className={cn(
                   'hidden text-xs tabular-nums transition-opacity duration-300 sm:inline',

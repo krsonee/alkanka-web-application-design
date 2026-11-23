@@ -15,7 +15,7 @@ export function BadgeSets({ sets, badges, signedIn }: { sets: SetProgress[]; bad
         </h2>
         <p className="text-xs text-muted-foreground">Setin tüm rozetlerini topla, büyük KP ödülü otomatik hesabına geçsin.</p>
       </div>
-      <ul className="grid gap-3 sm:grid-cols-2">
+      <ul className="no-scrollbar grid gap-3 max-sm:-mx-4 max-sm:flex max-sm:snap-x max-sm:scroll-px-4 max-sm:overflow-x-auto max-sm:px-4 max-sm:*:w-72 max-sm:*:shrink-0 max-sm:*:snap-start sm:grid-cols-2">
         {sets.map((s) => {
           const done = s.owned.length === s.badgeIds.length
           return (

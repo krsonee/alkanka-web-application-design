@@ -65,13 +65,14 @@ function OddCard({ odd }: { odd: SpecialOdd }) {
   return (
     <li className={cn('flex flex-col gap-2 rounded-xl border bg-card px-2.5 py-2 md:flex-row md:items-center md:gap-4 md:p-4', open ? 'border-primary/40' : 'border-border')}>
       <div className="flex min-w-0 flex-1 flex-col gap-1 md:gap-1.5">
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+        {/* Narrow cards: the site name keeps the first line, a long tag drops to its own line under it. */}
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground max-md:flex-wrap max-md:gap-y-1">
           <StateBadge odd={odd} />
           <span className="truncate font-semibold uppercase tracking-wider text-accent">{odd.siteName}</span>
           {oddsTagText(odd.tag, odd.tagText) && (
             <span
               className={cn(
-                'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide',
+                'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide max-md:order-last',
                 odd.tag === 'sponsor' ? 'bg-primary/15 text-primary' : 'border border-border bg-secondary text-foreground',
               )}
             >

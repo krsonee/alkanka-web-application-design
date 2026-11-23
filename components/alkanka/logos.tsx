@@ -76,7 +76,7 @@ function ShieldLogo({ className, size = 'md' }: LogoProps) {
         <path d="M15.5 22 H24.5" stroke="var(--primary)" strokeWidth="2.4" strokeLinecap="round" />
       </svg>
       <span className="logo-text flex flex-col leading-none">
-        <span className={cn('font-display font-bold uppercase tracking-widest text-foreground', size === 'sm' ? 'text-sm' : 'text-lg')}>
+        <span data-wordmark className={cn('font-display font-bold uppercase tracking-widest text-foreground', size === 'sm' ? 'text-sm' : 'text-lg')}>
           Alkanka
         </span>
       </span>
@@ -135,7 +135,7 @@ function EmblemLogo({ image, flat, className, size = 'md' }: LogoProps & { image
         )}
       />
       <span className="logo-text flex flex-col leading-none">
-        <span className={cn('font-display font-bold uppercase tracking-widest text-foreground', size === 'sm' ? 'text-sm' : 'text-lg')}>
+        <span data-wordmark className={cn('font-display font-bold uppercase tracking-widest text-foreground', size === 'sm' ? 'text-sm' : 'text-lg')}>
           Alkanka
         </span>
       </span>

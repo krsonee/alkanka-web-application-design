@@ -17,7 +17,8 @@ const STATE_TEXT = { open: 'Tek seferlik', pending: 'Onay bekliyor', done: 'Tama
 export function SocialTaskStrip({ items }: { items: SocialTaskItem[] }) {
   if (!items.length) return null
   return (
-    <ul className="kp-stagger grid grid-cols-2 gap-2 lg:grid-cols-3">
+    // Phones: one row that scrolls sideways, bleeding to the screen edges.
+    <ul className="kp-stagger no-scrollbar grid grid-cols-2 gap-2 max-sm:-mx-4 max-sm:flex max-sm:snap-x max-sm:scroll-px-4 max-sm:overflow-x-auto max-sm:px-4 max-sm:*:w-44 max-sm:*:shrink-0 max-sm:*:snap-start lg:grid-cols-3">
       {items.map((t, idx) => {
         const platform = t.param && isPlatform(t.param) ? t.param : null
         const done = t.state === 'done'

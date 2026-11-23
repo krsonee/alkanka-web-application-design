@@ -84,23 +84,24 @@ const dateTR = (iso: string) => new Date(iso).toLocaleDateString('tr-TR', { day:
 function ChampionsWall({ champions }: { champions: AwardRow[] }) {
   return (
     <section aria-labelledby="sampiyonlar" className="flex flex-col gap-3">
-      <header className="flex items-center justify-between gap-2 px-1">
-        <h2 id="sampiyonlar" className="flex items-center gap-2 font-display text-lg font-bold text-foreground">
+      <header className="flex flex-wrap items-center justify-between gap-x-2 px-1">
+        <h2 id="sampiyonlar" className="flex items-center gap-2 whitespace-nowrap font-display text-lg font-bold text-foreground">
           <Medal className="size-5 text-primary" aria-hidden /> Şampiyonlar duvarı
         </h2>
-        <span className="flex items-center gap-3">
-          <Link href="/sampiyonlar" className="text-xs font-semibold text-primary hover:underline">
+        <span className="flex items-center gap-3 whitespace-nowrap">
+          <Link href="/sampiyonlar" className="text-xs font-semibold text-primary hover:underline max-sm:flex max-sm:h-11 max-sm:items-center">
             Şampiyon kürsüsü
           </Link>
-          <Link href="/rozetler" className="text-xs font-semibold text-primary hover:underline">
+          <Link href="/rozetler" className="text-xs font-semibold text-primary hover:underline max-sm:flex max-sm:h-11 max-sm:items-center">
             Tüm rozetler
           </Link>
         </span>
       </header>
       {champions.length ? (
-        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        // Phones: one row that scrolls sideways instead of a tall stack.
+        <ul className="no-scrollbar grid gap-2 max-sm:-mx-4 max-sm:flex max-sm:snap-x max-sm:scroll-px-4 max-sm:overflow-x-auto max-sm:px-4 sm:grid-cols-2 lg:grid-cols-3">
           {champions.map((a) => (
-            <li key={a.id} className="panel-gold flex items-center gap-3 rounded-xl px-3.5 py-3">
+            <li key={a.id} className="panel-gold flex items-center gap-3 rounded-xl px-3.5 py-3 max-sm:w-64 max-sm:shrink-0 max-sm:snap-start">
               <SpecialEmblem icon={a.icon} tier={a.tier} size="md" />
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-[11px] font-bold uppercase tracking-wider text-primary">{a.badgeName}</span>
