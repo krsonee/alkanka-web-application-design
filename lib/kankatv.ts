@@ -148,7 +148,7 @@ async function fetchScores(sport: SportSlug, day: DayOffset): Promise<RawScores 
   try {
     const res = await fetch(
       `${API}/games/allscores/?${BASE_QUERY}&sports=${sportId}&startDate=${date}&endDate=${date}&showOdds=false&onlyMajorGames=false`,
-      { headers: HEADERS, next: { revalidate: day === 0 ? 30 : 600 } },
+      { headers: HEADERS, next: { revalidate: day === 0 ? 30 : 600 }, signal: AbortSignal.timeout(8000) },
     )
     if (!res.ok) return null
     return (await res.json()) as RawScores
@@ -327,7 +327,7 @@ export async function getFixtures(day: string): Promise<Fixture[]> {
     const date = `${d}/${m}/${y}`
     const res = await fetch(
       `${API}/games/allscores/?${BASE_QUERY}&sports=1&startDate=${date}&endDate=${date}&showOdds=false&onlyMajorGames=false`,
-      { headers: HEADERS, next: { revalidate: 900 } },
+      { headers: HEADERS, next: { revalidate: 900 }, signal: AbortSignal.timeout(8000) },
     )
     if (!res.ok) return []
     const raw = (await res.json()) as RawScores
@@ -358,7 +358,7 @@ export async function getFixtures(day: string): Promise<Fixture[]> {
 /** Final score of a finished game, or null while it is still to be played or in progress. */
 export async function getFinalScore(id: number): Promise<{ home: number; away: number } | null> {
   try {
-    const res = await fetch(`${API}/game/?${BASE_QUERY}&gameId=${id}`, { headers: HEADERS, cache: 'no-store' })
+    const res = await fetch(`${API}/game/?${BASE_QUERY}&gameId=${id}`, { headers: HEADERS, cache: 'no-store', signal: AbortSignal.timeout(8000) })
     if (!res.ok) return null
     const { game } = (await res.json()) as { game?: RawGame }
     if (!game || game.statusGroup !== 4) return null
@@ -507,7 +507,7 @@ export type GameSnapshot = {
 
 export async function getGameSnapshot(id: number): Promise<GameSnapshot | null> {
   try {
-    const res = await fetch(`${API}/game/?${BASE_QUERY}&gameId=${id}`, { headers: HEADERS, cache: 'no-store' })
+    const res = await fetch(`${API}/game/?${BASE_QUERY}&gameId=${id}`, { headers: HEADERS, cache: 'no-store', signal: AbortSignal.timeout(8000) })
     if (!res.ok) return null
     const { game } = (await res.json()) as { game?: RawGame & NonNullable<RawDetail['game']> }
     if (!game) return null
@@ -584,7 +584,7 @@ export async function getGameLive(id: number): Promise<GameLive | null> {
 
 export async function getMatchDetail(id: number): Promise<MatchDetail> {
   try {
-    const res = await fetch(`${API}/game/?${BASE_QUERY}&gameId=${id}`, { headers: HEADERS, next: { revalidate: 30 } })
+    const res = await fetch(`${API}/game/?${BASE_QUERY}&gameId=${id}`, { headers: HEADERS, next: { revalidate: 30 }, signal: AbortSignal.timeout(8000) })
     if (!res.ok) return { events: [], periods: [] }
     const { game } = (await res.json()) as RawDetail
     if (!game) return { events: [], periods: [] }
@@ -628,6 +628,7 @@ async function fetchLiveVideoId(path: string): Promise<string | null> {
     const res = await fetch(`https://www.youtube.com/${path}/live`, {
       headers: { ...HEADERS, 'Accept-Language': 'tr' },
       cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) return null
     const html = await res.text()
@@ -671,6 +672,7 @@ async function fetchKick(query: string, limit: number): Promise<KickStream[]> {
     const res = await fetch(`https://web.kick.com/api/v1/livestreams?limit=${limit}&sort=viewer_count_desc&language=tr${query}`, {
       headers: HEADERS,
       next: { revalidate: 120 },
+      signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) return []
     const json = (await res.json()) as { data?: { livestreams?: KickStream[] } }

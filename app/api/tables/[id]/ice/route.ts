@@ -29,6 +29,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ ttl: 4 * 3600 }),
       cache: 'no-store',
+      // Without relay servers the table still connects directly; waiting on this would hold the table up.
+      signal: AbortSignal.timeout(6000),
     })
     if (!r.ok) return NextResponse.json({ iceServers: STUN, turn: false })
     const { iceServers } = (await r.json()) as { iceServers: RTCIceServer[] }
