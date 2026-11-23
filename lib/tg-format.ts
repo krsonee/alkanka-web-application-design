@@ -47,10 +47,36 @@ export function tgMemberMessage(name: string, mark: TgMark | null | undefined, t
   return `${tgAuthor(name, mark)}\n${escapeHtml(text)}`
 }
 
-export type TgSpan = string | { bold: string }
+export type TgSpan = string | { bold: string } | { italic: string } | { strike: string }
 export type TgLine = string | TgSpan[]
 
 export const bold = (text: string | number): TgSpan => ({ bold: String(text) })
+export const italic = (text: string | number): TgSpan => ({ italic: String(text) })
+export const strike = (text: string | number): TgSpan => ({ strike: String(text) })
+
+type Marked = { bold?: string; italic?: string; strike?: string }
+
+function spanHtml(span: TgSpan): string {
+  if (typeof span === 'string') return escapeHtml(span)
+  const { bold: b, italic: i, strike: s } = span as Marked
+  if (b !== undefined) return `<b>${escapeHtml(b)}</b>`
+  if (i !== undefined) return `<i>${escapeHtml(i)}</i>`
+  return `<s>${escapeHtml(s ?? '')}</s>`
+}
+
+function spanText(span: TgSpan): string {
+  if (typeof span === 'string') return span
+  const { bold: b, italic: i, strike: s } = span as Marked
+  return b ?? i ?? s ?? ''
+}
+
+const lineSpans = (line: TgLine): TgSpan[] => (typeof line === 'string' ? [line] : line)
+
+/** Lines as Telegram HTML. An empty line stays as a gap between blocks. */
+export const tgLines = (lines: TgLine[]) => lines.map((line) => lineSpans(line).map(spanHtml).join('')).join('\n')
+
+/** The same lines without markup, for places that show plain text (the site, the panel preview). */
+export const plainLines = (lines: TgLine[]) => lines.map((line) => lineSpans(line).map(spanText).join('')).join('\n')
 
 export const NOTICE_EMOJI = {
   duyuru: '📣',
@@ -66,16 +92,11 @@ export type TgNoticeKind = keyof typeof NOTICE_EMOJI
 /** An automatic message: a bold headline, the details under it, then an optional closing line and an optional address, each set apart. */
 export type TgNotice = { kind: TgNoticeKind; title: string; lines?: (TgLine | null | undefined | false)[]; foot?: string; link?: string }
 
-const spans = (line: TgLine): TgSpan[] => (typeof line === 'string' ? [line] : line)
 const filled = (l: TgLine | null | undefined | false): l is TgLine => (typeof l === 'string' ? l.trim() !== '' : Array.isArray(l) && l.length > 0)
 const kept = (n: TgNotice): TgLine[] => (n.lines ?? []).filter(filled)
 
 export function tgNotice(n: TgNotice): string {
-  const body = kept(n).map((line) =>
-    spans(line)
-      .map((s) => (typeof s === 'string' ? escapeHtml(s) : `<b>${escapeHtml(s.bold)}</b>`))
-      .join(''),
-  )
+  const body = kept(n).map((line) => lineSpans(line).map(spanHtml).join(''))
   const parts = [`${NOTICE_EMOJI[n.kind]} <b>${escapeHtml(n.title.trim())}</b>`]
   if (body.length) parts.push('', ...body)
   if (n.foot?.trim()) parts.push('', escapeHtml(n.foot.trim()))
@@ -87,10 +108,6 @@ export function tgNotice(n: TgNotice): string {
 export function noticePlain(n: TgNotice): string {
   const title = n.title.trim()
   const head = /[.!?:]$/.test(title) ? title : `${title}!`
-  const body = kept(n).map((line) =>
-    spans(line)
-      .map((s) => (typeof s === 'string' ? s : s.bold))
-      .join(''),
-  )
+  const body = kept(n).map((line) => lineSpans(line).map(spanText).join(''))
   return [head, ...body, n.foot ?? ''].join(' ').replace(/\s+/g, ' ').trim()
 }

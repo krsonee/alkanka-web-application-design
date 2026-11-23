@@ -100,6 +100,12 @@ export function oddsTagText(tag: OddsTag, custom: string) {
   return custom.trim() || ODDS_TAG_OPTIONS.find((o) => o.value === tag)!.defaultText
 }
 
+/** The tag as a quiet line under the post's headline: the preset in sentence case, a custom text as typed. */
+export function oddsTagLine(tag: OddsTag, custom: string) {
+  if (tag === 'none') return ''
+  return custom.trim() || ODDS_TAG_OPTIONS.find((o) => o.value === tag)!.label
+}
+
 export type OddsBotConfig = {
   enabled: boolean
   botId: number | null
@@ -157,12 +163,14 @@ export type OddsPreview = {
 
 // "1.85" or "2,10" standing alone: not part of "1.500", not money ("500,00 TL", "₺99,90") and not a percentage.
 const ODD_NUMBER = /(?<![\d.,₺$€%])\d{1,3}[.,]\d{2}(?![\d.,])(?!\s*(?:tl\b|try\b|usd\b|eur\b|bin\b|lira|₺|\$|€|%))/iu
-const MATCH_LINE = /[\p{L}\d][\p{L}\d.' ]+\s(?:-|–|—|vs\.?)\s[\p{L}\d][\p{L}\d.' ]+/iu
 
 export const hasOddNumber = (text: string) => ODD_NUMBER.test(text)
 
-/** Stand-in for the AI reader when it is unreachable: an odd-like number plus a "Team - Team" line. */
-export const looksLikeOdds = (text: string) => hasOddNumber(text) && MATCH_LINE.test(text)
+/** The first number written like an odd ("2,10"), or null. */
+export function firstOddNumber(text: string) {
+  const found = text.match(ODD_NUMBER)?.[0]
+  return found ? Number(found.replace(',', '.')) : null
+}
 
 export const DEFAULT_ODDS_BOT: OddsBotConfig = {
   enabled: false,

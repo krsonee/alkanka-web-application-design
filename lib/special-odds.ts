@@ -19,7 +19,9 @@ import {
   type ScrapedPost,
 } from '@/lib/telegram-mirror'
 import { parseReplacements, rewritePlain } from '@/lib/text-replace'
-import { readOddsPost } from '@/lib/odds-parse'
+import { readOddsPost, type OddsImage, type OddsReading } from '@/lib/odds-parse'
+import { carriedPost, isBareNote, namesMatch, oddsPost, resultNotice, type OddsPostText, type SettledOdd } from '@/lib/odds-post'
+import { assertPublicUrl } from '@/lib/public-address'
 import type { ParsedOdd } from '@/lib/deal-types'
 import { decodeEntities } from '@/lib/html-entities'
 import { isOddsText } from '@/lib/telegram-bots'
@@ -31,8 +33,7 @@ import {
   ODDS_PAGE,
   hasOddNumber,
   istanbulDay,
-  looksLikeOdds,
-  oddsTagText,
+  oddsTagLine,
   splitWords,
   toMediaFallback,
   toOddsPassMode,
@@ -426,58 +427,78 @@ function classify(text: string, config: OddsBotConfig): OddsPreview['kind'] {
   if (has(config.wonWords)) return 'won'
   if (has(config.lostWords)) return 'lost'
   // Only a candidate: the source's rule decides whether the post is really shared.
-  return isOddsText(text) || hasOddNumber(text) ? 'odds' : 'ignore'
+  return candidateKind(text)
 }
 
-type Verdict = { pass: boolean; reason: string; odds: ParsedOdd[]; /** List the post on the site by its first line although no odd was read. */ listAnyway: boolean }
+const candidateKind = (text: string): OddsPreview['kind'] => (isOddsText(text) || hasOddNumber(text) ? 'odds' : 'ignore')
 
-const skip = (reason: string): Verdict => ({ pass: false, reason, odds: [], listAnyway: false })
+type Read = Pick<OddsReading, 'odds' | 'note' | 'coupon'>
+type Verdict = Read & { pass: boolean; reason: string }
+
+const NO_READ: Read = { odds: [], note: '', coupon: null }
+const skip = (reason: string): Verdict => ({ ...NO_READ, pass: false, reason })
 
 /** Applies the source's rule. `kind` is `odds` (candidate) or `ignore` here; closing and result posts never reach it. */
-async function passRule(source: Pick<OddsSource, 'passMode' | 'passWords'>, text: string, kind: OddsPreview['kind']): Promise<Verdict> {
+async function passRule(
+  source: Pick<OddsSource, 'passMode' | 'passWords'>,
+  text: string,
+  kind: OddsPreview['kind'],
+  picture?: () => Promise<OddsImage | null>,
+): Promise<Verdict> {
   if (source.passMode === 'keyword') {
     const lower = text.toLocaleLowerCase('tr')
     if (!splitWords(source.passWords).some((w) => lower.includes(w))) return skip('Anahtar kelime geçmiyor')
   }
   if (source.passMode !== 'odds') {
-    const odds = kind === 'odds' ? (await readOddsPost(text)).odds : []
-    return { pass: true, reason: odds.length ? '' : 'Oran yok, kaynağın kuralı gereği paylaşıldı', odds, listAnyway: false }
+    const read = kind === 'odds' ? await readOddsPost(text, picture) : NO_READ
+    return { ...read, pass: true, reason: read.odds.length ? '' : 'Oran yok, kaynağın kuralı gereği paylaşıldı' }
   }
   if (kind !== 'odds') return skip('Oran yok')
-  const read = await readOddsPost(text)
-  if (read.odds.length) return { pass: true, reason: '', odds: read.odds, listAnyway: false }
-  if (!read.failed) return skip('Oran yok')
-  // The reader is down: a post that plainly looks like an odd still goes out, anything else waits in the panel.
-  return looksLikeOdds(text) ? { pass: true, reason: '', odds: [], listAnyway: true } : skip('Oran okunamadı (okuyucu yanıt vermedi)')
+  const read = await readOddsPost(text, picture)
+  if (read.odds.length) return { ...read, pass: true, reason: '' }
+  // Without the reader a post it could not read by rule waits in the panel; nothing goes out on a guess.
+  if (read.failed) return skip('Oran okunamadı (okuyucu yanıt vermedi)')
+  return skip(read.kind === 'sonuc' ? 'Sonuç postu (ilgili oran bulunamadı)' : 'Oran yok')
 }
 
-export function rewriteText(
+/** The post as it goes into our channel: an odd in our own layout, anything else as the source wrote it under our headline. */
+export function composeOddsPost(
   text: string,
   source: Pick<OddsSource, 'siteName' | 'siteLink'> & Partial<Pick<OddsSource, 'replacements' | 'footer' | 'tag' | 'tagText'>>,
   config: Pick<OddsBotConfig, 'footer'>,
-) {
-  const tag = oddsTagText(source.tag ?? 'none', source.tagText ?? '')
-  const header = tag ? `[ ${tag} ] · ${source.siteName.toLocaleUpperCase('tr')}\n\n` : ''
-  const body = rewritePlain(text, parseReplacements(source.replacements ?? ''), source.siteLink, 'odds')
-  const footerText = source.footer?.trim() || config.footer
-  const footer = footerText ? `\n\n${footerText}` : ''
-  return `${header}${body}${footer}`.trim()
+  read: Read = NO_READ,
+): OddsPostText {
+  const rules = parseReplacements(source.replacements ?? '')
+  const head = {
+    siteName: source.siteName,
+    tagLine: oddsTagLine(source.tag ?? 'none', source.tagText ?? ''),
+    footer: source.footer?.trim() || config.footer,
+  }
+  if (!read.odds.length) return carriedPost({ ...head, body: rewritePlain(text, rules, source.siteLink, 'odds') })
+  const note = read.note ? rewritePlain(read.note, rules, source.siteLink, 'odds') : ''
+  return oddsPost({ ...head, odds: read.odds, coupon: read.coupon, note })
 }
 
 const fit = (text: string, limit: number) => (text.length > limit ? `${text.slice(0, limit - 1).trimEnd()}…` : text)
+
+/** Message fields for a post: marked up while it fits, plain and cut short when it does not (a cut can break a tag). */
+const textFields = (post: OddsPostText) =>
+  post.plain.length <= MESSAGE_LIMIT ? { text: post.html, parse_mode: 'HTML' } : { text: fit(post.plain, MESSAGE_LIMIT) }
 
 export async function previewOddsPost(text: string, sourceId: number | null): Promise<OddsPreview> {
   const config = await getOddsBotConfig()
   const sources = await listOddsSources()
   const found = sources.find((s) => s.id === sourceId) ?? { siteName: 'Site', siteLink: 'https://site.com', passMode: 'odds' as const, passWords: '', replacements: '' }
   const source = { ...found, replacements: withSharedRules(found.replacements, await sharedRules()) }
-  const kind = classify(text, config)
-  if (kind !== 'odds' && kind !== 'ignore') return { kind, odds: [], rewritten: '', verdict: null, reason: '' }
+  const signal = classify(text, config)
+  // A result word alone settles nothing: only a bare note ("Kazandı ✅") is taken as a result here, as in the live flow.
+  if (signal !== 'odds' && signal !== 'ignore' && isBareNote(text)) return { kind: signal, odds: [], rewritten: '', verdict: null, reason: '' }
+  const kind = candidateKind(text)
   const rule = await passRule(source, text, kind)
   return {
     kind: rule.odds.length ? 'odds' : kind,
     odds: rule.odds.map((o) => ({ match: o.match, market: o.market, oldOdd: o.oldOdd, newOdd: o.newOdd })),
-    rewritten: rule.pass ? rewriteText(text, source, config) : '',
+    rewritten: rule.pass ? composeOddsPost(text, source, config, rule).plain : '',
     verdict: rule.pass ? 'send' : 'skip',
     reason: rule.reason,
   }
@@ -507,41 +528,42 @@ type Incoming = {
 type Sent = { message_id: number }
 
 /** Shares the post with its own photo, video, GIF or album. Throws MediaError when the media can't be carried over. */
-async function publishToChannel(config: OddsBotConfig, source: OddsSource, incoming: Incoming, rewritten: string, fromChat: string | null, withMedia = true) {
+async function publishToChannel(config: OddsBotConfig, source: OddsSource, incoming: Incoming, post: OddsPostText, fromChat: string | null, withMedia = true) {
   if (!config.enabled || !config.botId || !config.channelId) return null
   const token = await botToken(config.botId)
   const chat_id = config.channelId
   const buttons = postButtons({ link: source.siteLink, buttons: source.buttons, carryButtons: source.carryButtons }, incoming.buttons, parseReplacements(source.replacements))
   const markup = buttonMarkup(buttons)
   const sendText = async () =>
-    (await callBot<Sent>(token, 'sendMessage', { chat_id, text: fit(rewritten, MESSAGE_LIMIT), link_preview_options: { is_disabled: true }, ...markup })).message_id
+    (await callBot<Sent>(token, 'sendMessage', { chat_id, ...textFields(post), link_preview_options: { is_disabled: true }, ...markup })).message_id
   const mediaFailed = (error: unknown) => new MediaError(String((error as Error).message).slice(0, 200))
   if (!withMedia) return sendText()
+  const fitsCaption = post.plain.length <= CAPTION_LIMIT
+  const caption = { caption: post.html, parse_mode: 'HTML' }
 
   if (fromChat && incoming.album.length > 1) {
     // Telegram albums can't carry buttons, so with buttons the text follows the album as its own message.
-    const inCaption = rewritten.length <= CAPTION_LIMIT && !buttons.length
-    const media = incoming.album.slice(0, 10).map((part, i) => ({ type: part.type, media: part.fileId, ...(i === 0 && inCaption ? { caption: rewritten } : {}) }))
+    const inCaption = fitsCaption && !buttons.length
+    const media = incoming.album.slice(0, 10).map((part, i) => ({ type: part.type, media: part.fileId, ...(i === 0 && inCaption ? caption : {}) }))
     const sent = await callBot<Sent[]>(token, 'sendMediaGroup', { chat_id, media }).catch((error) => {
       throw mediaFailed(error)
     })
     return inCaption ? sent[0].message_id : sendText()
   }
   if (fromChat && incoming.hasMedia) {
-    const inCaption = rewritten.length <= CAPTION_LIMIT
     const copied = await callBot<Sent>(token, 'copyMessage', {
       chat_id,
       from_chat_id: fromChat,
       message_id: incoming.messageId,
-      caption: inCaption ? rewritten : '',
-      ...(inCaption ? markup : {}),
+      ...(fitsCaption ? { ...caption, ...markup } : { caption: '' }),
     }).catch((error) => {
       throw mediaFailed(error)
     })
-    return inCaption ? copied.message_id : sendText()
+    return fitsCaption ? copied.message_id : sendText()
   }
   if (incoming.post) {
-    const delivered = await deliver({ token, chatId: chat_id, title: config.channelTitle }, incoming.post, fit(rewritten, MESSAGE_LIMIT), undefined, {
+    const fields = textFields(post)
+    const delivered = await deliver({ token, chatId: chat_id, title: config.channelTitle }, incoming.post, fields.text, fields.parse_mode ? 'HTML' : undefined, {
       buttons,
       mediaFail: 'throw',
     })
@@ -585,28 +607,25 @@ async function notePublishError(error: unknown) {
 async function publishAndStore(own: OddsSource, incoming: Incoming, fromChat: string | null, verdict: Verdict, media: 'auto' | 'media' | 'text' = 'auto') {
   const config = await getOddsBotConfig()
   const source: OddsSource = { ...own, replacements: withSharedRules(own.replacements, await sharedRules()) }
-  const rewritten = rewriteText(incoming.text, source, config)
+  const post = composeOddsPost(incoming.text, source, config, verdict)
+  const rewritten = post.plain
   let ourMsg: number | null = null
   let held: string | null = null
   try {
-    ourMsg = await publishToChannel(config, source, incoming, rewritten, fromChat, media !== 'text')
+    ourMsg = await publishToChannel(config, source, incoming, post, fromChat, media !== 'text')
   } catch (error) {
     if (!(error instanceof MediaError)) await notePublishError(error)
     else if (media === 'media') throw error
     else if (config.mediaFallback === 'hold') held = error.message || 'Medya alınamadı'
-    else ourMsg = await publishToChannel(config, source, incoming, rewritten, fromChat, false).catch(async (again) => {
+    else ourMsg = await publishToChannel(config, source, incoming, post, fromChat, false).catch(async (again) => {
       await notePublishError(again)
       return null
     })
   }
   if (ourMsg) await setSetting(PUBLISH_ERROR_KEY, '')
 
-  const firstLine = incoming.text.split('\n').find((l) => l.trim().length > 3)?.trim() ?? 'Özel oran'
-  const items: (Omit<ParsedOdd, 'newOdd'> & { newOdd: number | null })[] = verdict.odds.length
-    ? verdict.odds
-    : verdict.listAnyway
-      ? [{ match: firstLine.slice(0, 80), league: '', market: '', oldOdd: null, newOdd: null, kickoff: '', limit: '' }]
-      : []
+  // Only a post whose odd was read is listed on the site; anything else is shared and noted in the queue.
+  const items: ParsedOdd[] = verdict.odds
   for (const [idx, o] of items.entries()) {
     await rows(sql`INSERT INTO special_odds (source_id, source_chat, source_msg, idx, our_msg, site_name, site_logo, link, match, league, market,
         old_odd, new_odd, kickoff, limit_text, body, photo, tag, tag_text)
@@ -620,72 +639,129 @@ async function publishAndStore(own: OddsSource, incoming: Incoming, fromChat: st
   return { count: items.length, ourMsg, held: Boolean(held) }
 }
 
-async function replyInChannel(config: OddsBotConfig, ourMsg: number | null, text: string) {
-  if (!config.enabled || !config.botId || !config.channelId || !text) return
+async function replyInChannel(config: OddsBotConfig, ourMsg: number | null, note: OddsPostText) {
+  if (!config.enabled || !config.botId || !config.channelId || !note.plain.trim()) return
   await callBot(await botToken(config.botId), 'sendMessage', {
     chat_id: config.channelId,
-    text: fit(text, MESSAGE_LIMIT),
+    ...textFields(note),
+    link_preview_options: { is_disabled: true },
     ...(ourMsg ? { reply_parameters: { message_id: ourMsg, allow_sending_without_reply: true } } : {}),
   }).catch((error) => console.error('[odds-bot] channel reply failed', error))
 }
 
-/** Picks the odds a "limit doldu" or result post refers to: reply target first, then match names, then the latest post. */
+type Target = { id: number; our_msg: number | null; match: string; market: string; new_odd: string | number | null; source_msg: number }
+
+const settled = (targets: Target[]): SettledOdd[] =>
+  targets.map((t) => ({ match: t.match, market: t.market, newOdd: t.new_odd === null ? null : Number(t.new_odd) }))
+
+/**
+ * Picks the odds a "limit doldu" or result post refers to. A reply (or an edit of the odd's own post)
+ * points at exactly one post; otherwise the post has to name a team of an open odd. Only a bare note
+ * with nothing else in it is taken to mean the source's latest odd. Posts shared without a read odd
+ * are never a target, so a campaign post can not be congratulated.
+ */
 async function targetRows(source: OddsSource, incoming: Incoming, where: 'open' | 'unsettled') {
   const filter = where === 'open'
     ? sql`status = 'open'`
     : sql`result IS NULL AND opened_at > now() - make_interval(hours => ${RESULT_LOOKBACK_HOURS})`
   if (incoming.replyTo) {
-    const r = await rows<{ id: number; our_msg: number | null; match: string }>(
-      sql`SELECT id, our_msg, match FROM special_odds WHERE source_chat = ${source.chatId} AND source_msg = ${incoming.replyTo} AND ${filter}`,
+    return rows<Target>(
+      sql`SELECT id, our_msg, match, market, new_odd, source_msg FROM special_odds
+        WHERE source_chat = ${source.chatId} AND source_msg = ${incoming.replyTo} AND new_odd IS NOT NULL AND ${filter} ORDER BY idx`,
     )
-    if (r.length) return r
   }
-  const candidates = await rows<{ id: number; our_msg: number | null; match: string; source_msg: number }>(
-    sql`SELECT id, our_msg, match, source_msg FROM special_odds WHERE source_id = ${source.id} AND ${filter} ORDER BY opened_at DESC LIMIT 30`,
+  const candidates = await rows<Target>(
+    sql`SELECT id, our_msg, match, market, new_odd, source_msg FROM special_odds
+      WHERE source_id = ${source.id} AND new_odd IS NOT NULL AND ${filter} ORDER BY opened_at DESC, idx LIMIT 30`,
   )
-  const lower = incoming.text.toLocaleLowerCase('tr')
-  const named = candidates.filter((c) =>
-    c.match
-      .toLocaleLowerCase('tr')
-      .split(/\s*(?:-|vs\.?|–|—)\s*/)
-      .filter((team) => team.length > 2)
-      .some((team) => lower.includes(team)),
-  )
-  if (named.length) return named
-  if (!candidates.length) return []
+  const named = candidates.filter((c) => namesMatch(incoming.text, c.match))
+  if (named.length) {
+    // One post, one reply: a note naming a team of a coupon settles that coupon as a whole.
+    const post = named[0].source_msg
+    return candidates.filter((c) => c.source_msg === post)
+  }
+  if (!candidates.length || !isBareNote(incoming.text)) return []
   const latest = candidates[0].source_msg
   return candidates.filter((c) => c.source_msg === latest)
+}
+
+/** A result post about a match this source already announced must not be listed as a new odd. */
+async function announcedBefore(source: OddsSource, odds: ParsedOdd[]) {
+  const recent = await rows<{ match: string }>(
+    sql`SELECT DISTINCT match FROM special_odds WHERE source_id = ${source.id} AND new_odd IS NOT NULL AND opened_at > now() - interval '7 days'`,
+  )
+  const known = new Set(recent.map((r) => r.match.toLocaleLowerCase('tr')))
+  return odds.some((o) => known.has(o.match.toLocaleLowerCase('tr')))
+}
+
+const PHOTO_LIMIT_BYTES = 5_000_000
+
+/** The post's first picture for the reader. Read only when the text says "oran" but names no match. */
+function pictureOf(config: OddsBotConfig, incoming: Incoming) {
+  const ref = incoming.photo
+  if (!ref) return undefined
+  return async (): Promise<OddsImage | null> => {
+    let url = ref
+    if (!/^https?:\/\//i.test(ref)) {
+      if (!config.botId) return null
+      const token = await botToken(config.botId)
+      const file = await callBot<{ file_path?: string }>(token, 'getFile', { file_id: ref })
+      if (!file.file_path) return null
+      url = `https://api.telegram.org/file/bot${token}/${file.file_path}`
+    } else {
+      await assertPublicUrl(ref)
+    }
+    const res = await fetch(url, { cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(8_000) })
+    if (!res.ok) return null
+    const data = new Uint8Array(await res.arrayBuffer())
+    if (!data.length || data.length > PHOTO_LIMIT_BYTES) return null
+    const type = res.headers.get('content-type') ?? ''
+    return { data, mediaType: type.startsWith('image/') ? type.split(';')[0] : 'image/jpeg' }
+  }
 }
 
 async function ingest(source: OddsSource, incoming: Incoming, fromChat: string | null) {
   const config = await getOddsBotConfig()
   await rows(sql`UPDATE odds_sources SET last_at = now() WHERE id = ${source.id}`)
 
-  // An edited post that now says "limit doldu" closes the odds it originally announced.
-  const kind = classify(incoming.text, config)
-  if (incoming.edited && kind !== 'filled' && !['won', 'lost', 'void'].includes(kind)) return { kind: 'ignore' as const, count: 0 }
+  const signal = classify(incoming.text, config)
+  const closing = signal === 'filled' || signal === 'won' || signal === 'lost' || signal === 'void'
+  // An edited post only matters when it now says "limit doldu" or carries a result for the odd it announced.
+  if (incoming.edited && !closing) return { kind: 'ignore' as const, count: 0 }
   const effective: Incoming = incoming.edited ? { ...incoming, replyTo: incoming.messageId } : incoming
 
-  if (kind === 'filled') {
+  if (signal === 'filled') {
     const targets = await targetRows(source, effective, 'open')
-    if (!targets.length) return { kind, count: 0 }
-    await rows(sql`UPDATE special_odds SET status = 'filled', filled_at = now() WHERE id IN ${targets.map((t) => t.id)}`)
-    await replyInChannel(config, targets[0].our_msg, config.filledText)
-    return { kind, count: targets.length }
+    if (targets.length) {
+      await rows(sql`UPDATE special_odds SET status = 'filled', filled_at = now() WHERE id IN ${targets.map((t) => t.id)}`)
+      await replyInChannel(config, targets[0].our_msg, resultNotice('filled', config.filledText, source.siteName, settled(targets)))
+      return { kind: signal, count: targets.length }
+    }
   }
 
-  if (kind === 'won' || kind === 'lost' || kind === 'void') {
+  if (signal === 'won' || signal === 'lost' || signal === 'void') {
     const targets = await targetRows(source, effective, 'unsettled')
-    if (!targets.length) return { kind, count: 0 }
-    await rows(sql`UPDATE special_odds SET result = ${kind}, result_at = now(),
-      status = CASE WHEN status = 'open' THEN 'expired' ELSE status END WHERE id IN ${targets.map((t) => t.id)}`)
-    if (config.postResults && kind !== 'void') await replyInChannel(config, targets[0].our_msg, kind === 'won' ? config.wonText : config.lostText)
-    return { kind, count: targets.length }
+    if (targets.length) {
+      await rows(sql`UPDATE special_odds SET result = ${signal}, result_at = now(),
+        status = CASE WHEN status = 'open' THEN 'expired' ELSE status END WHERE id IN ${targets.map((t) => t.id)}`)
+      if (config.postResults && signal !== 'void') {
+        const text = signal === 'won' ? config.wonText : config.lostText
+        await replyInChannel(config, targets[0].our_msg, resultNotice(signal, text, source.siteName, settled(targets)))
+      }
+      return { kind: signal, count: targets.length }
+    }
   }
+
+  if (closing && incoming.edited) return { kind: signal, count: 0 }
+  // A result word with no odd behind it ("kazanan", a tick in a campaign post) decides nothing: the post is judged like any other.
+  const kind = closing ? candidateKind(incoming.text) : signal
 
   if (await alreadySeen(source.chatId, incoming.messageId)) return { kind, count: 0 }
 
-  const verdict = await passRule(source, incoming.text, kind)
+  let verdict = await passRule(source, incoming.text, kind, pictureOf(config, incoming))
+  if (closing && verdict.pass && verdict.odds.length && (await announcedBefore(source, verdict.odds))) {
+    verdict = skip('Sonuç postu (oran daha önce paylaşıldı)')
+  }
   if (!verdict.pass) {
     await queuePost(source, incoming, fromChat, 'skipped', verdict.reason)
     return { kind: 'ignore' as const, count: 0, skipped: verdict.reason }
@@ -721,12 +797,37 @@ async function albumParts(m: MediaMessage): Promise<AlbumPart[]> {
   return r.map((p) => ({ type: p.kind === 'video' || p.kind === 'document' ? p.kind : 'photo', fileId: p.file_id }))
 }
 
+type Entity = { type: string; offset: number; length: number }
+
+/**
+ * Blanks out rows of premium emoji (two or more in a row: a word or banner drawn with them). A bot
+ * cannot send them, so only stand-in faces would be left. Lengths are kept so the other entities still fit.
+ */
+function blankEmojiRuns(text: string, entities: Entity[]) {
+  const emoji = entities.filter((e) => e.type === 'custom_emoji').sort((a, b) => a.offset - b.offset)
+  const chars = [...text.split('')]
+  let run: Entity[] = []
+  const flush = () => {
+    if (run.length > 1) for (const e of run) chars.fill(' ', e.offset, e.offset + e.length)
+    run = []
+  }
+  for (const e of emoji) {
+    const last = run[run.length - 1]
+    if (last && text.slice(last.offset + last.length, e.offset).trim() !== '') flush()
+    run.push(e)
+  }
+  flush()
+  return chars.join('')
+}
+
 function toIncoming(m: MediaMessage, edited: boolean, album: AlbumPart[]): Incoming {
+  const entities = m.entities ?? m.caption_entities ?? []
+  const raw = m.text ?? m.caption ?? ''
   return {
     chatId: String(m.chat.id),
     messageId: m.message_id,
     replyTo: m.reply_to_message?.message_id ?? null,
-    text: entitiesToCleanText(m.text ?? m.caption ?? '', m.entities ?? m.caption_entities ?? []),
+    text: entitiesToCleanText(blankEmojiRuns(raw, entities), entities),
     photo: m.photo?.length ? m.photo[m.photo.length - 1].file_id : null,
     edited,
     hasMedia: Boolean(m.photo?.length || m.video || m.animation || m.document),
@@ -835,8 +936,8 @@ export async function resolveOddsQueue(id: number, action: QueueAction) {
     buttons: cleanButtons(payload.buttons),
   }
   const listed = (await rows(sql`SELECT 1 FROM special_odds WHERE source_chat = ${source.chatId} AND source_msg = ${incoming.messageId} LIMIT 1`)).length > 0
-  const odds = listed ? [] : (await readOddsPost(incoming.text)).odds
-  const verdict: Verdict = { pass: true, reason: 'Panelden paylaşıldı', odds, listAnyway: false }
+  const read = listed ? NO_READ : await readOddsPost(incoming.text, pictureOf(config, incoming))
+  const verdict: Verdict = { odds: read.odds, note: read.note, coupon: read.coupon, pass: true, reason: 'Panelden paylaşıldı' }
   const media = action === 'text' ? 'text' : action === 'media' ? 'media' : 'auto'
   const stored = await publishAndStore(source, incoming, payload.fromChat ?? null, verdict, media).catch((error) => {
     if (error instanceof MediaError) throw new Error(`Medya yine alınamadı (${error.message}). “Yazıyla gönder” ile medyasız paylaşabilirsin.`)
@@ -884,12 +985,12 @@ export async function scrapeOddsSources(config?: OddsBotConfig) {
       const fresh = posts.filter((p) => p.id > last!).slice(0, WEB_BATCH)
       for (const post of fresh) {
         await rows(sql`UPDATE odds_sources SET web_last = GREATEST(COALESCE(web_last, 0), ${post.id}) WHERE id = ${source.id}`)
-        const text = scrapedHtmlToCleanText(post.html)
+        const text = scrapedHtmlToCleanText(post.html, { dropEmojiRuns: true })
         if (!text) continue
         const incoming: Incoming = {
           chatId: source.chatId,
           messageId: post.id,
-          replyTo: null,
+          replyTo: post.replyTo ?? null,
           text,
           photo: post.photos[0] ?? null,
           edited: false,
