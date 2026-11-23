@@ -1,5 +1,15 @@
-import { neon } from '@neondatabase/serverless'
+import { neon, neonConfig } from '@neondatabase/serverless'
 import { trackedSetting } from '@/lib/panel-log-shared'
+
+/** Longest a settings query may wait for its answer. */
+const READ_LIMIT_MS = 20_000
+
+// These queries travel over HTTP and `fetch` has no time limit of its own: a request the database never
+// answered kept the page waiting until the platform killed it five minutes later.
+neonConfig.fetchFunction = (input: RequestInfo | URL, init?: RequestInit) => {
+  const limit = AbortSignal.timeout(READ_LIMIT_MS)
+  return fetch(input, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, limit]) : limit })
+}
 
 const sql = neon(process.env.DATABASE_URL!)
 
