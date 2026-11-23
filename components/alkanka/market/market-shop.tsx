@@ -128,25 +128,26 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
   const detailState = detail ? buyState(detail, leftOf(detail), usedOf(detail), points, signedIn, detailPay) : null
 
   return (
-    <section aria-label="Puan marketi" className="@container flex flex-col gap-6">
-      <div className="panel-gold flex flex-col gap-4 rounded-2xl p-4 @2xl:flex-row @2xl:items-center @2xl:justify-between">
-        <div className="flex items-center gap-3">
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/15">
+    <section aria-label="Puan marketi" className="@container flex flex-col gap-6 max-sm:gap-4">
+      {/* Phones: one row, balance on the left and one button on the right. */}
+      <div className="panel-gold flex flex-col gap-4 rounded-2xl p-4 max-sm:flex-row max-sm:items-center max-sm:justify-between max-sm:gap-3 max-sm:px-4 max-sm:py-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/15 max-sm:hidden">
             <Coins className="size-6 text-primary" aria-hidden="true" />
           </span>
-          <div className="flex flex-col">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{signedIn ? 'Bakiyen' : 'Kanka Coin ile alışveriş'}</span>
+          <div className="flex min-w-0 flex-col">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground max-sm:normal-case max-sm:tracking-normal">{signedIn ? 'Bakiyen' : 'Kanka Coin ile alışveriş'}</span>
             {signedIn ? (
-              <span className="font-display text-3xl font-bold leading-tight text-foreground tabular-nums">
+              <span className="font-display text-3xl font-bold leading-tight text-foreground tabular-nums max-sm:text-2xl">
                 {formatAC(points)} <span className="text-base font-semibold text-muted-foreground">KC</span>
               </span>
             ) : (
-              <span className="font-display text-xl font-bold leading-tight text-foreground text-balance">Giriş yap, coinini ödüle çevir</span>
+              <span className="font-display text-xl font-bold leading-tight text-foreground text-balance max-sm:text-base">Giriş yap, coinini ödüle çevir</span>
             )}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
+        <div className="flex flex-wrap items-center gap-3 max-sm:shrink-0">
+          <p className="text-sm leading-relaxed text-muted-foreground text-pretty max-sm:hidden">
             {signedIn
               ? reachable > 0
                 ? `Coinin şu an ${reachable} ürüne yetiyor.`
@@ -154,12 +155,12 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
               : 'Oyunlardan ve görevlerden coin topla, buradan harca.'}
           </p>
           {signedIn ? (
-            <Link href="/gorevler" className="flex h-10 items-center gap-2 rounded-lg border border-primary/40 px-3 text-sm font-bold text-primary hover:bg-primary/10">
+            <Link href="/gorevler" className="flex h-10 items-center gap-2 rounded-lg border border-primary/40 px-3 text-sm font-bold text-primary hover:bg-primary/10 max-sm:h-11">
               <Target className="size-4" aria-hidden="true" />
               Coin kazan
             </Link>
           ) : (
-            <button type="button" onClick={() => requireLogin()} className="flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground hover:opacity-90">
+            <button type="button" onClick={() => requireLogin()} className="flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground hover:opacity-90 max-sm:h-11">
               Giriş yap
             </button>
           )}
@@ -203,7 +204,7 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
       )}
 
       <div className="flex flex-col gap-4">
-        <div role="tablist" aria-label="Market kategorisi" className="flex max-w-full gap-1 self-start overflow-x-auto rounded-xl border border-border bg-card p-1 [scrollbar-width:none]">
+        <div role="tablist" aria-label="Market kategorisi" className="flex max-w-full gap-1 self-start overflow-x-auto rounded-xl border border-border bg-card p-1 [scrollbar-width:none] max-sm:[&>button]:py-3">
           {categories.map((c) => (
             <button
               key={c.id}
@@ -243,7 +244,7 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
               <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
                 Bu ürünleri normal fiyatından da alabilirsin. Kartta yazan görevi tamamlarsan görev fiyatı kendiliğinden uygulanır; ayrıca bir şey yapmana gerek yok.
               </p>
-              <ul className="grid grid-cols-2 gap-3 @2xl:grid-cols-3 @5xl:grid-cols-4">
+              <ul className="grid grid-cols-2 gap-3 max-sm:gap-2.5 @2xl:grid-cols-3 @5xl:grid-cols-4">
                 {deals.map((item) => (
                   <ProductCard key={item.id} {...cardProps(item)} />
                 ))}
@@ -259,7 +260,7 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
               {inCategory(shown).length === 0 ? (
                 <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">{EMPTY_TEXT[shown]}</p>
               ) : (
-                <ul className="grid grid-cols-2 gap-3 @2xl:grid-cols-3 @5xl:grid-cols-4">
+                <ul className="grid grid-cols-2 gap-3 max-sm:gap-2.5 @2xl:grid-cols-3 @5xl:grid-cols-4">
                   {inCategory(shown).map((item) => (
                     <ProductCard key={item.id} {...cardProps(item)} />
                   ))}

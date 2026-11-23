@@ -186,8 +186,16 @@ type CardProps = {
 
 export function ProductCard({ item, left, used, points, signedIn, pay, taskDone, onBuy, onDetail }: CardProps) {
   const state = buyState(item, left, used, points, signedIn, pay)
+  const level = stockLevel(left, item.total)
+  // Phones: the card is the picture, the name and the price; one tap opens the detail sheet, which carries the button.
   return (
-    <li className="panel-gold flex flex-col overflow-hidden rounded-xl">
+    <li className="panel-gold relative flex flex-col overflow-hidden rounded-xl max-sm:rounded-2xl">
+      <button
+        type="button"
+        onClick={onDetail}
+        aria-label={`${item.name}: detay ve ${buyLabel(item).toLocaleLowerCase('tr')}`}
+        className="absolute inset-0 z-10 rounded-2xl focus-visible:outline-2 focus-visible:outline-primary sm:hidden"
+      />
       <div className="relative aspect-[4/3] overflow-hidden bg-secondary">
         <Image
           src={productImage(item)}
@@ -206,20 +214,34 @@ export function ProductCard({ item, left, used, points, signedIn, pay, taskDone,
           </div>
         )}
       </div>
-      <div className="flex flex-1 flex-col gap-3 p-3">
+      <div className="flex flex-1 flex-col gap-3 p-3 max-sm:gap-1.5 max-sm:p-2.5">
         <div className="flex flex-col items-start gap-1.5">
-          <h3 className="text-sm font-semibold leading-snug text-foreground text-pretty">{item.name}</h3>
-          <DeliveryLine item={item} className="max-w-full" />
+          <h3 className="text-sm font-semibold leading-snug text-foreground text-pretty max-sm:line-clamp-2">{item.name}</h3>
+          <DeliveryLine item={item} className="max-w-full max-sm:hidden" />
+          <span className={cn('text-xs tabular-nums sm:hidden', level === 'out' ? 'font-semibold text-destructive' : level === 'low' ? 'font-semibold text-primary' : 'text-muted-foreground')}>
+            {level === 'out' ? 'Stok tükendi' : level === 'low' ? `Son ${left} adet` : item.total > 0 ? `Stok ${left}/${item.total}` : 'Stokta'}
+          </span>
         </div>
-        <StockMeter left={left} total={item.total} />
-        <div className="mt-auto flex flex-col gap-2">
-          <DealLine item={item} taskDone={taskDone} />
+        <StockMeter left={left} total={item.total} className="max-sm:hidden" />
+        <div className="mt-auto flex flex-col gap-2 max-sm:gap-1">
+          <div className="max-sm:hidden">
+            <DealLine item={item} taskDone={taskDone} />
+          </div>
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <Price value={pay} was={item.price} />
-            <LimitLine item={item} used={used} signedIn={signedIn} />
+            <span className="max-sm:hidden">
+              <LimitLine item={item} used={used} signedIn={signedIn} />
+            </span>
           </div>
-          <BuyButton item={item} state={state} onBuy={onBuy} />
-          <DetailButton onClick={onDetail} />
+          {dealShown(item, taskDone) && item.dealTask ? (
+            <span className="text-xs font-semibold text-primary sm:hidden">
+              {taskDone ? 'Görev fiyatı uygulandı' : `Görevle ${formatAC(item.dealPrice)} KC`}
+            </span>
+          ) : null}
+          <div className="contents max-sm:hidden">
+            <BuyButton item={item} state={state} onBuy={onBuy} />
+            <DetailButton onClick={onDetail} />
+          </div>
         </div>
       </div>
     </li>

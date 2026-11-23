@@ -100,7 +100,7 @@ export default async function GamePage({ params }: { params: Promise<{ oyun: str
     <div data-game-page className="flex min-w-0 flex-col gap-5">
       {isOpen(oyun) && <script type="application/ld+json" dangerouslySetInnerHTML={jsonLd(gameLd(oyun))} />}
       <div className="flex flex-col gap-3 [body:has([data-table-playing])_&]:hidden">
-        <Link href="/oyunlar" className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground">
+        <Link href="/oyunlar" className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground max-sm:hidden">
           <ArrowLeft className="size-4" aria-hidden="true" />
           Tüm oyunlar
         </Link>

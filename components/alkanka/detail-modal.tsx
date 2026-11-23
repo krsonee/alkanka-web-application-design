@@ -123,7 +123,12 @@ export function DetailModal({
                 {content.note}
               </JakoTip>
             )}
-            {action}
+            {action ? (
+              // Phones: the button stays at the sheet's bottom edge while the rules scroll behind it.
+              <div className="flex flex-col max-sm:sticky max-sm:bottom-0 max-sm:-mx-5 max-sm:-mb-5 max-sm:border-t max-sm:border-border max-sm:bg-card max-sm:px-5 max-sm:py-3">
+                {action}
+              </div>
+            ) : null}
           </div>
         </>
       )}

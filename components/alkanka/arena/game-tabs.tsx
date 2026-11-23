@@ -12,7 +12,7 @@ export function GameTabs({ items, current }: { items: { key: string; title: stri
           key={it.key}
           href={`/oyunlar/${it.key}`}
           aria-current={it.key === current ? 'page' : undefined}
-          className="shrink-0 truncate rounded-md px-3 py-2 text-center text-xs font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground max-sm:aria-[current=page]:order-first sm:px-1.5 sm:text-sm"
+          className="shrink-0 truncate rounded-md px-3 py-2 max-sm:px-3.5 max-sm:py-3 text-center text-xs font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground max-sm:aria-[current=page]:order-first sm:px-1.5 sm:text-sm"
         >
           {it.title}
         </Link>
