@@ -19,7 +19,7 @@ import {
   withSharedRules,
   type ScrapedPost,
 } from '@/lib/telegram-mirror'
-import { parseReplacements, rewritePlain } from '@/lib/text-replace'
+import { MAX_SENT_BUTTONS, parseReplacements, rewritePlain } from '@/lib/text-replace'
 import { readOddsPost, type OddsImage, type OddsReading } from '@/lib/odds-parse'
 import { carriedPost, isBareNote, namesMatch, oddsPost, resultNotice, type OddsPostText, type SettledOdd } from '@/lib/odds-post'
 import { assertPublicUrl } from '@/lib/public-address'
@@ -30,12 +30,15 @@ import type { TgMessage } from '@/lib/telegram-chat'
 import { buttonError, buttonMarkup, cleanButtons, type PostButton } from '@/lib/tg-buttons'
 import {
   DEFAULT_ODDS_BOT,
+  NO_MAIN_CHANNEL,
+  NO_SPONSOR_LINK,
   ODDS_MAX,
   ODDS_PAGE,
   hasOddNumber,
   istanbulDay,
   oddsTagLine,
   splitWords,
+  sponsorLinkError,
   toMediaFallback,
   toOddsPassMode,
   toOddsTag,
@@ -91,6 +94,7 @@ function ensureOddsTables() {
     await rows(sql`ALTER TABLE odds_sources ADD COLUMN IF NOT EXISTS pass_words text NOT NULL DEFAULT ''`)
     await rows(sql`ALTER TABLE odds_sources ADD COLUMN IF NOT EXISTS buttons text NOT NULL DEFAULT '[]'`)
     await rows(sql`ALTER TABLE odds_sources ADD COLUMN IF NOT EXISTS carry_buttons boolean NOT NULL DEFAULT false`)
+    await rows(sql`ALTER TABLE odds_sources ADD COLUMN IF NOT EXISTS sponsor_link text NOT NULL DEFAULT ''`)
     // Posts that were not shared as an odd: skipped by the source's rule, waiting for their media, or shared without odds.
     await rows(sql`CREATE TABLE IF NOT EXISTS odds_queue (
       id serial PRIMARY KEY, source_id int REFERENCES odds_sources(id) ON DELETE CASCADE, source_chat text NOT NULL, source_msg bigint NOT NULL,
@@ -224,6 +228,8 @@ export async function oddsBotStatus(): Promise<OddsBotStatus> {
   let pending = 0
   let lastError: string | null = null
   let channelError: string | null = null
+  let mainChannelError: string | null = null
+  const main = await mainChannel()
   if (config.botId) {
     try {
       const token = await botToken(config.botId)
@@ -231,7 +237,10 @@ export async function oddsBotStatus(): Promise<OddsBotStatus> {
       webhookUrl = info.url || null
       pending = info.pending_update_count
       lastError = info.last_error_message ?? null
-      if (config.channelId) channelError = await channelAccessError(token, config)
+      if (config.channelId) {
+        channelError = await channelAccessError(token, { chatId: config.channelId, title: config.channelTitle || 'özel oran kanalımız' }, 'oranlar kanala düşmez')
+      }
+      if (main) mainChannelError = await channelAccessError(token, main, 'kampanya ve bonus postları ana kanala düşmez')
     } catch (error) {
       lastError = String((error as Error).message)
     }
@@ -251,21 +260,38 @@ export async function oddsBotStatus(): Promise<OddsBotStatus> {
     lastUpdateAt: lastUpdateAt || null,
     todayTotal: Number(today?.c ?? 0),
     channelError,
+    mainChannel: main?.title ?? null,
+    mainChannelError,
     publishError,
     activeSources: Number(sources?.c ?? 0),
   }
 }
 
+/** A channel of ours the bot posts into. */
+type Outlet = { chatId: string; title: string }
+
+/**
+ * Our main (announcement) channel, as registered in the Telegram section. Posts without an odd go
+ * here instead of the odds channel. The keys are the ones lib/telegram-channels.ts keeps for `duyuru`.
+ */
+async function mainChannel(): Promise<Outlet | null> {
+  const r = await rows<{ key: string; value: string }>(sql`SELECT key, value FROM tg_settings WHERE key IN ('channel_duyuru', 'channel_duyuru_id')`)
+  const username = r.find((s) => s.key === 'channel_duyuru')?.value?.replace(/^@/, '').trim()
+  const id = r.find((s) => s.key === 'channel_duyuru_id')?.value?.trim()
+  if (!username && !id) return null
+  return { chatId: id || `@${username}`, title: username ? `@${username}` : String(id) }
+}
+
 /** The bot is checked when the channel is saved, but it can be demoted or removed afterwards. */
-async function channelAccessError(token: string, config: OddsBotConfig) {
-  const name = config.channelTitle || 'özel oran kanalımız'
+async function channelAccessError(token: string, outlet: Outlet, effect: string) {
+  const name = outlet.title
   try {
     const member = await callBot<{ status: string; can_post_messages?: boolean }>(token, 'getChatMember', {
-      chat_id: config.channelId,
+      chat_id: outlet.chatId,
       user_id: Number(token.split(':')[0]),
     })
     if (member.status !== 'administrator' && member.status !== 'creator') {
-      return `Bot “${name}” kanalında yönetici değil, oranlar kanala düşmez. Kanal ayarlarından botu yönetici yap ve “Mesaj gönder” yetkisini aç`
+      return `Bot “${name}” kanalında yönetici değil, ${effect}. Kanal ayarlarından botu yönetici yap ve “Mesaj gönder” yetkisini aç`
     }
     if (member.can_post_messages === false) return `Botun “${name}” kanalında “Mesaj gönder” yetkisi kapalı. Yönetici ayarından aç`
     return null
@@ -292,6 +318,7 @@ function mapSource(r: Record<string, unknown>): OddsSource {
     title: String(r.title),
     siteName: String(r.site_name),
     siteLink: String(r.site_link),
+    sponsorLink: String(r.sponsor_link ?? ''),
     siteLogo: r.site_logo ? String(r.site_logo) : null,
     replacements: String(r.replacements ?? ''),
     footer: String(r.footer ?? ''),
@@ -320,6 +347,18 @@ export async function updateOddsSourceText(id: number, input: { siteLink: string
   if (!/^https?:\/\/\S+$/i.test(siteLink)) throw new Error('Site linki http(s):// ile başlamalı')
   await rows(sql`UPDATE odds_sources SET site_link = ${siteLink.slice(0, 400)}, replacements = ${checkedRules(input.replacements)},
     footer = ${input.footer.trim().slice(0, 300)} WHERE id = ${id}`)
+}
+
+function checkedSponsorLink(link: string) {
+  const invalid = sponsorLinkError(link)
+  if (invalid) throw new Error(invalid)
+  return link.trim().slice(0, 400)
+}
+
+/** Where the source's campaign posts lead. Empty clears it, and campaign posts of the source wait until it is set again. */
+export async function updateOddsSourceSponsorLink(id: number, link: string) {
+  await ensureOddsTables()
+  await rows(sql`UPDATE odds_sources SET sponsor_link = ${checkedSponsorLink(link)} WHERE id = ${id}`)
 }
 
 function sourceRule(input: { passMode: string; passWords: string; buttons: unknown; carryButtons?: boolean }) {
@@ -352,6 +391,7 @@ export async function addOddsSource(input: {
   chat: string
   siteName: string
   siteLink: string
+  sponsorLink?: string
   siteLogo: string
   replacements: string
   footer: string
@@ -370,6 +410,7 @@ export async function addOddsSource(input: {
   const siteLink = input.siteLink.trim()
   if (!siteName) throw new Error('Site adını yaz')
   if (!/^https?:\/\/\S+$/i.test(siteLink)) throw new Error('Site linki http(s):// ile başlamalı')
+  const sponsorLink = checkedSponsorLink(input.sponsorLink ?? '')
   const chat = normalizeChat(input.chat)
   if (!chat) throw new Error('Kaynak kanal geçersiz. Örnek: @siteoranlar ya da -1001234567890')
   let chatId = chat
@@ -386,10 +427,11 @@ export async function addOddsSource(input: {
   const logo = input.siteLogo.trim()
   const tag = toOddsTag(input.tag)
   const tagText = tag === 'none' ? '' : input.tagText.trim().slice(0, 60)
-  await rows(sql`INSERT INTO odds_sources (chat_id, title, site_name, site_link, site_logo, replacements, footer, tag, tag_text, pass_mode, pass_words, buttons, carry_buttons)
-    VALUES (${chatId}, ${title.slice(0, 80)}, ${siteName}, ${siteLink.slice(0, 400)}, ${/^https?:\/\/|^\//.test(logo) ? logo.slice(0, 400) : null},
+  await rows(sql`INSERT INTO odds_sources (chat_id, title, site_name, site_link, sponsor_link, site_logo, replacements, footer, tag, tag_text, pass_mode, pass_words, buttons, carry_buttons)
+    VALUES (${chatId}, ${title.slice(0, 80)}, ${siteName}, ${siteLink.slice(0, 400)}, ${sponsorLink}, ${/^https?:\/\/|^\//.test(logo) ? logo.slice(0, 400) : null},
       ${replacements}, ${input.footer.trim().slice(0, 300)}, ${tag}, ${tagText}, ${rule.passMode}, ${rule.passWords}, ${rule.buttons}, ${rule.carryButtons})
     ON CONFLICT (chat_id) DO UPDATE SET site_name = EXCLUDED.site_name, site_link = EXCLUDED.site_link, site_logo = EXCLUDED.site_logo,
+      sponsor_link = CASE WHEN EXCLUDED.sponsor_link = '' THEN odds_sources.sponsor_link ELSE EXCLUDED.sponsor_link END,
       replacements = EXCLUDED.replacements, footer = EXCLUDED.footer, tag = EXCLUDED.tag, tag_text = EXCLUDED.tag_text,
       pass_mode = EXCLUDED.pass_mode, pass_words = EXCLUDED.pass_words, buttons = EXCLUDED.buttons, carry_buttons = EXCLUDED.carry_buttons, active = true`)
   return title
@@ -434,7 +476,10 @@ function classify(text: string, config: OddsBotConfig): OddsPreview['kind'] {
 const candidateKind = (text: string): OddsPreview['kind'] => (isOddsText(text) || hasOddNumber(text) ? 'odds' : 'ignore')
 
 type Read = Pick<OddsReading, 'odds' | 'note' | 'coupon'>
-type Verdict = Read & { pass: boolean; reason: string }
+/** `unread`: the post is an odd whose odd could not be read. It stays an odds channel post and is never taken for a campaign. */
+type Verdict = Read & { pass: boolean; reason: string; unread?: boolean }
+
+const READER_SILENT = 'Oran okunamadı (okuyucu yanıt vermedi)'
 
 const NO_READ: Read = { odds: [], note: '', coupon: null }
 const skip = (reason: string): Verdict => ({ ...NO_READ, pass: false, reason })
@@ -451,29 +496,45 @@ async function passRule(
     if (!splitWords(source.passWords).some((w) => lower.includes(w))) return skip('Anahtar kelime geçmiyor')
   }
   if (source.passMode !== 'odds') {
-    const read = kind === 'odds' ? await readOddsPost(text, picture) : NO_READ
-    return { ...read, pass: true, reason: read.odds.length ? '' : 'Oran yok, kaynağın kuralı gereği paylaşıldı' }
+    if (kind !== 'odds') return { ...NO_READ, pass: true, reason: 'Oran yok, kaynağın kuralı gereği paylaşıldı' }
+    const read = await readOddsPost(text, picture)
+    if (read.odds.length) return { ...read, pass: true, reason: '' }
+    // An odd and a campaign go to different channels of ours, so a post the reader gave no answer for waits in the panel.
+    if (read.failed) return skip(READER_SILENT)
+    return read.claimed
+      ? { ...read, pass: true, unread: true, reason: 'Oranı okunamadı, kaynağın kuralı gereği paylaşıldı' }
+      : { ...read, pass: true, reason: 'Oran yok, kaynağın kuralı gereği paylaşıldı' }
   }
   if (kind !== 'odds') return skip('Oran yok')
   const read = await readOddsPost(text, picture)
   if (read.odds.length) return { ...read, pass: true, reason: '' }
   // Without the reader a post it could not read by rule waits in the panel; nothing goes out on a guess.
-  if (read.failed) return skip('Oran okunamadı (okuyucu yanıt vermedi)')
+  if (read.failed) return skip(READER_SILENT)
   return skip(read.kind === 'sonuc' ? 'Sonuç postu (ilgili oran bulunamadı)' : 'Oran yok')
 }
 
-/** The post as it goes into our channel: an odd in our own layout, anything else as the source wrote it under our headline. */
+/**
+ * The post as it goes out: an odd in our own layout for the odds channel, anything else as a campaign
+ * for the main channel. A campaign's links lead to the sponsor's own site, and the odds channel's
+ * footer has no place under it. `kind: 'odds'` is an odd without a read: one already listed being
+ * sent again, or one whose match is only on its video.
+ */
 export function composeOddsPost(
   text: string,
-  source: Pick<OddsSource, 'siteName' | 'siteLink'> & Partial<Pick<OddsSource, 'replacements' | 'footer' | 'tag' | 'tagText'>>,
+  source: Pick<OddsSource, 'siteName' | 'siteLink'> & Partial<Pick<OddsSource, 'replacements' | 'footer' | 'tag' | 'tagText' | 'sponsorLink'>>,
   config: Pick<OddsBotConfig, 'footer'>,
   read: Read = NO_READ,
+  kind: 'auto' | 'odds' = 'auto',
 ): OddsPostText {
   const rules = parseReplacements(source.replacements ?? '')
+  const ownFooter = source.footer?.trim() ?? ''
   const head = {
     siteName: source.siteName,
     tagLine: oddsTagLine(source.tag ?? 'none', source.tagText ?? ''),
-    footer: source.footer?.trim() || config.footer,
+    footer: ownFooter || config.footer,
+  }
+  if (!read.odds.length && kind === 'auto') {
+    return carriedPost({ ...head, footer: ownFooter, body: rewritePlain(text, rules, source.sponsorLink ?? '', 'odds') })
   }
   if (!read.odds.length) return carriedPost({ ...head, body: rewritePlain(text, rules, source.siteLink, 'odds') })
   const note = read.note ? rewritePlain(read.note, rules, source.siteLink, 'odds') : ''
@@ -489,19 +550,28 @@ const textFields = (post: OddsPostText) =>
 export async function previewOddsPost(text: string, sourceId: number | null): Promise<OddsPreview> {
   const config = await getOddsBotConfig()
   const sources = await listOddsSources()
-  const found = sources.find((s) => s.id === sourceId) ?? { siteName: 'Site', siteLink: 'https://site.com', passMode: 'odds' as const, passWords: '', replacements: '' }
+  const found = sources.find((s) => s.id === sourceId) ?? {
+    siteName: 'Site',
+    siteLink: 'https://site.com',
+    sponsorLink: 'https://site.com',
+    passMode: 'odds' as const,
+    passWords: '',
+    replacements: '',
+  }
   const source = { ...found, replacements: withSharedRules(found.replacements, await sharedRules()) }
   const signal = classify(text, config)
   // A result word alone settles nothing: only a bare note ("Kazandı ✅") is taken as a result here, as in the live flow.
   if (signal !== 'odds' && signal !== 'ignore' && isBareNote(text)) return { kind: signal, odds: [], rewritten: '', verdict: null, reason: '' }
   const kind = candidateKind(text)
   const rule = await passRule(source, text, kind)
+  const campaign = rule.pass && !rule.odds.length && !rule.unread
+  const blocked = campaign ? (!source.sponsorLink ? NO_SPONSOR_LINK : (await mainChannel()) ? '' : NO_MAIN_CHANNEL) : ''
   return {
     kind: rule.odds.length ? 'odds' : kind,
     odds: rule.odds.map((o) => ({ match: o.match, market: o.market, oldOdd: o.oldOdd, newOdd: o.newOdd })),
-    rewritten: rule.pass ? composeOddsPost(text, source, config, rule).plain : '',
-    verdict: rule.pass ? 'send' : 'skip',
-    reason: rule.reason,
+    rewritten: rule.pass ? composeOddsPost(text, source, config, rule, rule.unread ? 'odds' : 'auto').plain : '',
+    verdict: rule.pass && !blocked ? 'send' : 'skip',
+    reason: blocked || (campaign ? `${rule.reason} · ana kanala gider` : rule.reason),
   }
 }
 
@@ -528,12 +598,35 @@ type Incoming = {
 
 type Sent = { message_id: number }
 
+/** Which of our channels a post goes into, and the buttons under it. */
+type Route = { dest: Outlet; buttons: PostButton[] }
+
+const oddsRoute = (config: OddsBotConfig, source: OddsSource, incoming: Incoming): Route => ({
+  dest: { chatId: config.channelId, title: config.channelTitle },
+  buttons: postButtons({ link: source.siteLink, buttons: source.buttons, carryButtons: source.carryButtons }, incoming.buttons, parseReplacements(source.replacements)),
+})
+
+/** Under a campaign the first button always opens the sponsor's own site; the source's and our own buttons follow. */
+function campaignButtons(source: OddsSource, own: PostButton[] | undefined) {
+  const rest = postButtons({ link: source.sponsorLink, buttons: source.buttons, carryButtons: source.carryButtons }, own, parseReplacements(source.replacements))
+  const lead = { text: `${source.siteName} giriş`.slice(0, 40), url: source.sponsorLink }
+  return [lead, ...rest.filter((b) => b.url !== lead.url)].slice(0, MAX_SENT_BUTTONS)
+}
+
+/** A campaign never falls back to the odds channel or to a link of ours: without its channel or the sponsor's link it waits in the panel. */
+async function campaignRoute(source: OddsSource, incoming: Incoming): Promise<Route | { blocked: string }> {
+  if (!source.sponsorLink) return { blocked: NO_SPONSOR_LINK }
+  const dest = await mainChannel()
+  if (!dest) return { blocked: NO_MAIN_CHANNEL }
+  return { dest, buttons: campaignButtons(source, incoming.buttons) }
+}
+
 /** Shares the post with its own photo, video, GIF or album. Throws MediaError when the media can't be carried over. */
-async function publishToChannel(config: OddsBotConfig, source: OddsSource, incoming: Incoming, post: OddsPostText, fromChat: string | null, withMedia = true) {
-  if (!config.enabled || !config.botId || !config.channelId) return null
+async function publishToChannel(config: OddsBotConfig, route: Route, incoming: Incoming, post: OddsPostText, fromChat: string | null, withMedia = true) {
+  if (!config.enabled || !config.botId || !route.dest.chatId) return null
   const token = await botToken(config.botId)
-  const chat_id = config.channelId
-  const buttons = postButtons({ link: source.siteLink, buttons: source.buttons, carryButtons: source.carryButtons }, incoming.buttons, parseReplacements(source.replacements))
+  const chat_id = route.dest.chatId
+  const buttons = route.buttons
   const markup = buttonMarkup(buttons)
   const sendText = async () =>
     (await callBot<Sent>(token, 'sendMessage', { chat_id, ...textFields(post), link_preview_options: { is_disabled: true }, ...markup })).message_id
@@ -564,7 +657,7 @@ async function publishToChannel(config: OddsBotConfig, source: OddsSource, incom
   }
   if (incoming.post) {
     const fields = textFields(post)
-    const delivered = await deliver({ token, chatId: chat_id, title: config.channelTitle }, incoming.post, fields.text, fields.parse_mode ? 'HTML' : undefined, {
+    const delivered = await deliver({ token, chatId: chat_id, title: route.dest.title }, incoming.post, fields.text, fields.parse_mode ? 'HTML' : undefined, {
       buttons,
       mediaFail: 'throw',
     })
@@ -598,28 +691,48 @@ async function alreadySeen(chatId: string, messageId: number) {
   return r.length > 0
 }
 
-async function notePublishError(error: unknown) {
+async function notePublishError(error: unknown, mainChannelName = '') {
   console.error('[odds-bot] publish failed', error)
-  const failure = { at: new Date().toISOString(), message: String((error as Error).message).slice(0, 300) }
+  const message = String((error as Error).message)
+  const failure = { at: new Date().toISOString(), message: (mainChannelName ? `Ana kanal (${mainChannelName}): ${message}` : message).slice(0, 300) }
   await setSetting(PUBLISH_ERROR_KEY, JSON.stringify(failure)).catch(() => null)
 }
 
-/** Shares a post that passed the source's rule and records it. `media` forces one path; by default the bot's setting decides. */
-async function publishAndStore(own: OddsSource, incoming: Incoming, fromChat: string | null, verdict: Verdict, media: 'auto' | 'media' | 'text' = 'auto') {
+/**
+ * Shares a post that passed the source's rule and records it. An odd goes to the odds channel; a post
+ * without one is a campaign and goes to the main channel. `media` forces one path; by default the
+ * bot's setting decides. `listed` is an odd already on the site being sent again.
+ */
+async function publishAndStore(
+  own: OddsSource,
+  incoming: Incoming,
+  fromChat: string | null,
+  verdict: Verdict,
+  media: 'auto' | 'media' | 'text' = 'auto',
+  listed = false,
+) {
   const config = await getOddsBotConfig()
   const source: OddsSource = { ...own, replacements: withSharedRules(own.replacements, await sharedRules()) }
-  const post = composeOddsPost(incoming.text, source, config, verdict)
+  const asOdd = listed || Boolean(verdict.unread)
+  const campaign = !verdict.odds.length && !asOdd
+  const route = campaign ? await campaignRoute(source, incoming) : oddsRoute(config, source, incoming)
+  if ('blocked' in route) {
+    await queuePost(source, incoming, fromChat, 'skipped', route.blocked)
+    return { count: 0, ourMsg: null, held: false, blocked: route.blocked, outlet: null }
+  }
+  const outlet = campaign ? route.dest.title : ''
+  const post = composeOddsPost(incoming.text, source, config, verdict, asOdd ? 'odds' : 'auto')
   const rewritten = post.plain
   let ourMsg: number | null = null
   let held: string | null = null
   try {
-    ourMsg = await publishToChannel(config, source, incoming, post, fromChat, media !== 'text')
+    ourMsg = await publishToChannel(config, route, incoming, post, fromChat, media !== 'text')
   } catch (error) {
-    if (!(error instanceof MediaError)) await notePublishError(error)
+    if (!(error instanceof MediaError)) await notePublishError(error, outlet)
     else if (media === 'media') throw error
     else if (config.mediaFallback === 'hold') held = error.message || 'Medya alınamadı'
-    else ourMsg = await publishToChannel(config, source, incoming, post, fromChat, false).catch(async (again) => {
-      await notePublishError(again)
+    else ourMsg = await publishToChannel(config, route, incoming, post, fromChat, false).catch(async (again) => {
+      await notePublishError(again, outlet)
       return null
     })
   }
@@ -636,8 +749,11 @@ async function publishAndStore(own: OddsSource, incoming: Incoming, fromChat: st
       ON CONFLICT (source_chat, source_msg, idx) DO UPDATE SET our_msg = COALESCE(special_odds.our_msg, EXCLUDED.our_msg)`)
   }
   if (held) await queuePost(source, incoming, fromChat, 'held', held)
-  else if (!items.length) await queuePost(source, incoming, fromChat, ourMsg ? 'sent' : 'skipped', ourMsg ? verdict.reason : 'Kanala gönderilemedi (bot kapalı ya da hata verdi)')
-  return { count: items.length, ourMsg, held: Boolean(held) }
+  else if (!items.length) {
+    const sentNote = [verdict.reason, outlet ? `ana kanala (${outlet}) gitti` : ''].filter(Boolean).join(' · ')
+    await queuePost(source, incoming, fromChat, ourMsg ? 'sent' : 'skipped', ourMsg ? sentNote : 'Kanala gönderilemedi (bot kapalı ya da hata verdi)')
+  }
+  return { count: items.length, ourMsg, held: Boolean(held), blocked: null, outlet: outlet || null }
 }
 
 async function replyInChannel(config: OddsBotConfig, ourMsg: number | null, note: OddsPostText) {
@@ -769,6 +885,7 @@ async function ingest(source: OddsSource, incoming: Incoming, fromChat: string |
     return { kind: 'ignore' as const, count: 0, skipped: verdict.reason }
   }
   const stored = await publishAndStore(source, incoming, fromChat, verdict)
+  if (stored.blocked) return { kind: 'ignore' as const, count: 0, skipped: stored.blocked }
   return { kind: 'odds' as const, count: stored.count, held: stored.held }
 }
 
@@ -944,18 +1061,31 @@ export async function resolveOddsQueue(id: number, action: QueueAction) {
     buttons: cleanButtons(payload.buttons),
   }
   const listed = (await rows(sql`SELECT 1 FROM special_odds WHERE source_chat = ${source.chatId} AND source_msg = ${incoming.messageId} LIMIT 1`)).length > 0
-  const read = listed ? NO_READ : await readOddsPost(incoming.text, pictureOf(config, incoming))
-  const verdict: Verdict = { odds: read.odds, note: read.note, coupon: read.coupon, pass: true, reason: 'Panelden paylaşıldı' }
+  const read = listed ? null : await readOddsPost(incoming.text, pictureOf(config, incoming))
+  // An odd goes to the odds channel and a campaign to the main one; with no answer from the reader the post could be either.
+  if (read?.failed && candidateKind(incoming.text) === 'odds') {
+    throw new Error('Okuyucu yanıt vermedi: postun oran mı kampanya mı olduğu anlaşılamadı, bu yüzden hangi kanala gideceği belli değil. Biraz sonra tekrar dene.')
+  }
+  const verdict: Verdict = {
+    odds: read?.odds ?? [],
+    note: read?.note ?? '',
+    coupon: read?.coupon ?? null,
+    pass: true,
+    reason: 'Panelden paylaşıldı',
+    unread: Boolean(read && !read.odds.length && read.claimed),
+  }
   const media = action === 'text' ? 'text' : action === 'media' ? 'media' : 'auto'
-  const stored = await publishAndStore(source, incoming, payload.fromChat ?? null, verdict, media).catch((error) => {
+  const stored = await publishAndStore(source, incoming, payload.fromChat ?? null, verdict, media, listed).catch((error) => {
     if (error instanceof MediaError) throw new Error(`Medya yine alınamadı (${error.message}). “Yazıyla gönder” ile medyasız paylaşabilirsin.`)
     throw error
   })
+  if (stored.blocked) throw new Error(stored.blocked)
   if (stored.held) return 'Medya yine alınamadı, post beklemede kaldı. “Yazıyla gönder” ile medyasız paylaşabilirsin.'
   if (!stored.ourMsg) throw new Error('Kanala gönderilemedi. Sebebi yukarıdaki durum kutusunda yazar.')
   if (listed) await rows(sql`UPDATE special_odds SET our_msg = COALESCE(our_msg, ${stored.ourMsg}) WHERE source_chat = ${source.chatId} AND source_msg = ${incoming.messageId}`)
   if (listed || stored.count) await rows(sql`DELETE FROM odds_queue WHERE id = ${id}`)
-  return action === 'text' ? 'Post yazıyla paylaşıldı.' : 'Post paylaşıldı.'
+  const where = stored.outlet ? `ana kanala (${stored.outlet}) ` : ''
+  return action === 'text' ? `Post ${where}yazıyla paylaşıldı.` : `Post ${where}paylaşıldı.`
 }
 
 const WEB_BATCH = 10

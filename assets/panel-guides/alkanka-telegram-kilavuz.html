@@ -686,8 +686,8 @@
   <h2><span class="n">29</span> Özel Oran Botu</h2>
   <p><span class="path">Botlar → Özel Oran Botu</span>. Sekme dört adımı sırayla gösterir:</p>
   <ol>
-    <li><strong>Bot ve kanalımız:</strong> Botu kendi özel oran kanalımıza yönetici olarak ekle. Aynı botu tüm kaynak site kanallarına da eklemen gerekir.</li>
-    <li><strong>Kaynak site kanalları:</strong> Her kanal bir siteye bağlanır. Bot o kanaldaki postlardaki tüm linkleri buradaki site linkiyle değiştirir.</li>
+    <li><strong>Bot ve kanalımız:</strong> Botu kendi özel oran kanalımıza yönetici olarak ekle. Aynı botu tüm kaynak site kanallarına da eklemen gerekir. Kampanya ve bonus postları için botu ana kanala (Duyuru kanalı) da yönetici yap.</li>
+    <li><strong>Kaynak site kanalları:</strong> Her kanal bir siteye bağlanır. Bot oran postlarındaki linkleri buradaki site linkiyle, kampanya ve bonus postlarındaki linkleri kaynağın <kbd>Sponsor linki</kbd> ile değiştirir.</li>
     <li><strong>Test et / elle ekle:</strong> Kaynak kanaldan bir post yapıştır; botun onu nasıl anladığını gör, istersen bot gibi işle.</li>
     <li><strong>Oranlar ve sonuçlar:</strong> Bot sonuç postu atmazsa buradan toplu işaretle: kutuları seç, Kazandı ya da Kaybetti'ye bas.</li>
   </ol>
@@ -697,6 +697,13 @@
     <li><em>Sadece oran içerenler:</em> maçı ve oranı okunamayan post paylaşılmaz, "atlandı" diye kayda düşer. Duyuru ve reklam postları kanala gitmez.</li>
     <li><em>Anahtar kelime geçenler:</em> yazdığın kelimelerden biri geçen her post paylaşılır, oran olmasa da. Kelimeleri virgülle ayır.</li>
     <li><em>Hepsi:</em> kanaldaki her post paylaşılır.</li>
+  </ul>
+  <h3>Hangi post hangi kanala gider</h3>
+  <ul>
+    <li><strong>Oranı okunan post:</strong> özel oran kanalına gider ve sitede listelenir.</li>
+    <li><strong>Oranı olmayan post (kampanya, bonus, duyuru):</strong> özel oran kanalına gitmez, ana kanala (Telegram bölümünde kayıtlı Duyuru kanalı) gider. Hangi kanala gideceği <span class="path">Bot ve kanalımız</span> kutusunda yazar; bot o kanalda yönetici değilse aynı kutuda kırmızı uyarı çıkar.</li>
+    <li><strong>Sponsor linki:</strong> her kaynağın altındaki <kbd>Sponsor linki</kbd> kutusuna sponsorun kendi sitesine giden adresi yaz. Kampanya postunun altına "… giriş" butonu bu adresle konur, yazıdaki linkler de bu adrese çevrilir. Oran postları bundan etkilenmez.</li>
+    <li><strong>Eksik varsa post gitmez:</strong> sponsor linki boşsa ya da ana kanal kayıtlı değilse kampanya postu hiçbir kanala atılmaz; <kbd>Bekleyen ve atlanan postlar</kbd> kutusunda sebebiyle bekler. Eksiği giderip <kbd>Yine de paylaş</kbd> dersin.</li>
   </ul>
   <p>Freespin, freebet, bonus, kod, kasa, turnuva ve çekiliş postları içinde sayı ya da "oran" kelimesi geçse bile oran sayılmaz. Oranı okuyan sistem cevap vermezse bot tahminle post atmaz: düz yazılmış oran postunu (maç satırı, altında bahis, oran) kuralla okur, okuyamadığını "Oran okunamadı" diye bu kutuda bekletir.</p>
   <h3>Postun kanalımızdaki görünümü</h3>

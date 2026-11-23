@@ -7,8 +7,8 @@ export type OddsPassMode = 'odds' | 'keyword' | 'all'
 
 export const ODDS_PASS_OPTIONS: { value: OddsPassMode; label: string; hint: string }[] = [
   { value: 'odds', label: 'Sadece oran içerenler', hint: 'Maçı ve oranı okunamayan post paylaşılmaz, "atlandı" diye kayda düşer.' },
-  { value: 'keyword', label: 'Anahtar kelime geçenler', hint: 'Yazdığın kelimelerden biri geçen her post paylaşılır, oran olmasa da.' },
-  { value: 'all', label: 'Hepsi', hint: 'Kanaldaki her post paylaşılır. Duyuru ve reklam postları da gider.' },
+  { value: 'keyword', label: 'Anahtar kelime geçenler', hint: 'Yazdığın kelimelerden biri geçen her post paylaşılır. Oranı olan özel oran kanalına, oranı olmayan (kampanya, bonus) ana kanala gider.' },
+  { value: 'all', label: 'Hepsi', hint: 'Kanaldaki her post paylaşılır. Oranı olan özel oran kanalına, oranı olmayan (kampanya, bonus, duyuru) ana kanala gider.' },
 ]
 
 export const toOddsPassMode = (v: unknown): OddsPassMode => (v === 'keyword' || v === 'all' ? v : 'odds')
@@ -68,6 +68,8 @@ export type OddsSource = {
   title: string
   siteName: string
   siteLink: string
+  /** The sponsor's own site. Campaign posts (no odd) lead here; empty until the panel sets it, and such posts wait. */
+  sponsorLink: string
   siteLogo: string | null
   replacements: string
   footer: string
@@ -135,9 +137,24 @@ export type OddsBotStatus = {
   todayTotal: number
   /** Set when the bot can no longer post to our channel (removed, demoted, posting right off). */
   channelError: string | null
+  /** Our main channel, where posts without an odd go. Null when none is registered. */
+  mainChannel: string | null
+  /** Set when the bot can not post to the main channel. */
+  mainChannelError: string | null
   /** Last failed attempt to publish an odd to our channel. Cleared by the next successful post. */
   publishError: { at: string; message: string } | null
   activeSources: number
+}
+
+export const NO_SPONSOR_LINK = 'Sponsor linki girilmemiş. Kaynağın “Sponsor linki” alanını doldur, sonra “Yine de paylaş” de'
+export const NO_MAIN_CHANNEL = 'Ana kanal kayıtlı değil. Telegram bölümünde Duyuru kanalını kaydet, sonra “Yine de paylaş” de'
+
+/** A link the panel typed for a sponsor's site. Empty is allowed and means "not set yet". */
+export function sponsorLinkError(link: string) {
+  const value = link.trim()
+  if (!value) return null
+  if (!/^https?:\/\/[^\s/]+\.[^\s/]+/i.test(value) || /\s/.test(value)) return 'Sponsor linki http(s):// ile başlayan tam bir adres olmalı'
+  return null
 }
 
 export const EMPTY_ODDS_STATUS: OddsBotStatus = {
@@ -148,6 +165,8 @@ export const EMPTY_ODDS_STATUS: OddsBotStatus = {
   lastUpdateAt: null,
   todayTotal: 0,
   channelError: null,
+  mainChannel: null,
+  mainChannelError: null,
   publishError: null,
   activeSources: 0,
 }

@@ -339,6 +339,12 @@ const SETUP_STEPS: GuideStep[] = [
           emoji çağrıları (“Emojileri döktür”, “50 emoji gerekiyor”) kanala taşınmaz. Post Paylaşım’da sponsor adı <b>Destek</b> ayarındaki sponsor listesinden okunur.
         </li>
         <li>
+          <b>Oran botunda hangi post hangi kanala gider</b>: oranı okunan post özel oran kanalına gider. Oranı olmayan post (kampanya, bonus, duyuru) özel oran
+          kanalına <b>gitmez</b>, ana kanala (Duyuru kanalı) gider; bot o kanalda da yönetici olmalı. Bu postun altına “… giriş” butonu konur ve yazıdaki linkler,
+          kaynağın <b>Sponsor linki</b> alanına yazdığın adrese çevrilir. Sponsor linki boşsa ya da ana kanal kayıtlı değilse post hiçbir kanala gitmez,{' '}
+          <b>Bekleyen ve atlanan postlar</b> kutusunda sebebiyle bekler; linki girip <b>Yine de paylaş</b> dersin.
+        </li>
+        <li>
           <b>Butonlar</b>: kanal aktarımında ve oran botunda kaynak başına, Post Paylaşım’da sponsor başına post altı butonu eklenir. Kaynak postun kendi butonları da
           taşınabilir; linkleri kurallara göre değişir. Albüme buton konmadığı için albümde yazı ve butonlar ayrı mesaj olarak gider.
         </li>

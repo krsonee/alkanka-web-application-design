@@ -14,6 +14,8 @@ export type OddsReading = {
   /** The reader could not be reached and the post could not be read without it either. */
   failed: boolean
   kind: OddsPostKind
+  /** No odd could be read, yet the reader took the post for one (the match is on a video, or the numbers are not in the text). */
+  claimed: boolean
   /** Whether the matches are one combined coupon. Null when the reader did not say. */
   coupon: boolean | null
   /** Who can take the odd, as the source wrote it. */
@@ -133,11 +135,18 @@ export async function readOddsPost(text: string, picture?: () => Promise<OddsIma
   const read = await ask([{ type: 'text', text: task(text, false) }])
   if (!read) {
     const odds = localOdds(text)
-    return { odds, failed: !odds.length, kind: odds.length ? 'oran' : 'diger', coupon: null, note: odds.length ? localNote(text) : '' }
+    return { odds, failed: !odds.length, claimed: false, kind: odds.length ? 'oran' : 'diger', coupon: null, note: odds.length ? localNote(text) : '' }
   }
   const odds = groundedOdds(text, read.odds)
-  if (odds.length) return { ...read, odds, failed: false }
-  const none: OddsReading = { odds: [], failed: false, kind: read.kind === 'oran' ? 'diger' : read.kind, coupon: null, note: '' }
+  if (odds.length) return { ...read, odds, failed: false, claimed: false }
+  const none: OddsReading = {
+    odds: [],
+    failed: false,
+    claimed: read.kind === 'oran',
+    kind: read.kind === 'oran' ? 'diger' : read.kind,
+    coupon: null,
+    note: '',
+  }
   if (!picture || read.kind === 'sonuc' || !declaresOdd(text)) return none
 
   const image = await picture().catch(() => null)
@@ -146,5 +155,5 @@ export async function readOddsPost(text: string, picture?: () => Promise<OddsIma
     { type: 'file', data: image.data, mediaType: image.mediaType },
     { type: 'text', text: task(text, true) },
   ])
-  return seen?.odds.length ? { ...seen, failed: false } : none
+  return seen?.odds.length ? { ...seen, failed: false, claimed: false } : { ...none, claimed: none.claimed || seen?.kind === 'oran' }
 }

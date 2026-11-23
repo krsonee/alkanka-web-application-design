@@ -33,6 +33,7 @@ const SETTINGS: ({ title: string; words?: string; query?: string; anyOf?: PanelM
   { title: 'Telegram premium emoji', words: 'emoji paketi addemoji özel emoji hareketli emoji post', row: 'telegram', query: 's=post-new', anyOf: ['telegram', 'tg_posts'] },
   { title: 'Telegram kaynakları', words: 'kaynak kanal kaynak grup botların okuduğu liste', row: 'telegram', query: 's=sources' },
   { title: 'Özel oran botu paylaşım kuralı', words: 'alakasız post oran içermeyen atlandı anahtar kelime video albüm görselsiz bekleyen', row: 'telegram', query: 's=odds' },
+  { title: 'Kampanya postlarının sponsor linki', words: 'sponsor linki kampanya bonus postu ana kanal duyuru kanalı buton giriş oran botu kaynak', row: 'telegram', query: 's=odds' },
   { title: 'Değiştirme kuralları', words: 'kelime kullanıcı adı link alan adı buton linki değiştir ortak kural aktarma kaynak butonu', row: 'telegram', query: 's=mirror' },
   { title: 'Post paylaşım butonları', words: 'sponsor butonu tetikleyici post paylaşım botu albüm', row: 'telegram', query: 's=share' },
   { title: 'Yasal metinler', words: 'kvkk gizlilik kullanım şartları çerez sözleşme', row: 'texts', query: 's=legal' },

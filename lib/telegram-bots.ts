@@ -102,7 +102,7 @@ const num = (v: unknown) => (Number.isInteger(Number(v)) && Number(v) > 0 ? Numb
 
 export const DEFAULT_RULE = {
   trigger: '#paylaş',
-  appendText: 'Güncel giriş ve bonuslar: alkanka.com',
+  appendText: '',
   replyText: 'Paylaşıldı:',
 }
 
