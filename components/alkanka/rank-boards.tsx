@@ -157,7 +157,11 @@ function PeriodBar({
   const current = PERIODS.find((p) => p.id === period)!
   return (
     <div className="flex flex-col gap-2">
-      <div role="tablist" aria-label="Dönem" className="grid grid-cols-3 rounded-xl bg-secondary p-1">
+      <div
+        role="tablist"
+        aria-label="Dönem"
+        className="grid grid-cols-3 gap-1 rounded-full border border-border bg-foreground/[0.04] p-1 shadow-[inset_0_1px_0_0_oklch(1_0_0/0.04)]"
+      >
         {PERIODS.map((p) => (
           <button
             key={p.id}
@@ -166,15 +170,17 @@ function PeriodBar({
             aria-selected={period === p.id}
             onClick={() => setPeriod(p.id)}
             className={cn(
-              'flex h-10 items-center justify-center gap-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors',
-              period === p.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+              'flex h-9 items-center justify-center gap-1.5 rounded-full text-xs font-bold uppercase tracking-wider transition-[background-color,color,box-shadow,scale] duration-200 active:scale-[0.97]',
+              period === p.id
+                ? 'bg-primary text-primary-foreground shadow-[0_6px_18px_-8px_var(--primary)]'
+                : 'text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground',
             )}
           >
             {p.label}
             <span
               className={cn(
-                'rounded-full px-1.5 py-0.5 text-[10px] tabular-nums',
-                period === p.id ? 'bg-primary-foreground/20' : 'bg-background text-muted-foreground',
+                'min-w-5 rounded-full px-1.5 py-0.5 text-center text-[11px] leading-none tabular-nums',
+                period === p.id ? 'bg-primary-foreground/15' : 'bg-foreground/10 text-muted-foreground',
               )}
             >
               {counts[p.id]}
@@ -184,10 +190,19 @@ function PeriodBar({
         ))}
       </div>
       <p className="flex items-center justify-between gap-2 px-1 text-xs text-muted-foreground">
-        <span>{current.note}</span>
-        <span className="inline-flex items-center gap-1 font-semibold text-foreground" aria-live="polite">
-          <Clock className="size-3.5 text-primary" aria-hidden />
-          {countdown ? `Bitmesine ${countdown}` : '\u00a0'}
+        <span className="min-w-0 truncate">{current.note}</span>
+        <span
+          className={cn('inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 font-semibold tabular-nums text-primary', countdown && 'bg-primary/10')}
+          aria-live="polite"
+        >
+          {countdown ? (
+            <>
+              <Clock className="size-3 shrink-0" aria-hidden />
+              Bitmesine {countdown}
+            </>
+          ) : (
+            '\u00a0'
+          )}
         </span>
       </p>
     </div>

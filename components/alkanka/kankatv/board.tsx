@@ -175,25 +175,32 @@ function MatchRow({ match, sport }: { match: Match; sport: SportSlug }) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 max-sm:px-3 max-sm:py-2.5"
       >
-        <span className="w-16 shrink-0">
+        <span className="w-16 shrink-0 max-sm:w-14">
           <StatusBadge match={match} />
         </span>
-        <span className="grid min-w-0 flex-1 grid-cols-[1fr_auto_1fr] items-center gap-3">
-          <span className={cn('flex min-w-0 items-center justify-end gap-2 text-sm', homeWin ? 'font-bold' : 'font-medium')}>
-            <span className="truncate text-right text-foreground">{match.home.name}</span>
+        {/* Phone: the two teams stack so each name gets the full row; wider screens keep them facing each other. */}
+        <span className="grid min-w-0 flex-1 grid-cols-[1fr_auto_1fr] items-center gap-3 max-sm:grid-cols-[minmax(0,1fr)_auto] max-sm:gap-x-3 max-sm:gap-y-1.5">
+          <span
+            className={cn(
+              'flex min-w-0 items-center justify-end gap-2 text-sm max-sm:col-start-1 max-sm:row-start-1 max-sm:flex-row-reverse',
+              homeWin ? 'font-bold' : 'font-medium',
+            )}
+          >
+            <span className="truncate text-right text-foreground max-sm:text-left">{match.home.name}</span>
             <TeamCrest src={match.home.logo} />
           </span>
           <span
             className={cn(
-              'min-w-16 rounded-md px-2 py-1 text-center font-display text-base font-bold tabular-nums',
+              'min-w-16 rounded-md px-2 py-1 text-center font-display text-base font-bold tabular-nums max-sm:col-start-2 max-sm:row-span-2 max-sm:row-start-1 max-sm:min-w-14',
               match.state === 'in' ? 'bg-live text-live-foreground' : 'bg-background text-foreground',
+              !scored && 'max-sm:hidden',
             )}
           >
             {scored ? `${match.home.score} - ${match.away.score}` : 'vs'}
           </span>
-          <span className={cn('flex min-w-0 items-center gap-2 text-sm', awayWin ? 'font-bold' : 'font-medium')}>
+          <span className={cn('flex min-w-0 items-center gap-2 text-sm max-sm:col-start-1 max-sm:row-start-2', awayWin ? 'font-bold' : 'font-medium')}>
             <TeamCrest src={match.away.logo} />
             <span className="truncate text-foreground">{match.away.name}</span>
           </span>

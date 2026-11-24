@@ -46,33 +46,9 @@ function useChatSignal() {
   return { onGameTable, messages, lastId, seen, unread, open }
 }
 
-/** Phone and tablet chat button in the top bar; opens the site chat sheet. */
-export function ChatButton() {
-  const { onGameTable, unread, open } = useChatSignal()
-  if (onGameTable) return null
-  return (
-    <button
-      type="button"
-      onClick={open}
-      aria-label={unread > 0 ? `Sohbeti aç, ${unread} yeni mesaj` : 'Sohbeti aç'}
-      className="relative flex size-10 shrink-0 items-center justify-center rounded-full bg-foreground/[0.08] text-foreground transition-[scale] duration-150 active:scale-95 lg:hidden"
-    >
-      <MessageCircle className="size-5" aria-hidden="true" />
-      {unread > 0 && (
-        <span
-          aria-hidden="true"
-          className="absolute -right-0.5 -top-0.5 flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-bold leading-none text-destructive-foreground ring-2 ring-background"
-        >
-          {unread > 9 ? '9+' : unread}
-        </span>
-      )}
-    </button>
-  )
-}
-
-/** Phone and tablet preview of a new chat message, floating above the bottom menu; tapping it opens the chat. */
+/** Phone and tablet chat: a floating button above the bottom menu, with a short preview of each new message beside it. */
 export function TelegramBubble() {
-  const { onGameTable, messages, lastId, seen, open } = useChatSignal()
+  const { onGameTable, messages, lastId, seen, unread, open } = useChatSignal()
   const [peekId, setPeekId] = useState<number | null>(null)
 
   useEffect(() => {
@@ -86,17 +62,38 @@ export function TelegramBubble() {
   }, [lastId, seen])
 
   const peek = peekId !== null ? messages.find((m) => m.id === peekId) : undefined
-  if (onGameTable || !peek) return null
+  if (onGameTable) return null
 
   return (
-    <div className="fixed right-3 bottom-[calc(7.25rem+var(--safe-bottom)+var(--app-banner-h,0px)+var(--guest-gate-h,0px))] z-40 flex lg:hidden">
+    <div className="pointer-events-none fixed right-3 bottom-[calc(6.5rem+var(--safe-bottom)+var(--app-banner-h,0px)+var(--guest-gate-h,0px))] z-40 flex items-center gap-2 lg:hidden">
+      {peek && (
+        <button
+          type="button"
+          onClick={open}
+          tabIndex={-1}
+          aria-hidden="true"
+          className="pointer-events-auto animate-in fade-in slide-in-from-right-2 max-w-[min(15rem,calc(100vw-5.5rem))] truncate rounded-2xl rounded-br-sm border border-accent/40 bg-card/95 px-3 py-2 text-left text-sm text-foreground shadow-lg backdrop-blur"
+        >
+          <span className="font-bold text-accent">{peek.author}: </span>
+          {peek.text}
+        </button>
+      )}
       <button
         type="button"
         onClick={open}
-        className="animate-in fade-in slide-in-from-right-2 max-w-64 truncate rounded-2xl rounded-br-sm border border-accent/40 bg-card/95 px-3 py-2.5 text-left text-sm text-foreground shadow-lg backdrop-blur"
+        aria-label={unread > 0 ? `Sohbeti aç, ${unread} yeni mesaj` : 'Sohbeti aç'}
+        className="pointer-events-auto relative flex size-12 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-[0_10px_28px_-8px_var(--accent)] ring-4 ring-background transition-[scale] duration-150 active:scale-95"
       >
-        <span className="font-bold text-accent">{peek.author}: </span>
-        {peek.text}
+        {unread > 0 && <span aria-hidden="true" className="absolute inset-0 animate-ping rounded-full bg-accent/50 [animation-duration:2.4s] motion-reduce:hidden" />}
+        <MessageCircle className="relative size-[1.375rem]" strokeWidth={2.25} aria-hidden="true" />
+        {unread > 0 && (
+          <span
+            aria-hidden="true"
+            className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-bold leading-none text-destructive-foreground ring-2 ring-background"
+          >
+            {unread > 9 ? '9+' : unread}
+          </span>
+        )}
       </button>
     </div>
   )

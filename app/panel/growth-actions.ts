@@ -6,6 +6,8 @@ import { canPanel } from '@/lib/admin-auth'
 import { checkAffTarget, deleteAffLink, saveAffLink, setAffActive, type AffInput } from '@/lib/aff-links'
 import { importWagers, notifyAddressChange, setFlag, setSiteLink, setSponsorAccountStatus } from '@/lib/growth'
 import { siteNameLookup } from '@/lib/sites'
+import { setContent } from '@/lib/content'
+import { cleanWagerBox, WAGER_BOX_KEY, type WagerBox } from '@/lib/wager-box'
 
 type Result = { ok: boolean; message: string }
 const denied: Result = { ok: false, message: 'Oturum süresi doldu, tekrar giriş yap.' }
@@ -92,6 +94,20 @@ export async function reviewSponsorAccountAction(userId: string, siteId: string,
   revalidatePath('/siralama')
   await logPanel('growth', approve ? 'Sponsor hesabı onaylandı' : 'Sponsor hesabı reddedildi', await memberTag(userId), `sponsor ${siteId}${note ? ` · ${note}` : ''}`)
   return { ok: true, message: approve ? 'Hesap onaylandı.' : 'Hesap reddedildi.' }
+}
+
+export async function saveWagerBoxAction(input: WagerBox): Promise<Result> {
+  if (!(await canPanel('growth'))) return denied
+  try {
+    const box = cleanWagerBox(input)
+    await setContent(WAGER_BOX_KEY, box)
+    revalidatePath('/siralama')
+    revalidatePath('/panel')
+    await logPanel('growth', box.show ? 'Çevrim yarışı kutusu güncellendi' : 'Çevrim yarışı kutusu gizlendi', 'Sıralama sayfası', box.show ? `${box.title} · ${box.button}` : '')
+    return { ok: true, message: box.show ? 'Kaydedildi. Kutu sıralama sayfasında bu yazılarla görünür.' : 'Kaydedildi. Kutu sıralama sayfasından kalktı.' }
+  } catch (error) {
+    return fail(error)
+  }
 }
 
 export async function importWagersAction(siteId: string, period: string, text: string): Promise<Result> {

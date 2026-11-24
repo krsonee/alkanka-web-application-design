@@ -462,8 +462,60 @@ export function WalletCard({
 }) {
   const pct = goal ? Math.min(100, Math.round((balance / Math.max(1, goal.price)) * 100)) : 0
   return (
-    <section aria-label="Bakiyen" className="flex flex-col gap-4 overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="relative isolate flex flex-col gap-3 border-b border-border p-5">
+    <section
+      aria-label="Bakiyen"
+      className="flex flex-col gap-4 overflow-hidden rounded-2xl border border-border bg-card max-sm:gap-0 max-sm:bg-gradient-to-br max-sm:from-primary/[0.09] max-sm:via-card max-sm:to-card max-sm:shadow-[inset_0_1px_0_0_oklch(1_0_0/0.06)]"
+    >
+      {/* Phone: the balance is one slim row; the top bar already carries the number, so this row is for the next step. */}
+      <div className="flex items-center gap-3 px-3 py-2.5 sm:hidden">
+        <span
+          aria-hidden="true"
+          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-black text-primary-foreground ring-[3px] ring-primary/20"
+        >
+          KC
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <p className="font-display text-xl font-bold leading-none tabular-nums text-foreground">
+            {fmt(balance)}
+            <span className="sr-only"> Kanka Coin</span>
+          </p>
+          {kp !== null && (
+            <p className="truncate text-xs text-muted-foreground">
+              <span className="font-semibold tabular-nums text-foreground">{fmt(kp)}</span> KP
+              {weeklyRank && (
+                <>
+                  {' · '}
+                  <span className="font-semibold text-primary">Haftalık {weeklyRank}.</span>
+                </>
+              )}
+            </p>
+          )}
+        </div>
+        <Link
+          href={marketHref}
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-primary px-3.5 text-xs font-bold text-primary-foreground transition-[scale] duration-150 active:scale-[0.97]"
+        >
+          <ShoppingBag className="size-3.5" aria-hidden="true" />
+          Market
+        </Link>
+      </div>
+      {goal && (
+        <div className="flex flex-col gap-1.5 border-t border-border px-3 py-2 sm:hidden">
+          <div className="flex items-center justify-between gap-3 text-xs">
+            <span className="truncate text-muted-foreground">
+              Hedef: <span className="font-semibold text-foreground">{goal.name}</span>
+            </span>
+            <span className="shrink-0 font-semibold tabular-nums text-primary">
+              {balance >= goal.price ? 'Alabilirsin' : `${fmt(goal.price - balance)} KC kaldı`}
+            </span>
+          </div>
+          <div className="h-1 overflow-hidden rounded-full bg-foreground/10" aria-hidden="true">
+            <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+      )}
+
+      <div className="relative isolate flex flex-col gap-3 border-b border-border p-5 max-sm:hidden">
         <span aria-hidden="true" className="absolute -left-10 -top-20 -z-10 size-56 rounded-full bg-primary/20 blur-3xl" />
         <span
           aria-hidden="true"
@@ -499,7 +551,7 @@ export function WalletCard({
         )}
       </div>
 
-      <div className="flex flex-col gap-4 px-5 pb-5">
+      <div className="flex flex-col gap-4 px-5 pb-5 max-sm:hidden">
       {goal && (
         <div className="flex flex-col gap-3 rounded-xl border border-border bg-background/40 p-3">
           <div className="flex items-center gap-3">

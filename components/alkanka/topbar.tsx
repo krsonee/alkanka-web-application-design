@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import useSWR from 'swr'
 import { Award, ChevronDown, Coins, History, Link2, LogOut, Mail, MessageSquareText, Palette, Search, Send, Settings, UserRound } from 'lucide-react'
-import { ChatButton } from './telegram-bubble'
 import { getInboxStatus, type InboxStatus } from '@/app/actions/inbox'
 import { getLookSummary, type LookSummary } from '@/app/actions/look'
 import { AvatarFace } from './member-avatar'
@@ -275,13 +274,10 @@ export function Topbar({
   social,
   sponsors = [],
   telegram,
-  chat = false,
 }: {
   social: SocialLinks
   sponsors?: SearchSponsor[]
   telegram: TelegramLinks
-  /** Site chat is switched on: phones and tablets get its button in the bar. */
-  chat?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const close = useCallback(() => setOpen(false), [])
@@ -312,7 +308,6 @@ export function Topbar({
         <SiteSearch sponsors={sponsors} />
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-          {chat && <ChatButton />}
           <BadgeButton />
           <PointsPill />
           <CemberButton />

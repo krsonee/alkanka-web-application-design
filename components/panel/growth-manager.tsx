@@ -5,6 +5,7 @@ import { useMemo, useState, useTransition } from 'react'
 import { Check, Copy, Loader2, ShieldAlert, X } from 'lucide-react'
 import {
   importWagersAction,
+  saveWagerBoxAction,
   reviewSponsorAccountAction,
   saveSiteLinkAction,
   setFlagAction,
@@ -13,6 +14,7 @@ import { AffLinksManager, type AffSiteOption } from '@/components/panel/aff-link
 import { GrowthGuide } from '@/components/panel/growth-guide'
 import type { AffLinkView } from '@/lib/aff-links'
 import type { FlaggedMember, SiteLink, SponsorAccount, TrafficReport } from '@/lib/growth'
+import type { WagerBox } from '@/lib/wager-box'
 import { cn } from '@/lib/utils'
 import { askReason, confirmed } from '@/components/panel/confirm-dialog'
 import { Flash } from '@/components/panel/flash'
@@ -27,6 +29,7 @@ type Props = {
   flagged: FlaggedMember[]
   accounts: SponsorAccount[]
   period: string
+  wagerBox: WagerBox
   siteUrl: string
   /** Where campaign links are managed, for an account that may open that section; null keeps the quick builder here. */
   campaignsHref: string | null
@@ -352,6 +355,45 @@ function Wagers({ sites, period }: { sites: Site[]; period: string }) {
   )
 }
 
+function WagerBoxCard({ box }: { box: WagerBox }) {
+  const [draft, setDraft] = useState(box)
+  const { pending, msg, run } = useRunner()
+  const set = <K extends keyof WagerBox>(key: K, value: WagerBox[K]) => setDraft((current) => ({ ...current, [key]: value }))
+  return (
+    <section className={card} data-find="cevrim-kutusu">
+      <div className="flex flex-col gap-1">
+        <h2 className="font-display text-lg font-bold text-foreground">Sıralama sayfasındaki çevrim yarışı kutusu</h2>
+        <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
+          Sıralama sayfasının altındaki kutu. Yarış yokken kapatabilir ya da yazısını değiştirebilirsin. Kapalıyken çevrim tablosu da görünmez.
+        </p>
+      </div>
+      <label className="flex items-center gap-3 text-sm font-semibold text-foreground">
+        <input type="checkbox" className="size-4 accent-primary" checked={draft.show} onChange={(e) => set('show', e.target.checked)} />
+        Sıralama sayfasında göster
+      </label>
+      <div className={cn('grid gap-3 sm:grid-cols-2', !draft.show && 'opacity-50')}>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
+          Başlık (yanına ay ve yıl eklenir)
+          <input className={input} value={draft.title} maxLength={60} disabled={!draft.show} onChange={(e) => set('title', e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
+          Düğme yazısı
+          <input className={input} value={draft.button} maxLength={24} disabled={!draft.show} onChange={(e) => set('button', e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground sm:col-span-2">
+          Açıklama (veri yokken görünür)
+          <input className={input} value={draft.text} maxLength={200} disabled={!draft.show} onChange={(e) => set('text', e.target.value)} />
+        </label>
+      </div>
+      <Note msg={msg} />
+      <button type="button" className={cn(btn, 'self-start')} disabled={pending} onClick={() => run(() => saveWagerBoxAction(draft))}>
+        {pending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+        Kaydet
+      </button>
+    </section>
+  )
+}
+
 function Flagged({ flagged }: { flagged: FlaggedMember[] }) {
   const { pending, msg, run } = useRunner()
   return (
@@ -419,6 +461,7 @@ export function GrowthManager(props: Props) {
         <Accounts accounts={props.accounts} names={names} />
         <Wagers sites={props.sites} period={props.period} />
       </div>
+      <WagerBoxCard box={props.wagerBox} />
     </div>
   )
 }

@@ -443,12 +443,12 @@ function MenuTile({ item, pathname, signals, onNavigate }: { item: NavItem; path
       data-tour-nav={item.id}
       aria-current={isActive ? 'page' : undefined}
       className={cn(
-        'relative flex h-[5.25rem] flex-col items-center justify-center gap-2 rounded-2xl border px-1.5 text-center text-[0.8125rem] font-semibold leading-tight transition-[scale,background-color] duration-150 active:scale-[0.96]',
+        'relative flex h-[4.25rem] flex-col items-center justify-center gap-1.5 rounded-2xl border px-1 text-center text-xs font-semibold leading-[1.15] transition-[scale,background-color] duration-150 active:scale-[0.96]',
         isActive ? 'border-primary/45 bg-primary/10 text-primary' : 'border-border bg-foreground/[0.05] text-foreground active:bg-foreground/10',
       )}
     >
-      <Icon className="size-[1.375rem] text-primary" aria-hidden="true" />
-      <span className="w-full truncate">{item.label}</span>
+      <Icon className="size-5 shrink-0 text-primary" aria-hidden="true" />
+      <span className="line-clamp-2 w-full text-balance">{item.label}</span>
       {tasks > 0 && (
         <span className="absolute right-2 top-2 flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-bold leading-5 text-primary-foreground">
           {tasks > 9 ? '9+' : tasks}
@@ -475,7 +475,7 @@ function MenuSheetBody({ onNavigate, social, telegram }: BodyProps) {
   const pathname = usePathname()
   const signals = useNavSignals()
   return (
-    <div className="flex min-h-0 flex-col gap-4 overflow-y-auto overscroll-contain px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] no-scrollbar">
+    <div className="flex min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain px-4 pb-[calc(1rem+var(--safe-bottom))] no-scrollbar">
       <MemberCard onNavigate={onNavigate} compact={false} />
       <nav aria-label="Ana menü">
         <ul className="grid grid-cols-3 gap-2">
@@ -533,21 +533,21 @@ export function MobileDrawer({
         aria-modal="true"
         aria-label="Menü"
         className={cn(
-          'relative mx-auto flex max-h-[88dvh] w-full max-w-xl flex-col rounded-t-[1.75rem] border-t border-border bg-surface shadow-2xl shadow-background',
+          'relative mx-auto flex max-h-[calc(100dvh-var(--safe-top)-0.75rem)] w-full max-w-xl flex-col rounded-t-[1.75rem] border-t border-foreground/15 bg-surface shadow-2xl shadow-background',
           open ? 'animate-in fade-in slide-in-from-bottom-10 duration-300' : 'invisible',
         )}
       >
-        <div className="relative flex h-16 shrink-0 items-end justify-between pb-2 pl-5 pr-2">
-          <span aria-hidden="true" className="absolute left-1/2 top-2 h-1 w-10 -translate-x-1/2 rounded-full bg-foreground/15" />
-          <h2 className="pb-1.5 font-display text-lg font-semibold text-foreground">Menü</h2>
+        <div className="relative flex h-14 shrink-0 items-center justify-between pl-5 pr-3 pt-2">
+          <span aria-hidden="true" className="absolute left-1/2 top-2 h-1 w-10 -translate-x-1/2 rounded-full bg-foreground/20" />
+          <h2 className="font-display text-lg font-semibold text-foreground">Menü</h2>
           <button
             type="button"
             onClick={onClose}
             tabIndex={open ? 0 : -1}
             aria-label="Menüyü kapat"
-            className="flex size-11 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            className="relative flex size-9 items-center justify-center rounded-full border border-foreground/15 bg-foreground/10 text-foreground transition-[scale,background-color] duration-150 after:absolute after:-inset-1 hover:bg-foreground/15 active:scale-95"
           >
-            <X className="size-5" aria-hidden="true" />
+            <X className="size-[1.125rem]" strokeWidth={2.5} aria-hidden="true" />
           </button>
         </div>
         {open && <MenuSheetBody onNavigate={onClose} social={social} telegram={telegram} />}

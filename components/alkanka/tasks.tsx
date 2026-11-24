@@ -603,24 +603,41 @@ export function Tasks({
                   const open = shownGroup === group.value
                   const GroupIcon = CATEGORY_ICON[group.value]
                   const finished = group.items.filter((t) => stateOf(t) === 'done').length
+                  const share = group.items.length ? Math.round((finished / group.items.length) * 100) : 0
                   return (
-                    <div key={group.value} className="border-t border-border first:border-t-0">
+                    <div key={group.value} className={cn('border-t border-border transition-colors first:border-t-0', open && 'bg-primary/[0.04]')}>
                       <button
                         type="button"
                         aria-expanded={open}
                         onClick={() => setOpenGroup((current) => ({ ...current, [tabKey]: open ? null : group.value }))}
-                        className="flex min-h-15 w-full items-center gap-3 px-3 py-2 text-left transition-colors active:bg-secondary/60"
+                        className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left transition-colors active:bg-foreground/[0.05]"
                       >
-                        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
-                          <GroupIcon className="size-5" aria-hidden="true" />
+                        <span
+                          className={cn(
+                            'flex size-9 shrink-0 items-center justify-center rounded-xl ring-1 transition-colors',
+                            open ? 'bg-primary text-primary-foreground ring-primary' : 'bg-gradient-to-br from-primary/25 to-primary/5 text-primary ring-primary/25',
+                          )}
+                        >
+                          <GroupIcon className="size-[1.125rem]" aria-hidden="true" />
                         </span>
-                        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <span className="text-sm font-bold text-foreground">{group.label}</span>
-                          <span className="text-xs tabular-nums text-muted-foreground">
-                            {finished}/{group.items.length} görev, toplam {formatAC(group.items.reduce((sum, t) => sum + t.points, 0))} KC
+                        <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+                          <span className="flex items-center justify-between gap-2">
+                            <span className="truncate text-sm font-bold text-foreground">{group.label}</span>
+                            <span className="shrink-0 text-xs font-bold tabular-nums text-primary">
+                              {formatAC(group.items.reduce((sum, t) => sum + t.points, 0))} KC
+                            </span>
+                          </span>
+                          <span className="flex items-center gap-2">
+                            <span className="h-1 flex-1 overflow-hidden rounded-full bg-foreground/10" aria-hidden="true">
+                              <span className="block h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${share}%` }} />
+                            </span>
+                            <span className="shrink-0 text-[11px] font-semibold tabular-nums text-muted-foreground">
+                              {finished}/{group.items.length}
+                              <span className="sr-only"> görev tamam</span>
+                            </span>
                           </span>
                         </span>
-                        <ChevronDown className={cn('size-5 shrink-0 text-muted-foreground transition-transform duration-200', open && 'rotate-180')} aria-hidden="true" />
+                        <ChevronDown className={cn('size-4 shrink-0 text-muted-foreground transition-transform duration-200', open && 'rotate-180 text-primary')} aria-hidden="true" />
                       </button>
                       {open ? <div className="border-t border-border bg-background/50">{phoneRows(`${tabKey}:${group.value}`, group.items)}</div> : null}
                     </div>

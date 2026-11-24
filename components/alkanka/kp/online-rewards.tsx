@@ -1,7 +1,7 @@
 'use client'
 
 import useSWR from 'swr'
-import { Check, Lock, Radio, Timer, Zap } from 'lucide-react'
+import { Check, ChevronDown, Lock, Radio, Timer, Zap } from 'lucide-react'
 import { usePoints } from '@/components/alkanka/points-context'
 import { formatDuration, type OnlineStatus } from '@/lib/online-rewards-shared'
 import { RewardChips } from './reward-chips'
@@ -29,12 +29,12 @@ export function OnlineRewards() {
   const pct = Math.round((data.next?.progress ?? 1) * 100)
 
   return (
-    <section id="online-odul" aria-labelledby="online-odul-baslik" className="flex scroll-mt-24 flex-col gap-5">
+    <section id="online-odul" aria-labelledby="online-odul-baslik" className="flex scroll-mt-24 flex-col gap-5 max-sm:gap-3">
       <header className="flex flex-col gap-1">
         <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary">
           <Radio className="size-3.5" aria-hidden="true" /> Kesintisiz online ödülü
         </span>
-        <h2 id="online-odul-baslik" className="text-balance font-display text-2xl font-bold text-foreground">Ne kadar uzun kalırsan o kadar kazanırsın</h2>
+        <h2 id="online-odul-baslik" className="text-balance font-display text-2xl font-bold text-foreground max-sm:text-xl">Ne kadar uzun kalırsan o kadar kazanırsın</h2>
         <p className="max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground">
           Sitede kopmadan geçirdiğin her saat yeni bir ödül açar. İlk {data.tiers.at(-1)?.hour} saatte toplam{' '}
           <span className="font-semibold text-primary">{totals.coin.toLocaleString('tr-TR')} KC</span> ve{' '}
@@ -43,16 +43,16 @@ export function OnlineRewards() {
       </header>
 
       <div className="grid gap-4 lg:grid-cols-5">
-        <article className="panel-gold flex flex-col gap-5 rounded-2xl p-5 lg:col-span-2">
+        <article className="panel-gold flex flex-col gap-5 rounded-2xl p-5 max-sm:gap-3 max-sm:p-3.5 lg:col-span-2">
           {member ? (
             <>
               <div className="flex items-center justify-between gap-3">
-                <div className="flex flex-col">
+                <div className="flex flex-col max-sm:flex-row max-sm:items-baseline max-sm:gap-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bu oturum</span>
-                  <span className="font-display text-4xl font-bold tabular-nums text-foreground">{formatDuration(data.minutes)}</span>
+                  <span className="font-display text-4xl font-bold tabular-nums text-foreground max-sm:text-2xl max-sm:leading-none">{formatDuration(data.minutes)}</span>
                 </div>
-                <span className={cn('flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold', data.active ? 'bg-live/15 text-live' : 'bg-secondary text-muted-foreground')}>
-                  <span className={cn('size-1.5 rounded-full', data.active ? 'bg-live' : 'bg-muted-foreground')} />
+                <span className={cn('flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold max-sm:px-2.5', data.active ? 'bg-live/15 text-live' : 'bg-secondary text-muted-foreground')}>
+                  <span className={cn('size-1.5 rounded-full', data.active ? 'animate-pulse bg-live' : 'bg-muted-foreground')} />
                   {data.active ? 'Sayaç çalışıyor' : 'Sayaç beklemede'}
                 </span>
               </div>
@@ -64,7 +64,7 @@ export function OnlineRewards() {
                     </span>
                     <span className="font-semibold tabular-nums text-primary">{formatDuration(data.next.minutesLeft)} kaldı</span>
                   </div>
-                  <div className="h-3 overflow-hidden rounded-full bg-secondary" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Sıradaki ödüle ilerleme">
+                  <div className="h-3 overflow-hidden rounded-full bg-secondary max-sm:h-1.5" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Sıradaki ödüle ilerleme">
                     <div className="h-full rounded-full bg-primary transition-[width] duration-700" style={{ width: `${pct}%` }} />
                   </div>
                   <RewardChips coin={data.next.tier.coin} kp={data.next.tier.kp} />
@@ -72,7 +72,7 @@ export function OnlineRewards() {
               ) : (
                 <p className="text-sm text-muted-foreground">Tüm saat ödüllerini topladın, efsanesin kanka.</p>
               )}
-              <p className="flex items-start gap-2 rounded-lg bg-secondary p-3 text-xs leading-relaxed text-muted-foreground">
+              <p className="flex items-start gap-2 rounded-lg bg-secondary p-3 text-xs leading-relaxed text-muted-foreground max-sm:hidden">
                 <Timer className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden="true" />
                 Sekmeyi {data.graceMinutes} dakikadan uzun kapatırsan veya bağlantın koparsa sayaç sıfırdan başlar.
               </p>
@@ -89,7 +89,28 @@ export function OnlineRewards() {
               </button>
             </div>
           )}
-          <ol className="grid gap-3 border-t border-border pt-4 sm:grid-cols-3 lg:grid-cols-1">
+          {/* Phone: the fine print waits behind one line, so the counter itself stays a short card. */}
+          <details className="group border-t border-border pt-2.5 sm:hidden">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-semibold text-foreground [&::-webkit-details-marker]:hidden">
+              Sayaç nasıl işler?
+              <ChevronDown className="size-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180" aria-hidden="true" />
+            </summary>
+            <ul className="flex flex-col gap-2 pt-2.5 text-sm leading-snug text-muted-foreground">
+              {STEPS.map((s) => (
+                <li key={s.title}>
+                  <span className="font-semibold text-foreground">{s.title}: </span>
+                  {s.text}
+                </li>
+              ))}
+              {member && (
+                <li className="flex items-start gap-2 text-primary">
+                  <Timer className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                  <span className="text-muted-foreground">Sekmeyi {data.graceMinutes} dakikadan uzun kapatırsan veya bağlantın koparsa sayaç sıfırdan başlar.</span>
+                </li>
+              )}
+            </ul>
+          </details>
+          <ol className="grid gap-3 border-t border-border pt-4 max-sm:hidden sm:grid-cols-3 lg:grid-cols-1">
             {STEPS.map((s) => (
               <li key={s.title} className="flex flex-col gap-0.5">
                 <span className="text-sm font-semibold text-foreground">{s.title}</span>

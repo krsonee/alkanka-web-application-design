@@ -130,6 +130,9 @@ const STEPS: GuideStep[] = [
           Eşleşen onaylı üyeler <span className={code}>/siralama</span> sayfasındaki çevrim tablosunda anında görünür. Eşleşmeyen kullanıcı adları yok sayılır.
         </li>
         <li>Ay sonunda ilk sıralardaki üyelere ödülünü verip duyurusunu Telegram’dan yapabilirsin.</li>
+        <li>
+          Yarış yokken sayfanın en altındaki <b>Sıralama sayfasındaki çevrim yarışı kutusu</b> kartından kutuyu kapatabilir ya da başlığını, açıklamasını ve düğme yazısını değiştirebilirsin. Kapalıyken çevrim tablosu da sitede görünmez.
+        </li>
       </ol>
     ),
   },

@@ -221,44 +221,47 @@ const TOURNAMENT_GAMES = [...DUEL_TOURNAMENT_GAMES, ...TABLE_TOURNAMENT_GAMES].f
 function NoneOpen() {
   const telegramUrl = useTelegramUrl()
   return (
-    <section aria-labelledby="turnuva-yok" className="@container overflow-hidden rounded-2xl border border-border bg-card">
+    <section
+      aria-labelledby="turnuva-yok"
+      className="@container overflow-hidden rounded-2xl border border-border bg-card bg-gradient-to-br from-primary/[0.07] via-transparent to-transparent shadow-[inset_0_1px_0_0_oklch(1_0_0/0.05)]"
+    >
       <div className="flex flex-col @3xl:flex-row">
-        <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-4 p-6 @2xl:p-8">
-          <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary">
-            <span aria-hidden="true" className="h-px w-6 bg-primary" />
+        <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-2.5 p-4 @md:gap-4 @md:p-6 @2xl:p-8">
+          <p className="flex items-center gap-2 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-widest text-primary @md:bg-transparent @md:p-0 @md:text-xs">
+            <span aria-hidden="true" className="size-1.5 rounded-full bg-primary @md:h-px @md:w-6 @md:rounded-none" />
             Şu an açık turnuva yok
           </p>
-          <h2 id="turnuva-yok" className="font-display text-3xl font-bold uppercase leading-none text-foreground text-balance @2xl:text-4xl @5xl:text-5xl">
+          <h2 id="turnuva-yok" className="font-display text-2xl font-bold uppercase leading-none text-foreground text-balance @md:text-3xl @2xl:text-4xl @5xl:text-5xl">
             Yeni turnuva yakında
           </h2>
-          <p className="max-w-md leading-relaxed text-muted-foreground text-pretty @5xl:max-w-lg @5xl:text-lg">
+          <p className="max-w-md text-sm leading-relaxed text-muted-foreground text-pretty @md:text-base @5xl:max-w-lg @5xl:text-lg">
             Kayıtlar bu sayfada açılır, aynı anda Telegram kanalımızda duyurulur. O zamana kadar turnuva oyunlarında ısınabilirsin.
           </p>
-          <div className="flex w-full flex-col gap-2 pt-1 @md:w-auto @md:flex-row @md:flex-wrap">
+          <div className="flex w-full gap-2 pt-1 @md:w-auto @md:flex-wrap">
             <a
               href={telegramUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-primary px-5 py-3 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110"
+              className="flex h-11 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-primary px-4 text-sm font-bold uppercase tracking-wide text-primary-foreground hover:brightness-110 @md:flex-none @md:px-5"
             >
               <Send className="size-4 shrink-0" aria-hidden="true" />
               Telegram&apos;da haber al
               <span className="sr-only"> (yeni sekmede açılır)</span>
             </a>
-            <Link href="/oyunlar" className="flex items-center justify-center whitespace-nowrap rounded-xl border border-border px-5 py-3 text-sm font-bold uppercase tracking-wide text-foreground hover:bg-secondary">
+            <Link href="/oyunlar" className="flex h-11 items-center justify-center whitespace-nowrap rounded-xl border border-border bg-background/40 px-4 text-sm font-bold uppercase tracking-wide text-foreground hover:bg-secondary @md:px-5">
               Tüm oyunlar
             </Link>
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-border bg-background/50 p-6 @3xl:w-[42%] @3xl:border-t-0 @3xl:border-l @5xl:w-[36rem]">
+        <div className="flex flex-col gap-2.5 border-t border-border bg-background/50 p-4 @md:gap-3 @md:p-6 @3xl:w-[42%] @3xl:border-t-0 @3xl:border-l @5xl:w-[36rem]">
           <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Turnuva açılan oyunlar</h3>
           <ul className="grid grid-cols-3 gap-2">
             {TOURNAMENT_GAMES.map((game) => (
               <li key={game}>
                 <Link
                   href={`/oyunlar/${game}`}
-                  className="group relative block aspect-[4/3] overflow-hidden rounded-xl bg-surface ring-1 ring-border transition hover:ring-primary @md:aspect-[2/1] @3xl:aspect-[4/3] @5xl:aspect-[3/2]"
+                  className="group relative block overflow-hidden rounded-xl bg-surface ring-1 ring-border transition hover:ring-primary aspect-[2/1] @3xl:aspect-[4/3] @5xl:aspect-[3/2]"
                 >
                   <Image
                     src={ARENA_META[game].image || '/placeholder.svg'}
@@ -276,21 +279,23 @@ function NoneOpen() {
         </div>
       </div>
 
-      <ol aria-label="Turnuva nasıl işler" className="flex flex-col gap-5 border-t border-border p-6 @2xl:flex-row @2xl:gap-0 @2xl:px-8">
+      <ol aria-label="Turnuva nasıl işler" className="flex flex-col border-t border-border p-4 @md:p-6 @2xl:flex-row @2xl:px-8">
         {HOW_IT_WORKS.map((step, i) => (
           <li key={step.title} className="flex flex-1 gap-3 @2xl:flex-col">
-            <div className="flex items-center gap-3 self-start @2xl:self-auto">
+            <div className="flex flex-col items-center gap-1 @2xl:flex-row @2xl:gap-3">
               <span
                 aria-hidden="true"
-                className="flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/50 bg-primary/10 font-display text-sm font-bold text-primary"
+                className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 font-display text-xs font-bold text-primary ring-1 ring-primary/40 @2xl:size-8 @2xl:text-sm"
               >
                 {i + 1}
               </span>
-              {i < HOW_IT_WORKS.length - 1 && <span aria-hidden="true" className="hidden h-px flex-1 bg-border @2xl:mr-3 @2xl:block" />}
+              {i < HOW_IT_WORKS.length - 1 && (
+                <span aria-hidden="true" className="w-px flex-1 bg-gradient-to-b from-primary/40 to-border @2xl:mr-3 @2xl:h-px @2xl:w-auto @2xl:bg-none @2xl:bg-border" />
+              )}
             </div>
-            <div className="flex min-w-0 flex-col gap-1 @2xl:pr-8">
-              <span className="font-display text-base font-bold uppercase text-foreground">{step.title}</span>
-              <span className="text-sm leading-relaxed text-muted-foreground text-pretty">{step.text}</span>
+            <div className={cn('flex min-w-0 flex-col gap-0.5 @2xl:gap-1 @2xl:pb-0 @2xl:pr-8', i < HOW_IT_WORKS.length - 1 && 'pb-3')}>
+              <span className="font-display text-sm font-bold uppercase leading-6 text-foreground @2xl:text-base">{step.title}</span>
+              <span className="text-sm leading-snug text-muted-foreground text-pretty @2xl:leading-relaxed">{step.text}</span>
             </div>
           </li>
         ))}
@@ -300,9 +305,9 @@ function NoneOpen() {
 }
 
 const FORMATS = [
-  { icon: Swords, name: 'Eleme', text: 'Kaybeden elenir, kazanan tur atlar. Tek oturumda biter; finali kazanan şampiyon olur.' },
-  { icon: CalendarDays, name: 'Fikstürlü lig', text: 'Herkes herkesle oynar. Turlar art arda, her gün ya da her hafta açılır; en çok puanı toplayan şampiyon olur.' },
-  { icon: TrendingUp, name: 'Puan ligi', text: 'Eşleşme yok. Lig süresince o oyunda oynadığın masalar puan getirir; bitişte ilk sıralar ödülü alır.' },
+  { icon: Swords, tint: 'bg-primary/15 text-primary', name: 'Eleme', text: 'Kaybeden elenir, kazanan tur atlar. Tek oturumda biter; finali kazanan şampiyon olur.' },
+  { icon: CalendarDays, tint: 'bg-accent/15 text-accent', name: 'Fikstürlü lig', text: 'Herkes herkesle oynar. Turlar art arda, her gün ya da her hafta açılır; en çok puanı toplayan şampiyon olur.' },
+  { icon: TrendingUp, tint: 'bg-live/15 text-live', name: 'Puan ligi', text: 'Eşleşme yok. Lig süresince o oyunda oynadığın masalar puan getirir; bitişte ilk sıralar ödülü alır.' },
 ]
 
 /** The three kinds of tournament a card can name, so the word on the card means something. */
@@ -311,12 +316,14 @@ function FormatGuide() {
     <Group id="turnuva-turleri" title="Turnuva türleri">
       <div className="@container">
         <ul className="grid gap-px overflow-hidden rounded-2xl border border-border bg-border @2xl:grid-cols-3">
-          {FORMATS.map(({ icon: Icon, name, text }) => (
-            <li key={name} className="flex gap-3 bg-card p-4 @2xl:flex-col @2xl:p-5">
-              <Icon className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" />
-              <div className="flex min-w-0 flex-col gap-1">
-                <span className="font-display text-base font-bold uppercase text-foreground">{name}</span>
-                <span className="text-sm leading-relaxed text-muted-foreground text-pretty">{text}</span>
+          {FORMATS.map(({ icon: Icon, tint, name, text }) => (
+            <li key={name} className="flex gap-3 bg-card px-3.5 py-3 @2xl:flex-col @2xl:p-5">
+              <span aria-hidden="true" className={cn('flex size-8 shrink-0 items-center justify-center rounded-lg', tint)}>
+                <Icon className="size-4" />
+              </span>
+              <div className="flex min-w-0 flex-col gap-0.5 @2xl:gap-1">
+                <span className="font-display text-sm font-bold uppercase text-foreground @2xl:text-base">{name}</span>
+                <span className="text-sm leading-snug text-muted-foreground text-pretty @2xl:leading-relaxed">{text}</span>
               </div>
             </li>
           ))}

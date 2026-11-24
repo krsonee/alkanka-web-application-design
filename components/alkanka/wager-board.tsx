@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Trophy } from 'lucide-react'
 import { currentPeriod, wagerBoard } from '@/lib/growth'
+import { getWagerBox } from '@/lib/wager-box'
 
 const MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık']
 const label = (p: string) => {
@@ -10,23 +11,25 @@ const label = (p: string) => {
 const maskAmount = (n: number) => `${Math.round(n).toLocaleString('tr-TR')} ₺`
 
 export async function WagerBoard() {
+  const box = await getWagerBox()
+  if (!box.show) return null
   const period = currentPeriod()
   const rows = await wagerBoard(period, 20).catch(() => [])
 
   if (rows.length === 0) {
     return (
-      <section aria-labelledby="cevrim-baslik" className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary" aria-hidden="true">
-          <Trophy className="size-5" />
+      <section aria-labelledby="cevrim-baslik" className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 max-sm:px-3 max-sm:py-2.5">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary max-sm:size-9" aria-hidden="true">
+          <Trophy className="size-5 max-sm:size-4" />
         </span>
         <div className="flex min-w-0 flex-1 flex-col">
           <h2 id="cevrim-baslik" className="truncate font-display text-sm font-bold text-foreground">
-            Çevrim yarışı · {label(period)}
+            {box.title} · {label(period)}
           </h2>
-          <p className="text-xs leading-relaxed text-muted-foreground">Sponsor hesabını bağla, veri gelince listeye gir.</p>
+          <p className="text-xs leading-relaxed text-muted-foreground text-pretty">{box.text}</p>
         </div>
-        <Link href="/profil#sponsor-hesaplari" className="inline-flex h-9 shrink-0 items-center rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground">
-          Bağla
+        <Link href="/profil#sponsor-hesaplari" className="inline-flex h-9 shrink-0 items-center rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground max-sm:rounded-full">
+          {box.button}
         </Link>
       </section>
     )
@@ -38,7 +41,7 @@ export async function WagerBoard() {
         <div className="flex flex-col gap-1">
           <h2 id="cevrim-baslik" className="flex items-center gap-2 font-display text-xl font-bold text-foreground">
             <Trophy className="size-5 text-primary" aria-hidden="true" />
-            Aylık çevrim yarışı · {label(period)}
+            {box.title} · {label(period)}
           </h2>
           <p className="text-sm leading-relaxed text-muted-foreground">
             Sponsor sitelerde yaptığın toplam çevrim. Hesabını profilinden bağla, onaylandıktan sonra listeye girersin.
