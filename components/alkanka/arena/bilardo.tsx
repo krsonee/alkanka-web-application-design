@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import type { BilardoState } from '@/lib/pvp/rules'
 import type { GameApi } from './stake-gate'
 import type { Remote } from './remote'
+import { MobileTableChat } from './mobile-table-chat'
 import { playSound } from '@/lib/sound'
 import { canvasScale, pacedFrames } from '@/lib/paced-frames'
 import { TableBrand } from './table-brand'
@@ -1488,6 +1489,8 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
           >
             <LogOut className="size-4" aria-hidden="true" /> Oyundan çık
           </a>
+          {/* The sideways table covers the page header, and with it the table's chat pill. */}
+          {remote?.id && <MobileTableChat tableId={remote.id} placement="layer" showLabel buttonClassName="static min-h-10 w-full shrink-0" />}
           {[seat, oppSeat].map((s) => (
             <div
               key={s}

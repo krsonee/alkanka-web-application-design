@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { CheckCircle2, Clock, Coins, Handshake, Target, Zap } from 'lucide-react'
+import { CheckCircle2, Clock, Coins, Handshake, Package, Target, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { MarketProduct } from '@/lib/market'
 import { productImage } from '@/lib/market-image'
@@ -129,18 +129,31 @@ export function StockMeter({ left, total, className }: { left: number; total: nu
  * What stands for the product on its card. A sponsor's product is the sponsor itself, so its logo fills the
  * tile on a quiet panel; a picture behind it only fought the logo. Everything else keeps its picture.
  */
-function ProductMedia({ item, dimmed, sizes }: { item: MarketProduct; dimmed: boolean; sizes: string }) {
+function ProductMedia({
+  item,
+  dimmed,
+  sizes,
+  phone,
+}: {
+  item: MarketProduct
+  dimmed: boolean
+  sizes: string
+  /** The small phone card: the logo sits in a short band, and moves down when a price tag shares the band. */
+  phone?: 'plain' | 'tagged'
+}) {
   if (item.kind === 'sponsor' && item.sponsorLogo) {
     return (
       <div
         className={cn(
           'absolute inset-0 flex items-center justify-center bg-background bg-[radial-gradient(120%_90%_at_50%_0%,color-mix(in_oklch,var(--primary)_22%,transparent),transparent_70%)] px-5 pb-2 pt-7',
+          phone && 'max-sm:px-4 max-sm:py-2',
+          phone === 'tagged' && 'max-sm:pt-7',
           dimmed && 'opacity-50 grayscale',
         )}
       >
         <span aria-hidden="true" className="absolute inset-0 opacity-[0.06] [background-image:radial-gradient(var(--primary)_1px,transparent_1px)] [background-size:12px_12px]" />
         {/* eslint-disable-next-line @next/next/no-img-element -- sponsor logos are uploaded files of any size */}
-        <img src={item.sponsorLogo} alt={item.sponsorName ?? ''} className="relative max-h-[52%] w-auto max-w-full object-contain drop-shadow-[0_6px_16px_oklch(0_0_0/0.55)]" />
+        <img src={item.sponsorLogo} alt={item.sponsorName ?? ''} className={cn('relative max-h-[52%] w-auto max-w-full object-contain drop-shadow-[0_6px_16px_oklch(0_0_0/0.55)]', phone && 'max-sm:max-h-full')} />
       </div>
     )
   }
@@ -156,11 +169,11 @@ function ProductMedia({ item, dimmed, sizes }: { item: MarketProduct; dimmed: bo
   )
 }
 
-function Price({ value, was, className }: { value: number; was: number; className?: string }) {
+function Price({ value, was, small, className }: { value: number; was: number; small?: boolean; className?: string }) {
   return (
     <span className={cn('flex flex-wrap items-center gap-x-1.5', className)}>
       <Coins className="size-4 text-primary" aria-hidden="true" />
-      <span className="font-display text-lg font-bold text-foreground tabular-nums">{formatAC(value)}</span>
+      <span className={cn('font-display font-bold text-foreground tabular-nums', small ? 'text-base' : 'text-lg')}>{formatAC(value)}</span>
       <span className="text-xs text-muted-foreground">KC</span>
       {was > value && (
         <s className="text-xs text-muted-foreground tabular-nums">
@@ -219,6 +232,8 @@ export function ProductCard({ item, left, used, points, signedIn, pay, taskDone,
   const state = buyState(item, left, used, points, signedIn, pay)
   const level = stockLevel(left, item.total)
   const deal = dealShown(item, taskDone) && Boolean(item.dealTask)
+  const logoTile = item.kind === 'sponsor' && Boolean(item.sponsorLogo)
+  const tagged = Boolean(item.sale) || deal
   // Phones: the card is the picture, the name and the price; one tap opens the detail sheet, which carries the button.
   return (
     <li className="panel-gold relative flex flex-col overflow-hidden rounded-xl max-sm:rounded-2xl">
@@ -228,43 +243,56 @@ export function ProductCard({ item, left, used, points, signedIn, pay, taskDone,
         aria-label={`${item.name}: detay ve ${buyLabel(item).toLocaleLowerCase('tr')}`}
         className="absolute inset-0 z-10 rounded-2xl focus-visible:outline-2 focus-visible:outline-primary sm:hidden"
       />
-      <div className="relative aspect-[4/3] overflow-hidden bg-secondary max-sm:aspect-[16/10]">
-        <ProductMedia item={item} dimmed={state.kind === 'out'} sizes="(min-width: 1536px) 20vw, (min-width: 768px) 30vw, 50vw" />
-        <div className="absolute inset-x-0 top-0 flex flex-wrap items-start justify-between gap-1 p-2">
-          <span className="rounded bg-background/85 px-1.5 py-0.5 text-xs font-bold tracking-wider text-foreground max-sm:rounded-full max-sm:border max-sm:border-border max-sm:px-2 max-sm:text-[11px] max-sm:tracking-normal">{item.type}</span>
-          <SaleTag item={item} />
+      <div className={cn('relative aspect-[4/3] overflow-hidden bg-secondary', logoTile ? 'max-sm:aspect-auto max-sm:h-16' : 'max-sm:aspect-[2/1]')}>
+        <ProductMedia
+          item={item}
+          dimmed={state.kind === 'out'}
+          phone={tagged ? 'tagged' : 'plain'}
+          sizes="(min-width: 1536px) 20vw, (min-width: 768px) 30vw, 50vw"
+        />
+        <div className="absolute inset-x-0 top-0 flex flex-wrap items-start gap-1 p-2 max-sm:p-1.5 sm:justify-between">
+          <span className="rounded bg-background/85 px-1.5 py-0.5 text-xs font-bold tracking-wider text-foreground max-sm:hidden">{item.type}</span>
+          <SaleTag item={item} className="max-sm:rounded-full max-sm:px-2 max-sm:text-[11px] max-sm:leading-4 max-sm:tracking-normal" />
+          {deal ? (
+            <span className="flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold leading-4 text-primary-foreground sm:hidden">
+              <Target className="size-3" aria-hidden="true" />
+              {taskDone ? 'Görev fiyatı' : `Görevle ${formatAC(item.dealPrice)}`}
+            </span>
+          ) : null}
         </div>
-        {deal ? (
-          <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold leading-4 text-primary-foreground shadow-md shadow-background/50 sm:hidden">
-            <Target className="size-3" aria-hidden="true" />
-            {taskDone ? 'Görev fiyatı' : `Görevle ${formatAC(item.dealPrice)}`}
-          </span>
-        ) : null}
       </div>
-      {/* Phone: every card carries the same three lines, so a row never leaves a hole under a shorter name. */}
-      <div className="flex flex-1 flex-col gap-3 p-3 max-sm:gap-1 max-sm:p-2.5">
-        <div className="flex flex-col items-start gap-1.5 max-sm:gap-0.5">
-          <h3 className="text-sm font-semibold leading-snug text-foreground text-pretty max-sm:line-clamp-2 max-sm:min-h-[2.75em]">{item.name}</h3>
-          <DeliveryLine item={item} className="max-w-full max-sm:hidden" />
-          <span className={cn('text-xs tabular-nums sm:hidden', level === 'out' ? 'font-semibold text-destructive' : level === 'low' ? 'font-semibold text-primary' : 'text-muted-foreground')}>
-            {level === 'out' ? 'Stok tükendi' : level === 'low' ? `Son ${left} adet` : item.total > 0 ? `Stok ${left}/${item.total}` : 'Stokta'}
+      {/* Phone: kind and stock share one line, the name takes only the lines it needs, the price closes the card. */}
+      <div className="flex flex-1 flex-col gap-1 p-2.5 sm:hidden">
+        <div className="flex items-start justify-between gap-2 text-[11px] leading-4">
+          <span className="min-w-0 font-semibold lowercase text-muted-foreground first-letter:uppercase">{item.type}</span>
+          <span
+            className={cn(
+              'flex shrink-0 items-center gap-1 tabular-nums',
+              level === 'out' ? 'font-semibold text-destructive' : level === 'low' ? 'font-semibold text-primary' : 'text-muted-foreground',
+            )}
+          >
+            {level !== 'out' && <Package className="size-3" aria-hidden="true" />}
+            <span className="sr-only">Stok: </span>
+            {level === 'out' ? 'Tükendi' : level === 'low' ? `Son ${left}` : item.total > 0 ? `${left}/${item.total}` : 'Var'}
           </span>
         </div>
-        <StockMeter left={left} total={item.total} className="max-sm:hidden" />
-        <div className="mt-auto flex flex-col gap-2 max-sm:mt-0 max-sm:gap-1">
-          <div className="max-sm:hidden">
-            <DealLine item={item} taskDone={taskDone} />
-          </div>
+        <h3 className="text-sm font-semibold leading-snug text-foreground text-pretty">{item.name}</h3>
+        <Price value={pay} was={item.price} small className="mt-auto pt-0.5" />
+      </div>
+      <div className="flex flex-1 flex-col gap-3 p-3 max-sm:hidden">
+        <div className="flex flex-col items-start gap-1.5">
+          <h3 className="text-sm font-semibold leading-snug text-foreground text-pretty">{item.name}</h3>
+          <DeliveryLine item={item} className="max-w-full" />
+        </div>
+        <StockMeter left={left} total={item.total} />
+        <div className="mt-auto flex flex-col gap-2">
+          <DealLine item={item} taskDone={taskDone} />
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <Price value={pay} was={item.price} />
-            <span className="max-sm:hidden">
-              <LimitLine item={item} used={used} signedIn={signedIn} />
-            </span>
+            <LimitLine item={item} used={used} signedIn={signedIn} />
           </div>
-          <div className="contents max-sm:hidden">
-            <BuyButton item={item} state={state} onBuy={onBuy} />
-            <DetailButton onClick={onDetail} />
-          </div>
+          <BuyButton item={item} state={state} onBuy={onBuy} />
+          <DetailButton onClick={onDetail} />
         </div>
       </div>
     </li>

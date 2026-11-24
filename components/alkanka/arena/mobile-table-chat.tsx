@@ -22,8 +22,21 @@ const fetcher = chatFetcher
  * message toasts and rising emoji reactions over the felt, and a compact quick-chat panel.
  * Must be rendered inside a `relative` container (the table section).
  */
-export function MobileTableChat({ tableId, placement = 'header' }: { tableId: string; placement?: 'header' | 'table' }) {
-  const onTable = placement === 'table'
+export function MobileTableChat({
+  tableId,
+  placement = 'header',
+  buttonClassName,
+  showLabel = false,
+}: {
+  tableId: string
+  /** header: a pill in the table header. table: a pill on the felt. layer: a button on a fullscreen layer, sized and placed by `buttonClassName`. */
+  placement?: 'header' | 'table' | 'layer'
+  buttonClassName?: string
+  /** layer only: the button is wide enough to carry the word beside its icon. */
+  showLabel?: boolean
+}) {
+  const layer = placement === 'layer'
+  const onTable = placement !== 'header'
   const { member, requireLogin } = usePoints()
   const idle = useIdle()
   const { data, mutate } = useSWR(`/api/tables/${tableId}/chat`, fetcher, { refreshInterval: idle ? 20000 : 5000 })
@@ -53,7 +66,8 @@ export function MobileTableChat({ tableId, placement = 'header' }: { tableId: st
     const fresh = messages.filter((m) => m.id > (seenRef.current ?? 0))
     seenRef.current = lastId
     if (fresh.length === 0) return
-    if (fresh.some((m) => m.userId !== member?.id)) playSound('message')
+    // The header pill of the same table stays mounted behind a fullscreen layer and already plays the sound.
+    if (!layer && fresh.some((m) => m.userId !== member?.id)) playSound('message')
 
     const emojis = fresh.filter((m) => ONLY_EMOJI.test(m.body))
     const texts = fresh.filter((m) => !ONLY_EMOJI.test(m.body))
@@ -124,12 +138,13 @@ export function MobileTableChat({ tableId, placement = 'header' }: { tableId: st
         aria-label={unread > 0 ? `Masa sohbeti, ${unread} yeni mesaj` : 'Masa sohbeti'}
         className={cn(
           'relative flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold transition-colors',
-          onTable && 'table-chat-btn pointer-events-auto absolute left-2 top-2 z-30 shadow-lg backdrop-blur-md',
+          placement === 'table' && 'table-chat-btn pointer-events-auto absolute left-2 top-2 z-30 shadow-lg backdrop-blur-md',
+          layer && cn('pointer-events-auto absolute z-30 justify-center rounded-lg p-0 shadow-lg backdrop-blur-md', buttonClassName),
           open ? 'border-primary bg-primary text-primary-foreground' : 'border-primary/40 bg-background/70 text-foreground',
         )}
       >
         <MessageCircle className="size-3.5" aria-hidden="true" />
-        Sohbet
+        <span className={cn(layer && !showLabel && 'sr-only')}>Sohbet</span>
         {unread > 0 && !open && (
           <span className="absolute -top-1.5 -right-1.5 flex min-w-4 items-center justify-center rounded-full bg-live px-1 text-[10px] font-bold leading-4 text-background">
             {unread > 9 ? '9+' : unread}
@@ -138,7 +153,10 @@ export function MobileTableChat({ tableId, placement = 'header' }: { tableId: st
       </button>
 
       <div
-        className={cn('pointer-events-none absolute inset-x-3 z-20 flex flex-col items-start gap-1.5', onTable ? 'top-12' : 'top-28')}
+        className={cn(
+          'pointer-events-none absolute z-20 flex flex-col items-start gap-1.5',
+          layer ? 'left-12 right-3 top-2' : onTable ? 'inset-x-3 top-12' : 'inset-x-3 top-28',
+        )}
         aria-hidden="true"
       >
         {toasts.map((t) => (

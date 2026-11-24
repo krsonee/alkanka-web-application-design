@@ -1,7 +1,9 @@
 'use server'
 
+import { randomInt } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { pool } from '@/lib/db'
+import { withBotPayoutGate } from '@/lib/bot-gate'
 import { notifyTable } from '@/lib/pvp/table-events'
 import { credit, debit, getBalance, getMember, recordHistory } from '@/lib/member'
 import { getArenaSettings } from '@/lib/arena-server'
@@ -118,48 +120,52 @@ export async function cancelBotGame(sessionId: string) {
 export async function finishBotGame(sessionId: string, result: 'win' | 'loss' | 'draw', score?: { for: number; against: number }) {
   try {
     const m = await member()
-    const r = await pool.query(
-      `UPDATE solo_sessions SET status = 'bitti', state = $3::jsonb WHERE id = $1 AND user_id = $2 AND status = 'acik'
-       RETURNING game, stake, extract(epoch FROM now() - created_at) AS secs`,
-      [sessionId, m.id, JSON.stringify({ result, score: score ?? null })],
-    )
-    const row = r.rows[0]
-    if (!row) throw new Error('Oyun oturumu bulunamadı.')
-    const game = String(row.game) as keyof typeof ARENA_META
-    const stake = Number(row.stake)
-    let final: 'win' | 'loss' | 'draw' = result === 'win' || result === 'draw' ? result : 'loss'
-    let note: string | undefined
-    if (final === 'win' && Number(row.secs) < (MIN_WIN_SECONDS[game] ?? 30)) {
-      final = 'loss'
-      note = 'Oyun çok kısa sürdüğü için galibiyet sayılmadı.'
-    }
-    if (final !== 'loss' && SCORE_GAMES.includes(game) && !scoreMatches(final, score)) {
-      final = 'loss'
-      note = 'Skor doğrulanamadığı için sonuç kabul edilmedi.'
-    }
-    const s = (await getArenaSettings())[game]
-    let gross = botMatchGross(game, s, stake, final, score)
-    if (gross > stake) {
-      const room = Math.max(0, BOT_DAILY_PROFIT_CAP - (await botProfitToday(m.id)))
-      if (gross - stake > room) {
-        gross = stake + room
-        note = room ? 'Bot maçlarında günlük kazanç sınırına ulaştın.' : 'Bot maçlarında günlük kazanç sınırı doldu; bahsin iade edildi.'
+    // The session is closed inside the gate too: when the gate cannot be had, the session stays open and the
+    // result can be sent again instead of the stake being lost.
+    return await withBotPayoutGate([m.id], async () => {
+      const r = await pool.query(
+        `UPDATE solo_sessions SET status = 'bitti', state = $3::jsonb WHERE id = $1 AND user_id = $2 AND status = 'acik'
+         RETURNING game, stake, extract(epoch FROM now() - created_at) AS secs`,
+        [sessionId, m.id, JSON.stringify({ result, score: score ?? null })],
+      )
+      const row = r.rows[0]
+      if (!row) throw new Error('Oyun oturumu bulunamadı.')
+      const game = String(row.game) as keyof typeof ARENA_META
+      const stake = Number(row.stake)
+      let final: 'win' | 'loss' | 'draw' = result === 'win' || result === 'draw' ? result : 'loss'
+      let note: string | undefined
+      if (final === 'win' && Number(row.secs) < (MIN_WIN_SECONDS[game] ?? 30)) {
+        final = 'loss'
+        note = 'Oyun çok kısa sürdüğü için galibiyet sayılmadı.'
       }
-    }
-    const payout = await capPayout(m.id, stake, gross)
-    if (payout) await credit(m.id, payout, 'Bota karşı oyun ödemesi')
-    await recordHistory({
-      userId: m.id,
-      userName: m.name,
-      game,
-      mode: 'bot',
-      opponent: 'Alkanka Bot',
-      stake,
-      result: final,
-      delta: payout - stake,
-      score: score ? score.for : null,
+      if (final !== 'loss' && SCORE_GAMES.includes(game) && !scoreMatches(final, score)) {
+        final = 'loss'
+        note = 'Skor doğrulanamadığı için sonuç kabul edilmedi.'
+      }
+      const s = (await getArenaSettings())[game]
+      let gross = botMatchGross(game, s, stake, final, score)
+      if (gross > stake) {
+        const room = Math.max(0, BOT_DAILY_PROFIT_CAP - (await botProfitToday(m.id)))
+        if (gross - stake > room) {
+          gross = stake + room
+          note = room ? 'Bot maçlarında günlük kazanç sınırına ulaştın.' : 'Bot maçlarında günlük kazanç sınırı doldu; bahsin iade edildi.'
+        }
+      }
+      const payout = await capPayout(m.id, stake, gross)
+      if (payout) await credit(m.id, payout, 'Bota karşı oyun ödemesi')
+      await recordHistory({
+        userId: m.id,
+        userName: m.name,
+        game,
+        mode: 'bot',
+        opponent: 'Alkanka Bot',
+        stake,
+        result: final,
+        delta: payout - stake,
+        score: score ? score.for : null,
+      })
+      return { ok: true as const, result: final, payout, note, balance: await getBalance(m.id) }
     })
-    return { ok: true as const, result: final, payout, note, balance: await getBalance(m.id) }
   } catch (e) {
     return fail(e)
   }
@@ -311,7 +317,7 @@ export async function spinRoulette(bets: RouletteBet[]) {
     const total = bets.reduce((a, b) => a + b.amount, 0)
     await assertCanPlay(m.id)
     if (!(await debit(m.id, total, 'Rulet bahsi'))) throw new Error('Yetersiz Kanka Coin.')
-    const n = Math.floor(Math.random() * 37)
+    const n = randomInt(37)
     const returned = await capPayout(m.id, total, bets.reduce((a, b) => a + betReturn(b, n), 0))
     if (returned) await credit(m.id, returned, 'Rulet ödemesi')
     await recordHistory({
@@ -369,11 +375,15 @@ export async function openTable(game: string, stake: number, options?: { seats?:
 }
 
 /** "Bota karşı hemen oyna": every other seat is a bot, so the table is already running when this returns. */
-export async function playBotsNow(game: string, stake: number) {
+export async function playBotsNow(
+  game: string,
+  stake: number,
+  rules?: { seats?: number; team?: boolean; rounds?: number; variant?: string; extras?: string[] },
+) {
   try {
     const m = await member()
     await assertCanPlay(m.id)
-    const id = await quickSoloTable(m, game, stake)
+    const id = await quickSoloTable(m, game, stake, rules)
     return { ok: true as const, id }
   } catch (e) {
     return fail(e)

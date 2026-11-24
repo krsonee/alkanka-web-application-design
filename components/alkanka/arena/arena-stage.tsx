@@ -13,7 +13,8 @@ import { HeadGame } from './head-game'
 import { TableLobby, TableRoom } from './table-lobby'
 import { TournamentMatchCard } from './tournament-match-banner'
 import { PvpTablesPanel } from './pvp-tables-panel'
-import { wizardEnabledFor, type SetupConfig } from '@/lib/home-v2-shared'
+import { isWizardGame, wizardEnabledFor, type SetupConfig } from '@/lib/home-v2-shared'
+import { BotSetup } from './bot-setup'
 import { LiveLobby } from './live-lobby'
 
 const noSubscribe = () => () => {}
@@ -111,6 +112,9 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
   // Okey is the exception: its bot game keeps its own themed table, and server bots only fill player tables.
   const botPlay = isBotTableGame(game) && game !== 'okey' ? 'table' : meta.modes.includes('bot') ? 'session' : null
   const hasTables = pvp || botPlay === 'table'
+  // A bot table opens only after the member has picked its rules; the bet they chose waits here meanwhile.
+  const [botSetup, setBotSetup] = useState<number | null>(null)
+  const rulesFirst = botPlay === 'table' && setup != null && isWizardGame(game)
   // Roulette and blackjack have no table list of their own; a table room only opens there from a direct link.
   const liveOnly = game === 'rulet' || game === 'blackjack'
   const [entered, setEntered] = useState<{ bet: number } | null>(null)
@@ -151,7 +155,8 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
   const linkTarget = (query: string) => {
     const params = new URLSearchParams(query)
     const id = params.get('masa')
-    if (id) return { id }
+    // The id ends up inside request addresses (/api/tables/<id>), so anything that is not a plain id is ignored.
+    if (id && /^[\w-]{1,64}$/.test(id)) return { id }
     return wizardEnabledFor(setup, game) && params.has('masa-ac') ? { id: null } : null
   }
   const openLinked = (query: string) => {
@@ -231,8 +236,22 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
 
   return (
     <div className="flex flex-col gap-4">
-      {entered == null && <TournamentMatchCard game={game} onEnter={(id) => openTableRoom(id, settings.bets[0])} />}
-      {entered == null && (
+      {entered == null && botSetup == null && <TournamentMatchCard game={game} onEnter={(id) => openTableRoom(id, settings.bets[0])} />}
+      {entered == null && botSetup != null && setup && isWizardGame(game) && (
+        <BotSetup
+          game={game}
+          stake={botSetup}
+          setup={setup}
+          bets={settings.bets}
+          commission={settings.commission}
+          onClose={() => setBotSetup(null)}
+          onTable={(id) => {
+            setBotSetup(null)
+            openTableRoom(id, botSetup)
+          }}
+        />
+      )}
+      {entered == null && botSetup == null && (
         <StakeGate
           game={game}
           settings={settings}
@@ -241,6 +260,12 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
             bot: botPlay,
             pvp,
             onTable: openTableRoom,
+            onBotSetup: rulesFirst
+              ? (stake) => {
+                  setBotSetup(stake)
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                }
+              : undefined,
             tables: (
               <PvpTablesPanel
                 game={game}
