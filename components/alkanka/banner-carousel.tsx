@@ -1,10 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import Image, { getImageProps } from 'next/image'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SLIDES, type Slide } from './data'
+import { PlainBanner, SlidePicture } from './slide-picture'
 import { trackPromo } from '@/lib/promo-client'
 
 const INTERVAL = 6000
@@ -12,22 +12,7 @@ const SWIPE_RATIO = 0.15
 const WHEEL_MIN = 30
 const WIDE_SIZES = '(min-width: 1280px) 1100px, 100vw'
 const IMAGE_CLASS = 'pointer-events-none object-cover object-center'
-
-/** A slide with its own phone image swaps sources at the `sm` breakpoint, so a phone never downloads the wide one. */
-function SlideImage({ image, mobileImage, first }: { image: string; mobileImage?: string; first: boolean }) {
-  const wide = image || '/placeholder.svg'
-  if (!mobileImage) return <Image src={wide} alt="" fill draggable={false} priority={first} sizes={WIDE_SIZES} className={IMAGE_CLASS} />
-  const common = { alt: '', fill: true, priority: first }
-  const desktop = getImageProps({ ...common, src: wide, sizes: WIDE_SIZES }).props
-  const phone = getImageProps({ ...common, src: mobileImage, sizes: '100vw' }).props
-  // `images.unoptimized` leaves srcSet empty; a <source> without one is skipped and the phone image would show everywhere.
-  return (
-    <picture>
-      <source media="(min-width: 640px)" srcSet={desktop.srcSet ?? desktop.src} sizes={desktop.srcSet ? WIDE_SIZES : undefined} />
-      <img {...phone} alt="" draggable={false} className={IMAGE_CLASS} />
-    </picture>
-  )
-}
+const slideName = (slide: Slide) => slide.title || slide.eyebrow || 'Afiş'
 
 export function BannerCarousel({ slides = SLIDES }: { slides?: Slide[] }) {
   const [index, setIndex] = useState(0)
@@ -135,17 +120,29 @@ export function BannerCarousel({ slides = SLIDES }: { slides?: Slide[] }) {
           {slides.map((slide, i) => {
             const active = i === index
             const external = slide.href.startsWith('http')
+            const label = `${i + 1} / ${count}: ${slideName(slide)}`
+            // A banner that carries its own words is shown whole and clean, and the whole of it is the link.
+            if (slide.plain) {
+              return (
+                <div key={slide.id} role="group" aria-roledescription="slide" aria-label={label} aria-hidden={!active} className="relative h-full w-full shrink-0 overflow-hidden">
+                  <a
+                    href={slide.href}
+                    aria-label={slideName(slide)}
+                    tabIndex={active ? 0 : -1}
+                    draggable={false}
+                    onClick={() => trackPromo('slide', slide.id, 'click')}
+                    {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                    className="absolute inset-0"
+                  >
+                    <PlainBanner image={slide.image} mobileImage={slide.mobileImage} priority={i === 0} sizes={WIDE_SIZES} anchor="center" />
+                  </a>
+                </div>
+              )
+            }
             return (
-              <div
-                key={slide.id}
-                role="group"
-                aria-roledescription="slide"
-                aria-label={`${i + 1} / ${count}: ${slide.title}`}
-                aria-hidden={!active}
-                className="relative h-full w-full shrink-0 overflow-hidden"
-              >
+              <div key={slide.id} role="group" aria-roledescription="slide" aria-label={label} aria-hidden={!active} className="relative h-full w-full shrink-0 overflow-hidden">
                 <div className="absolute inset-0 sm:left-1/4">
-                  <SlideImage image={slide.image} mobileImage={slide.mobileImage} first={i === 0} />
+                  <SlidePicture image={slide.image} mobileImage={slide.mobileImage} priority={i === 0} sizes={WIDE_SIZES} className={IMAGE_CLASS} />
                 </div>
                 <div
                   aria-hidden="true"
@@ -157,9 +154,11 @@ export function BannerCarousel({ slides = SLIDES }: { slides?: Slide[] }) {
                     active ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0',
                   )}
                 >
-                  <span className="w-fit rounded-md bg-primary px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-primary-foreground">
-                    {slide.eyebrow}
-                  </span>
+                  {slide.eyebrow && (
+                    <span className="w-fit rounded-md bg-primary px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-primary-foreground">
+                      {slide.eyebrow}
+                    </span>
+                  )}
                   <h2 className="font-display text-2xl font-bold leading-tight text-foreground text-balance sm:text-3xl">{slide.title}</h2>
                   <p className="hidden text-sm leading-relaxed text-muted-foreground text-pretty sm:line-clamp-2">{slide.description}</p>
                   {slide.chips && slide.chips.length > 0 && (
@@ -216,7 +215,7 @@ export function BannerCarousel({ slides = SLIDES }: { slides?: Slide[] }) {
                     key={s.id}
                     type="button"
                     onClick={() => goTo(i)}
-                    aria-label={`${i + 1}. slayt: ${s.eyebrow || s.title}`}
+                    aria-label={`${i + 1}. slayt: ${s.eyebrow || slideName(s)}`}
                     aria-current={active}
                     className={cn(
                       'relative h-1.5 overflow-hidden rounded-full transition-all duration-300',

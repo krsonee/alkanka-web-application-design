@@ -67,6 +67,8 @@ const SETTINGS: ({ title: string; words?: string; query?: string; anyOf?: PanelM
   { title: 'Stüdyo hareketli GIF ve video kalitesi', words: 'gerçek hareket ışık efekti standart yüksek 720p 1080p süre kamera', row: 'studio' },
   { title: 'Stüdyo hareketli sticker', words: 'telegram video sticker kenar çizgisi şeffaf sallanma webm', row: 'studio' },
   { title: 'Slayt telefon görseli', words: 'mobil dikey görsel slider telefon', row: 'slide', query: 's=slider' },
+  { title: 'Sadece görsel slayt (afiş)', words: 'afiş banner yazısız yazı karartma üstüne yazı hazır görsel slider slayt link', row: 'slide', query: 's=slider' },
+  { title: 'Kaldığın yer slaytı', words: 'üye kapağı slider ilk slayt masa hoş geldin kapat', row: 'slide', query: 's=layout' },
   { title: 'Rehber yazısını ileri tarihe zamanla', words: 'yayın zamanı tarih saat zamanla blog yazı', row: 'seo' },
   { title: 'Turnuva şablonları', words: 'şablon kalıp tekrar aç haftalık kupa', row: 'tournaments' },
   { title: 'Turnuva sıralama ödülleri', words: 'sıralama ödülü ikinci üçüncü ödül havuzu kontenjan kişi sayısı kazanan sıra ekle kazanan sayısı', row: 'tournaments' },

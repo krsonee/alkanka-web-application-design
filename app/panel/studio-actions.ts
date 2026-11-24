@@ -116,7 +116,7 @@ const SLIDE_IMAGE_TYPES: Record<string, string> = { png: 'image/png', jpg: 'imag
 
 /**
  * Copies a Studio banner into the public image store and adds it to the slider as a hidden slide,
- * so nothing reaches the home page until someone has written its title and link.
+ * so nothing reaches the home page until someone has set where it leads.
  */
 export async function studioToSlideAction(id: number): Promise<Result> {
   if (!(await canPanel('studio'))) return EXPIRED
@@ -134,7 +134,7 @@ export async function studioToSlideAction(id: number): Promise<Result> {
     const data = await readFile(job.pathname)
     const blob = await put(`logos/slide-studio.${ext}`, data, { access: 'private', addRandomSuffix: true, contentType })
     const slideId = `c-${Date.now().toString(36)}`
-    const title = job.texts?.headline || 'Başlığı buraya yaz'
+    const title = job.texts?.headline || ''
     await setContent(CUSTOM_SLIDES_KEY, [
       ...list,
       {
@@ -145,6 +145,8 @@ export async function studioToSlideAction(id: number): Promise<Result> {
         cta: job.texts?.cta || 'İncele',
         href: '/',
         image: `/api/logo/${blob.pathname.slice('logos/'.length)}`,
+        // A Studio banner already has its words printed on it; the slider must not write them a second time.
+        plain: true,
       },
     ])
     const hidden = readHidden(await getContent(HIDDEN_KEY))
