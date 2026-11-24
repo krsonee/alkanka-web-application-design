@@ -10,7 +10,8 @@ import { myStreams } from '@/lib/member-streams'
 import { StreamChannelsCard } from '@/components/alkanka/profile/stream-channels'
 import { TelegramAccountCard } from '@/components/alkanka/profile/telegram-account-card'
 import { RANKS } from '@/lib/ranks-shared'
-import { getMember, historySummary } from '@/lib/member'
+import { getMember, historySummary, listHistory } from '@/lib/member'
+import { HistoryList } from '@/components/alkanka/profile/history-list'
 import { cemberCareer } from '@/lib/cember'
 import { ArenaCareer } from '@/components/alkanka/profile/arena-career'
 import { SITE_URL } from '@/lib/seo'
@@ -122,7 +123,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
   return (
     <div className="flex flex-col gap-6">
       <section aria-labelledby="profil-ad" className={cn('overflow-hidden rounded-2xl border', TIER_BG[tier])}>
-        <div className="relative h-36 md:h-44">
+        <div className="relative h-36 max-sm:h-28 md:h-44">
           <Image src={cover.src} alt="" fill priority sizes="(min-width: 1024px) 1000px, 100vw" className="object-cover" />
           <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
           <div className="absolute right-4 top-4 flex gap-2">
@@ -135,13 +136,13 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
           </div>
         </div>
 
-        <div className="relative flex flex-col gap-5 px-5 pb-5 md:flex-row md:items-end md:px-6">
-          <div className="-mt-16 flex shrink-0 items-end gap-3 md:-mt-20">
+        <div className="relative flex flex-col gap-5 px-5 pb-5 max-sm:gap-3.5 max-sm:px-4 max-sm:pb-4 md:flex-row md:items-end md:px-6">
+          <div className="-mt-16 flex shrink-0 items-end gap-3 max-sm:-mt-14 md:-mt-20">
             <Link
               href="/profil?sekme=gorunum"
               scroll={false}
               className={cn(
-                'group relative block size-28 overflow-hidden rounded-full border-4 bg-background md:size-32',
+                'group relative block size-28 overflow-hidden rounded-full border-4 bg-background max-sm:size-24 md:size-32',
                 frame ? FRAME_RING[frame] : 'border-gold',
               )}
               title={frame ? `${TIER_NAMES[frame]} rozet çerçevesi` : undefined}
@@ -167,7 +168,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
               {TIER_NAMES[tier]} Ligi · Seviye {lv}
             </span>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <h1 id="profil-ad" className="font-display text-3xl font-bold leading-none text-foreground">{member.name}</h1>
+              <h1 id="profil-ad" className="font-display text-3xl font-bold leading-none text-foreground max-sm:text-2xl">{member.name}</h1>
               <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold', TIER_BG[tier], TIER_TEXT[tier])}>
                 <LevelEmblem level={lv} size="chip" />
                 {level.name}
@@ -204,8 +205,8 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
 
         <dl className="grid grid-cols-2 border-t border-border md:grid-cols-4">
           {stats.map((s, i) => (
-            <div key={s.label} className={cn('flex items-center gap-3 px-5 py-4', i % 2 === 1 && 'border-l border-border', i >= 2 && 'border-t border-border md:border-t-0', i === 2 && 'md:border-l')}>
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background/70 text-gold">
+            <div key={s.label} className={cn('flex items-center gap-3 px-5 py-4 max-sm:gap-2.5 max-sm:px-4 max-sm:py-3', i % 2 === 1 && 'border-l border-border', i >= 2 && 'border-t border-border md:border-t-0', i === 2 && 'md:border-l')}>
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background/70 text-gold max-sm:size-8">
                 <s.icon className="size-4" aria-hidden />
               </span>
               <div className="flex min-w-0 flex-col">
@@ -233,6 +234,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
           </section>
         )}
         {tab === 'yorumlar' && <ReviewsTab memberId={member.id} />}
+        {tab === 'gecmis' && <HistoryList rows={await listHistory({ userId: member.id, limit: 50 })} played={games.played} wins={games.wins} />}
         {tab === 'mesajlar' && (
           <section aria-labelledby="mesajlar" className="flex max-w-3xl flex-col gap-3">
             <SectionTitle id="mesajlar" action={<span className="text-xs tabular-nums text-muted-foreground">{inbox.length} mesaj</span>}>
@@ -323,11 +325,11 @@ async function OverviewTab({
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         <section aria-labelledby="kp-kaynak" className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5">
           <SectionTitle id="kp-kaynak">KP nereden geldi?</SectionTitle>
-          <ul className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+          <ul className="grid gap-x-6 gap-y-3 max-sm:grid-cols-2 max-sm:gap-x-4 sm:grid-cols-2">
             {KP_SOURCES.map(([key, label]) => (
-              <li key={key} className="flex flex-col gap-1.5">
-                <div className="flex items-baseline justify-between text-sm">
-                  <span className="text-muted-foreground">{label}</span>
+              <li key={key} className="flex min-w-0 flex-col gap-1.5">
+                <div className="flex items-baseline justify-between text-sm max-sm:flex-col max-sm:items-start max-sm:gap-0.5">
+                  <span className="text-muted-foreground max-sm:text-xs">{label}</span>
                   <span className="font-display font-bold tabular-nums text-foreground">{fmt(breakdown[key])}</span>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-secondary">

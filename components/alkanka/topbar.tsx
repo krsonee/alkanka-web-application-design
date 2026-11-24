@@ -78,7 +78,7 @@ const MENU = [
   { href: '/profil?sekme=hesaplar', label: 'Bağlı hesaplar', icon: Link2 },
   { href: '/profil?sekme=ayarlar', label: 'Hesap ayarları', icon: Settings },
   { href: '/profil?sekme=yorumlar', label: 'Yorumlarım', icon: MessageSquareText },
-  { href: '/oyunlar/gecmis', label: 'Oyun geçmişi', icon: History },
+  { href: '/profil?sekme=gecmis', label: 'Oyun geçmişi', icon: History },
 ] as const
 
 function AccountMenu() {

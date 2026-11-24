@@ -99,7 +99,7 @@ export function OnlineRewards() {
           </ol>
         </article>
 
-        <ol aria-label="Saatlik ödüller" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:col-span-3 lg:grid-cols-4">
+        <ol aria-label="Saatlik ödüller" className="no-scrollbar grid grid-cols-2 gap-2 max-sm:-mx-4 max-sm:flex max-sm:snap-x max-sm:scroll-px-4 max-sm:overflow-x-auto max-sm:px-4 max-sm:py-1 sm:grid-cols-3 lg:col-span-3 lg:grid-cols-4">
           {data.tiers.map((t) => {
             const done = member && data.active && hours >= t.hour
             const current = member && data.active && data.next?.tier.hour === t.hour
@@ -107,7 +107,7 @@ export function OnlineRewards() {
               <li
                 key={t.hour}
                 className={cn(
-                  'relative flex flex-col gap-2 rounded-xl border p-3 transition-colors',
+                  'relative flex flex-col gap-2 rounded-xl border p-3 transition-colors max-sm:w-44 max-sm:shrink-0 max-sm:snap-start',
                   done ? 'border-primary/40 bg-primary/10' : current ? 'border-primary bg-card ring-2 ring-primary/30' : 'border-border bg-card',
                 )}
               >
@@ -130,7 +130,7 @@ export function OnlineRewards() {
             )
           })}
           {(data.extra.coin > 0 || data.extra.kp > 0) && (
-            <li className="col-span-2 flex flex-col justify-center gap-2 rounded-xl border border-dashed border-primary/40 p-3 sm:col-span-3 lg:col-span-4">
+            <li className="col-span-2 flex flex-col justify-center gap-2 rounded-xl border border-dashed border-primary/40 p-3 max-sm:w-48 max-sm:shrink-0 max-sm:snap-start sm:col-span-3 lg:col-span-4">
               <span className="text-xs font-semibold text-foreground">
                 {(data.tiers.at(-1)?.hour ?? 0) + 1}. saatten sonra her saat maraton bonusu
               </span>
