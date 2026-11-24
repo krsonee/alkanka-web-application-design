@@ -22,20 +22,21 @@ export default async function GuidePage() {
           İlk rehberler yakında burada.
         </p>
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        // Phones: a short row per guide, the cover as a square thumbnail on the left.
+        <ul className="grid gap-4 max-sm:gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
           {posts.map((p) => (
             <li key={p.id}>
               <Link
                 href={`/rehber/${p.slug}`}
-                className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card transition-colors hover:border-primary"
+                className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card transition-colors hover:border-primary max-sm:flex-row max-sm:active:bg-secondary/60"
               >
                 {p.cover && (
                   // eslint-disable-next-line @next/next/no-img-element -- admin-provided cover URL
-                  <img src={p.cover} alt="" className="aspect-video w-full object-cover" />
+                  <img src={p.cover} alt="" loading="lazy" className="aspect-video w-full object-cover max-sm:aspect-square max-sm:w-28 max-sm:shrink-0" />
                 )}
-                <div className="flex flex-col gap-2 p-4">
-                  <h2 className="text-pretty font-semibold leading-snug text-card-foreground">{p.title}</h2>
-                  <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">{p.excerpt}</p>
+                <div className="flex min-w-0 flex-col gap-2 p-4 max-sm:justify-center max-sm:gap-1 max-sm:p-3">
+                  <h2 className="text-pretty font-semibold leading-snug text-card-foreground max-sm:line-clamp-3 max-sm:text-sm">{p.title}</h2>
+                  <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground max-sm:line-clamp-2 max-sm:text-xs">{p.excerpt}</p>
                 </div>
               </Link>
             </li>

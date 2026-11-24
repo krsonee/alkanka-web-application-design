@@ -16,6 +16,8 @@ const dayKeyFmt = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-
 
 type Filter = 'hepsi' | 'ozel' | 'duyuru'
 
+const PHONE_FIRST = 12
+
 const detailLinkClass = 'flex items-center gap-1.5 self-start text-sm font-bold text-gold underline-offset-4 hover:underline'
 
 function dayLabel(key: string, sample: Date) {
@@ -29,6 +31,7 @@ function dayLabel(key: string, sample: Date) {
 export function InboxList({ messages }: { messages: InboxMessage[] }) {
   const { mutate } = useSWRConfig()
   const [filter, setFilter] = useState<Filter>('hepsi')
+  const [allOnPhone, setAllOnPhone] = useState(false)
   const hasUnread = messages.some((m) => !m.read)
 
   useEffect(() => {
@@ -56,8 +59,15 @@ export function InboxList({ messages }: { messages: InboxMessage[] }) {
       g.items.push(m)
       map.set(key, g)
     }
-    return [...map.entries()].map(([key, g]) => ({ key, ...g }))
+    let start = 0
+    return [...map.entries()].map(([key, g]) => {
+      const group = { key, ...g, start }
+      start += g.items.length
+      return group
+    })
   }, [messages, filter])
+  const shown = groups.reduce((n, g) => n + g.items.length, 0)
+  const older = shown - PHONE_FIRST
 
   if (!messages.length) {
     return (
@@ -102,17 +112,18 @@ export function InboxList({ messages }: { messages: InboxMessage[] }) {
         <p className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Bu türde mesajın yok kanka.</p>
       ) : (
         groups.map((g) => (
-          <section key={g.key} aria-label={g.label} className="flex flex-col gap-2">
-            <h3 className="sticky top-14 z-[1] self-start rounded-full bg-background/90 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-muted-foreground backdrop-blur">
+          <section key={g.key} aria-label={g.label} className={cn('flex flex-col gap-2', !allOnPhone && g.start >= PHONE_FIRST && 'max-sm:hidden')}>
+            <h3 className="sticky top-14 z-[1] self-start rounded-full bg-background/90 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-muted-foreground backdrop-blur max-sm:static">
               {g.label} · {g.items.length}
             </h3>
-            <ol className="flex flex-col gap-3">
-              {g.items.map((m) => (
+            <ol className="flex flex-col gap-3 max-sm:gap-2">
+              {g.items.map((m, i) => (
                 <li
                   key={m.id}
                   className={cn(
-                    'relative flex flex-col gap-2 overflow-hidden rounded-2xl border bg-card p-4',
+                    'relative flex flex-col gap-2 overflow-hidden rounded-2xl border bg-card p-4 max-sm:gap-1.5 max-sm:p-3.5',
                     m.read ? 'border-border' : 'border-primary/40',
+                    !allOnPhone && g.start + i >= PHONE_FIRST && 'max-sm:hidden',
                   )}
                 >
                   {!m.read && <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-primary" />}
@@ -155,6 +166,15 @@ export function InboxList({ messages }: { messages: InboxMessage[] }) {
             </ol>
           </section>
         ))
+      )}
+      {!allOnPhone && older > 0 && (
+        <button
+          type="button"
+          onClick={() => setAllOnPhone(true)}
+          className="h-11 rounded-xl border border-border bg-card text-sm font-semibold text-foreground sm:hidden"
+        >
+          Daha eski {older} mesajı göster
+        </button>
       )}
     </div>
   )

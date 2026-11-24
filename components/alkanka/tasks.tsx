@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useTransition } from 'react'
-import { Check, CalendarCheck, Flame, Info, Lock, Users } from 'lucide-react'
+import { Calendar, CalendarCheck, Check, ChevronDown, Flame, Info, LayoutGrid, Link2, ListChecks, Lock, Send, Users, type LucideIcon } from 'lucide-react'
 import { checkInAction, completeTaskAction } from '@/app/actions/tasks'
 import { PERIODS, STREAK_DAYS, type TaskPeriod } from '@/lib/task-period'
 import { isSocialCheckKind, KIND_META, kindHref, TASK_CATEGORIES, type TaskCategory, type TaskKind } from '@/lib/task-kinds'
@@ -53,6 +53,12 @@ const PERIOD_WORD: Record<TaskPeriod, string> = { daily: 'gunluk', weekly: 'haft
 const CATEGORY_WORD: Record<TaskCategory | 'hepsi', string> = { hepsi: 'hepsi', genel: 'genel', takvim: 'takvim', sosyal: 'sosyal', sponsor: 'sponsor', zincir: 'zincir' }
 const TASK_PARAM = 'gorev'
 
+const CATEGORY_ICON: Record<TaskCategory, LucideIcon> = { genel: ListChecks, takvim: Calendar, sosyal: Send, zincir: Link2, sponsor: LayoutGrid }
+/** How many rows a category shows on a phone before "show the rest". */
+const PHONE_ROWS = 5
+const RING = 2 * Math.PI * 26
+const BUTTON = 'flex h-9 shrink-0 items-center justify-center rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100 max-sm:h-11'
+
 const STREAK_RULES = [
   'Ödülü almak için her gün “Bugünü al” butonuna basman gerekir.',
   'Gün, Türkiye saatiyle 00:00’da yenilenir.',
@@ -99,6 +105,9 @@ export function Tasks({
   const [note, setNote] = useState<string | null>(null)
   const [visited, setVisited] = useState<Record<number, boolean>>({})
   const [bundleOpen, setBundleOpen] = useState<number | null>(null)
+  const [openRow, setOpenRow] = useState<number | null>(null)
+  const [openGroup, setOpenGroup] = useState<Record<string, TaskCategory | null>>({})
+  const [allRows, setAllRows] = useState<Record<string, boolean>>({})
   const [pending, start] = useTransition()
   const [tab, setTab] = useAddressChoice('donem', PERIOD_WORD, 'daily')
   const showDetail = (task: PublicTask | null) => {
@@ -199,8 +208,225 @@ export function Tasks({
 
   const selected = detail ? tasks.find((task) => task.id === detail.id) ?? detail : null
 
+  const stateOf = (task: PublicTask) => statusOf(task, claims[task.id], Boolean(done[task.id]))
+  const rewardText = (task: PublicTask) =>
+    `${task.kind === 'bundle' && task.period === 'daily' ? `${formatAC(task.points)}–${formatAC(task.points * 2)}` : `+${formatAC(task.points)}`} KC`
+
+  /** The one button a task shows, by where the member stands on it. The card and the phone row share it. */
+  function action(task: PublicTask) {
+    const state = stateOf(task)
+    const label = state === 'done' ? 'Tamamlandı' : state === 'waiting' ? 'Onay bekliyor' : state === 'rejected' ? 'Reddedildi' : task.kind !== 'manual' ? 'Ödülü al' : 'Görevi yap'
+    if (task.chainState === 'locked') {
+      return (
+        <span className="flex h-9 items-center gap-1.5 rounded-lg bg-secondary px-4 text-xs font-bold text-muted-foreground max-sm:h-11">
+          <Lock className="size-3.5" aria-hidden="true" />
+          Önceki adımı bitir
+        </span>
+      )
+    }
+    if (state === 'open' && (task.kind === 'secret_code' || task.kind === 'bundle')) {
+      return (
+        <button type="button" onClick={() => complete(task)} disabled={pending || (task.kind === 'bundle' && task.progress < task.target)} className={BUTTON}>
+          {task.kind === 'secret_code' ? 'Kodu gönder' : task.period === 'daily' && !task.parts?.length ? 'Sandığı aç' : 'Ödülü al'}
+        </button>
+      )
+    }
+    if (state === 'open' && isSocialCheckKind(task.kind)) {
+      return visited[task.id] || !task.link ? (
+        <button type="button" onClick={() => complete(task)} disabled={pending} className={BUTTON}>
+          Kontrol et
+        </button>
+      ) : (
+        <a href={task.link} target="_blank" rel="noopener noreferrer" onClick={(event) => visitSocial(event, task)} className={BUTTON}>
+          {task.kind === 'social_like' ? 'Beğen' : task.param === 'youtube' ? 'Abone ol' : 'Takip et'}
+        </a>
+      )
+    }
+    if (state === 'open' && task.kind !== 'manual' && task.progress < task.target) {
+      return <GoButton task={task} className={BUTTON} onBlocked={() => requireLogin()} />
+    }
+    if (task.link && state === 'open') {
+      return (
+        <a href={task.link} target="_blank" rel="noopener noreferrer" onClick={(event) => openTask(event, task)} className={BUTTON}>
+          {label}
+        </a>
+      )
+    }
+    return (
+      <button type="button" onClick={() => complete(task)} disabled={state !== 'open' || pending} className={BUTTON}>
+        {state === 'done' ? <Check className="size-4" aria-hidden="true" /> : null}
+        {label}
+      </button>
+    )
+  }
+
+  // Phones: the active tab's tasks as short rows, folded by category so the page stays a few screens long.
+  const phoneGroups = TASK_CATEGORIES.map((c) => ({ ...c, items: visibleTasks.filter((t) => (t.category ?? 'genel') === c.value) })).filter((g) => g.items.length > 0)
+  const tabKey = activeTab ?? 'daily'
+  const chosenGroup = openGroup[tabKey]
+  const shownGroup = chosenGroup !== undefined ? chosenGroup : (phoneGroups.find((g) => g.items.some((t) => stateOf(t) === 'open')) ?? phoneGroups[0])?.value ?? null
+  const summary = groups.find((g) => g.period === 'daily') ?? groups[0]
+
+  function phoneRow(task: PublicTask) {
+    const state = stateOf(task)
+    const locked = task.chainState === 'locked'
+    const auto = task.kind !== 'manual'
+    const open = openRow === task.id
+    const filled = state === 'done' ? 1 : auto && task.target > 0 ? Math.min(1, task.progress / task.target) : 0
+    const note =
+      state === 'done' ? 'Alındı'
+      : state === 'waiting' ? 'Onay bekliyor'
+      : state === 'rejected' ? 'Reddedildi'
+      : locked ? 'Kilitli'
+      : auto && task.progress >= task.target ? 'Ödül hazır'
+      : auto && task.target > 1 ? `${task.progress}/${task.target}`
+      : ''
+    const Icon = state === 'done' ? Check : locked ? Lock : CATEGORY_ICON[task.category ?? 'genel']
+    const checks =
+      state !== 'open' ? []
+      : task.parts?.length ? task.parts.map((part) => ({ label: part.label, done: part.done, tail: part.target > 1 ? `${part.progress.toLocaleString('tr-TR')}/${part.target.toLocaleString('tr-TR')}` : '' }))
+      : task.kind === 'bundle' ? visibleTasks.filter((t) => countsForBundle(task, t)).map((t) => ({ label: t.title, done: stateOf(t) === 'done', tail: `+${formatAC(t.points)}` }))
+      : []
+    return (
+      <li key={task.id} className={cn('border-t border-border first:border-t-0', (state === 'done' || locked) && !open && 'opacity-60')}>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={`gorev-${task.id}`}
+          onClick={() => setOpenRow(open ? null : task.id)}
+          className="flex min-h-15 w-full items-center gap-3 px-3 py-2 text-left transition-colors active:bg-secondary/60"
+        >
+          <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-lg', state === 'done' ? 'bg-live/15 text-live' : 'bg-secondary text-primary')}>
+            <Icon className="size-5" aria-hidden="true" />
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <span className={cn('text-sm font-semibold leading-snug text-foreground text-pretty', !open && 'line-clamp-2')}>{task.title}</span>
+            <span aria-hidden="true" className="h-1 overflow-hidden rounded-full bg-secondary">
+              <span className={cn('block h-full rounded-full transition-[width] duration-300', state === 'done' ? 'bg-live' : 'bg-primary')} style={{ width: `${Math.round(filled * 100)}%` }} />
+            </span>
+          </span>
+          <span className="flex shrink-0 flex-col items-end gap-0.5">
+            <span className="text-sm font-bold tabular-nums text-primary">{rewardText(task)}</span>
+            {note ? <span className="text-xs tabular-nums text-muted-foreground">{note}</span> : null}
+          </span>
+        </button>
+        {open ? (
+          <div id={`gorev-${task.id}`} className="flex flex-col gap-3 px-3 pb-3 pl-16">
+            {task.chain ? (
+              <span className="text-xs font-semibold text-primary">
+                {task.chain === 'sezon' ? 'Sezon Hikâyesi' : 'Yeni Üye Yolculuğu'} · {task.chainStep}. adım
+              </span>
+            ) : null}
+            {task.detail ? <p className="text-sm leading-relaxed text-muted-foreground text-pretty">{task.detail}</p> : null}
+            {task.badge || (task.cap ?? 0) > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {task.badge ? <span className="rounded-full border border-accent/40 px-2 py-0.5 text-xs font-semibold text-accent">Rozet ödüllü</span> : null}
+                {(task.cap ?? 0) > 0 ? <span className="rounded-full border border-border px-2 py-0.5 text-xs font-semibold text-muted-foreground">İlk {task.cap} kanka</span> : null}
+              </div>
+            ) : null}
+            {task.kind === 'secret_code' && state === 'open' ? (
+              <label className="flex flex-col gap-1">
+                <span className="sr-only">Gizli kod</span>
+                <input
+                  value={codes[task.id] ?? ''}
+                  onChange={(e) => setCodes((c) => ({ ...c, [task.id]: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.nativeEvent.isComposing || e.keyCode === 229) return
+                    if (e.key === 'Enter') complete(task)
+                  }}
+                  placeholder="Telegram’daki kodu yaz"
+                  maxLength={40}
+                  autoComplete="off"
+                  className="h-11 rounded-lg border border-border bg-background px-3 text-base uppercase tracking-wider text-foreground placeholder:normal-case placeholder:tracking-normal placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </label>
+            ) : null}
+            {checks.length ? (
+              <ul aria-label="Görevin şartları" className="flex flex-col gap-1.5 rounded-lg bg-secondary/60 p-2.5">
+                {checks.map((item, index) => (
+                  <li key={index} className="flex items-center gap-2 text-xs">
+                    <span
+                      className={cn('flex size-4 shrink-0 items-center justify-center rounded-full border', item.done ? 'border-primary bg-primary text-primary-foreground' : 'border-border')}
+                      aria-hidden="true"
+                    >
+                      {item.done ? <Check className="size-3" /> : null}
+                    </span>
+                    <span className={cn('min-w-0 flex-1 truncate', item.done ? 'text-muted-foreground line-through' : 'text-foreground')}>{item.label}</span>
+                    <span className="sr-only">{item.done ? 'tamamlandı' : 'bekliyor'}</span>
+                    {item.tail ? <span className="shrink-0 font-bold tabular-nums text-muted-foreground">{item.tail}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-2">
+              {action(task)}
+              <button
+                type="button"
+                onClick={() => showDetail(task)}
+                className="flex h-11 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-muted-foreground transition-colors active:bg-secondary"
+              >
+                <Info className="size-3.5" aria-hidden="true" />
+                Nasıl yapılır?
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </li>
+    )
+  }
+
+  function phoneRows(key: string, items: PublicTask[]) {
+    const shown = allRows[key] ? items : items.slice(0, PHONE_ROWS)
+    return (
+      <>
+        <ul>{shown.map(phoneRow)}</ul>
+        {items.length > shown.length ? (
+          <button
+            type="button"
+            onClick={() => setAllRows((current) => ({ ...current, [key]: true }))}
+            className="flex h-11 w-full items-center justify-center gap-1.5 border-t border-border text-xs font-semibold text-primary transition-colors active:bg-secondary/60"
+          >
+            Kalan {items.length - shown.length} görevi göster
+            <ChevronDown className="size-4" aria-hidden="true" />
+          </button>
+        ) : null}
+      </>
+    )
+  }
+
   return (
-    <section aria-label="Görevler" className="flex flex-col gap-5">
+    <section aria-label="Görevler" className="flex flex-col gap-5 max-sm:gap-4">
+      {summary ? (
+        <div className="panel-gold flex items-center gap-3.5 rounded-2xl p-4 sm:hidden">
+          <div role="img" aria-label={`${summary.done}/${summary.total} görev tamam`} className="relative size-16 shrink-0">
+            <svg viewBox="0 0 64 64" className="size-full -rotate-90" aria-hidden="true">
+              <circle cx="32" cy="32" r="26" fill="none" strokeWidth="6" className="stroke-secondary" />
+              <circle
+                cx="32"
+                cy="32"
+                r="26"
+                fill="none"
+                strokeWidth="6"
+                strokeLinecap="round"
+                strokeDasharray={RING}
+                strokeDashoffset={RING * (1 - (summary.total ? summary.done / summary.total : 0))}
+                className="stroke-primary transition-[stroke-dashoffset] duration-500"
+              />
+            </svg>
+            <span className="absolute inset-0 flex items-center justify-center font-display text-sm font-bold tabular-nums text-foreground">
+              {summary.done}/{summary.total}
+            </span>
+          </div>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="font-display text-base font-bold text-foreground">
+              {summary.period === 'daily' ? 'Bugünkü görevler' : `${PERIOD_LABEL[summary.period]} görevler`}
+            </span>
+            <span className="text-xs text-muted-foreground">Kalan görevlerden kazanabileceğin</span>
+            <span className="font-display text-lg font-bold tabular-nums leading-tight text-primary">{formatAC(summary.reward)} KC</span>
+          </div>
+        </div>
+      ) : null}
+
       <DailyGames />
 
       <article className="panel-gold flex flex-col gap-4 rounded-2xl p-4 sm:p-5">
@@ -229,7 +455,7 @@ export function Tasks({
               type="button"
               onClick={checkIn}
               disabled={checkedToday || pending}
-              className="flex h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 disabled:bg-secondary disabled:text-muted-foreground sm:flex-none"
+              className="flex h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 disabled:bg-secondary disabled:text-muted-foreground max-sm:h-11 max-sm:text-sm max-sm:normal-case max-sm:tracking-normal sm:flex-none"
             >
               <CalendarCheck className="size-4" aria-hidden="true" />
               {checkedToday ? 'Bugün alındı' : 'Bugünü al'}
@@ -267,15 +493,28 @@ export function Tasks({
             )
           })}
         </ol>
-        <JakoTip size="sm" pose={checkedToday ? 'kazandi' : 'dusunen'} title={checkedToday ? 'Helal kanka' : 'Unutma kanka'}>
-          {checkedToday
-            ? 'Bugünkü ödülü aldın, yarın da gel seriyi bozma!'
-            : 'Bir günü kaçırırsan seri sıfırlanır. Marketten Seri Kalkanı alarak koruyabilirsin.'}
-        </JakoTip>
+        <div className="max-sm:hidden">
+          <JakoTip size="sm" pose={checkedToday ? 'kazandi' : 'dusunen'} title={checkedToday ? 'Helal kanka' : 'Unutma kanka'}>
+            {checkedToday
+              ? 'Bugünkü ödülü aldın, yarın da gel seriyi bozma!'
+              : 'Bir günü kaçırırsan seri sıfırlanır. Marketten Seri Kalkanı alarak koruyabilirsin.'}
+          </JakoTip>
+        </div>
       </article>
 
+      {category !== 'hepsi' ? (
+        <div className="flex items-center justify-between gap-3 sm:hidden">
+          <span className="min-w-0 truncate text-sm text-muted-foreground">
+            Sadece <span className="font-semibold text-foreground">{categories.find((c) => c.value === category)?.label ?? 'seçili'}</span> görevleri
+          </span>
+          <button type="button" onClick={() => setCategory('hepsi')} className="flex h-11 shrink-0 items-center rounded-lg border border-border px-3 text-xs font-semibold text-foreground active:bg-secondary">
+            Hepsini göster
+          </button>
+        </div>
+      ) : null}
+
       {categories.length > 1 ? (
-        <div role="group" aria-label="Görev kategorisi" className="flex flex-wrap gap-2">
+        <div role="group" aria-label="Görev kategorisi" className="flex flex-wrap gap-2 max-sm:hidden">
           {[{ value: 'hepsi' as const, label: 'Hepsi' }, ...categories].map((c) => (
             <button
               key={c.value}
@@ -335,7 +574,7 @@ export function Tasks({
                       <span className="relative">{group.open}</span>
                     </span>
                   )}
-                  <span className="truncate text-[13px] font-semibold leading-tight sm:text-sm">{PERIOD_LABEL[group.period]}</span>
+                  <span className="max-w-full truncate text-xs font-semibold leading-tight sm:text-sm">{PERIOD_LABEL[group.period]}</span>
                   <span className="flex items-center gap-1.5">
                     <span className={cn('text-[11px] font-bold tabular-nums leading-none', !active && complete && 'text-primary')}>
                       {group.done}/{group.total}
@@ -357,12 +596,41 @@ export function Tasks({
             })}
           </div>
 
-          <ul role="tabpanel" className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="overflow-hidden rounded-2xl border border-border bg-card sm:hidden">
+            {phoneGroups.length === 1
+              ? phoneRows(`${tabKey}:${phoneGroups[0].value}`, phoneGroups[0].items)
+              : phoneGroups.map((group) => {
+                  const open = shownGroup === group.value
+                  const GroupIcon = CATEGORY_ICON[group.value]
+                  const finished = group.items.filter((t) => stateOf(t) === 'done').length
+                  return (
+                    <div key={group.value} className="border-t border-border first:border-t-0">
+                      <button
+                        type="button"
+                        aria-expanded={open}
+                        onClick={() => setOpenGroup((current) => ({ ...current, [tabKey]: open ? null : group.value }))}
+                        className="flex min-h-15 w-full items-center gap-3 px-3 py-2 text-left transition-colors active:bg-secondary/60"
+                      >
+                        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                          <GroupIcon className="size-5" aria-hidden="true" />
+                        </span>
+                        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span className="text-sm font-bold text-foreground">{group.label}</span>
+                          <span className="text-xs tabular-nums text-muted-foreground">
+                            {finished}/{group.items.length} görev, toplam {formatAC(group.items.reduce((sum, t) => sum + t.points, 0))} KC
+                          </span>
+                        </span>
+                        <ChevronDown className={cn('size-5 shrink-0 text-muted-foreground transition-transform duration-200', open && 'rotate-180')} aria-hidden="true" />
+                      </button>
+                      {open ? <div className="border-t border-border bg-background/50">{phoneRows(`${tabKey}:${group.value}`, group.items)}</div> : null}
+                    </div>
+                  )
+                })}
+          </div>
+
+          <ul role="tabpanel" className="grid gap-3 max-sm:hidden md:grid-cols-2 xl:grid-cols-3">
             {visibleTasks.map((task) => {
-              const state = statusOf(task, claims[task.id], Boolean(done[task.id]))
-              const label = state === 'done' ? 'Tamamlandı' : state === 'waiting' ? 'Onay bekliyor' : state === 'rejected' ? 'Reddedildi' : task.kind !== 'manual' ? 'Ödülü al' : 'Görevi yap'
-              const locked = state !== 'open' || pending
-              const className = 'flex h-9 shrink-0 items-center justify-center rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100'
+              const state = stateOf(task)
               const chainLocked = task.chainState === 'locked'
               return (
                 <li key={task.id} className={cn('panel-gold flex min-w-0 flex-col gap-3 rounded-xl p-4', (state === 'done' || chainLocked) && 'opacity-60')}>
@@ -483,37 +751,7 @@ export function Tasks({
                         {bundleOpen === task.id ? 'Gizle' : 'Görevleri göster'}
                       </button>
                     ) : null}
-                    {chainLocked ? (
-                      <span className="flex h-9 items-center gap-1.5 rounded-lg bg-secondary px-4 text-xs font-bold text-muted-foreground">
-                        <Lock className="size-3.5" aria-hidden="true" />
-                        Önceki adımı bitir
-                      </span>
-                    ) : state === 'open' && (task.kind === 'secret_code' || task.kind === 'bundle') ? (
-                      <button type="button" onClick={() => complete(task)} disabled={pending || (task.kind === 'bundle' && task.progress < task.target)} className={className}>
-                        {task.kind === 'secret_code' ? 'Kodu gönder' : task.period === 'daily' && !task.parts?.length ? 'Sandığı aç' : 'Ödülü al'}
-                      </button>
-                    ) : state === 'open' && isSocialCheckKind(task.kind) ? (
-                      visited[task.id] || !task.link ? (
-                        <button type="button" onClick={() => complete(task)} disabled={pending} className={className}>
-                          Kontrol et
-                        </button>
-                      ) : (
-                        <a href={task.link} target="_blank" rel="noopener noreferrer" onClick={(event) => visitSocial(event, task)} className={className}>
-                          {task.kind === 'social_like' ? 'Beğen' : task.param === 'youtube' ? 'Abone ol' : 'Takip et'}
-                        </a>
-                      )
-                    ) : state === 'open' && task.kind !== 'manual' && task.progress < task.target ? (
-                      <GoButton task={task} className={className} onBlocked={() => requireLogin()} />
-                    ) : task.link && state === 'open' ? (
-                      <a href={task.link} target="_blank" rel="noopener noreferrer" onClick={(event) => openTask(event, task)} className={className}>
-                        {label}
-                      </a>
-                    ) : (
-                      <button type="button" onClick={() => complete(task)} disabled={locked} className={className}>
-                        {state === 'done' ? <Check className="size-4" aria-hidden="true" /> : null}
-                        {label}
-                      </button>
-                    )}
+                    {action(task)}
                   </div>
                 </li>
               )

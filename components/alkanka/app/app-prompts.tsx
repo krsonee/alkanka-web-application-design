@@ -76,7 +76,7 @@ function InstallBanner() {
       role="region"
       aria-label="Mobil uygulama"
       className={cn(
-        'fixed inset-x-3 bottom-20 z-40 animate-in fade-in slide-in-from-bottom-4 duration-500 sm:left-auto sm:right-6 sm:w-96 lg:right-0 lg:bottom-0 lg:left-[var(--sidebar-w)] lg:w-auto xl:right-80',
+        'fixed inset-x-3 bottom-28 z-40 animate-in fade-in slide-in-from-bottom-4 duration-500 sm:left-auto sm:right-6 sm:w-96 lg:right-0 lg:bottom-0 lg:left-[var(--sidebar-w)] lg:w-auto xl:right-80',
         // Two prompts stacked would cover half a phone screen; the "join us" one goes first.
         joinPromptOpen && 'max-lg:hidden',
       )}
@@ -133,7 +133,7 @@ function StandaloneLoginNudge() {
   const [hidden, setHidden] = useState(false)
   if (!standalone || loading || member || hidden) return null
   return (
-    <div className="fixed inset-x-3 bottom-20 z-40 lg:inset-x-auto lg:right-6 lg:bottom-6 lg:w-96">
+    <div className="fixed inset-x-3 bottom-28 z-40 lg:inset-x-auto lg:right-6 lg:bottom-6 lg:w-96">
       <div className="flex items-center gap-3 rounded-2xl border border-primary/40 bg-card p-3 shadow-2xl">
         <JakoAvatar pose="kazandi" size="sm" />
         <p className="flex-1 text-xs leading-relaxed text-foreground">
@@ -176,7 +176,7 @@ function StandalonePushNudge() {
     <div
       role="region"
       aria-label="Bildirim daveti"
-      className="fixed inset-x-3 bottom-20 z-40 animate-in fade-in slide-in-from-bottom-4 duration-500 lg:inset-x-auto lg:right-6 lg:bottom-6 lg:w-96"
+      className="fixed inset-x-3 bottom-28 z-40 animate-in fade-in slide-in-from-bottom-4 duration-500 lg:inset-x-auto lg:right-6 lg:bottom-6 lg:w-96"
     >
       <div className="flex items-start gap-3 rounded-2xl border border-accent/50 bg-card p-4 shadow-2xl">
         <JakoAvatar pose="duyuru" size="sm" />
@@ -228,7 +228,7 @@ function PushComebackReminder() {
   const denied = pushState === 'denied'
 
   return (
-    <div role="region" aria-label="Bildirim hatırlatması" className="fixed inset-x-3 bottom-20 z-40 lg:inset-x-auto lg:right-6 lg:bottom-6 lg:w-96">
+    <div role="region" aria-label="Bildirim hatırlatması" className="fixed inset-x-3 bottom-28 z-40 lg:inset-x-auto lg:right-6 lg:bottom-6 lg:w-96">
       <div className="flex items-start gap-3 rounded-2xl border border-accent/50 bg-card p-4 shadow-2xl">
         <JakoAvatar pose="duyuru" size="sm" />
         <div className="flex min-w-0 flex-1 flex-col gap-2">

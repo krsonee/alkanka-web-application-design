@@ -29,6 +29,7 @@ import { MemberHomeV2 } from '@/components/alkanka/home/member-home-v2'
 import { GuestHomeV2, MemberHomeV2Page } from '@/components/alkanka/home/v2/home-v2'
 import { getMiniStatus } from '@/app/actions/wallet'
 import { listLeagueMatches, type LeagueMatch } from '@/lib/predictions'
+import { homeTournaments } from '@/lib/home-events'
 
 export async function generateMetadata(): Promise<Metadata> {
   const base = pageMeta('anasayfa')
@@ -133,9 +134,10 @@ export default async function HomePage() {
   const v2 = homeV2?.home
   const useV2 = !!v2 && v2.fullPage && (member ? v2.enabled : v2.guestEnabled)
   if (v2 && useV2) {
-    const [weeklyRaw, mini] = await Promise.all([
+    const [weeklyRaw, mini, tournaments] = await Promise.all([
       readLeaderboard(500, 'hafta').catch(() => []),
       member ? getMiniStatus().catch(() => null) : Promise.resolve(null),
+      homeTournaments(),
     ])
     const weekly = weeklyRaw.map((r) => ({ userId: r.userId, name: r.name, points: r.kp }))
     const weeklyIndex = member ? weekly.findIndex((r) => r.userId === member.id) : -1
@@ -155,9 +157,12 @@ export default async function HomePage() {
             meId={member.id}
             mini={mini}
             products={products}
+            streak={{ days: hub.streak, checkedToday: hub.checkedToday }}
+            match={hub.match}
+            tournaments={tournaments}
           />
         ) : (
-          <GuestHomeV2 config={v2} products={allProducts.filter((p) => p.active)} weekly={weekly} bonus={bonus} />
+          <GuestHomeV2 config={v2} products={allProducts.filter((p) => p.active)} weekly={weekly} bonus={bonus} tournaments={tournaments} />
         )}
       </>
     )

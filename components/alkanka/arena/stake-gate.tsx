@@ -523,17 +523,18 @@ export function StakeGate({
   }
 
   return (
-    <section className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card lg:grid lg:grid-cols-[1.05fr_1fr]">
-      <div className="relative aspect-[16/7] sm:aspect-[4/3] lg:aspect-auto lg:min-h-full">
+    // Phones: the cover runs edge to edge and fades into the page; the frame comes back from tablets up.
+    <section className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card max-sm:-mx-4 max-sm:rounded-none max-sm:border-0 max-sm:bg-transparent lg:grid lg:grid-cols-[1.05fr_1fr]">
+      <div className="relative aspect-[16/7] max-sm:aspect-[16/9] sm:aspect-[4/3] lg:aspect-auto lg:min-h-full">
         <Image src={settings.image || meta.image || '/placeholder.svg'} alt={`${meta.title} masası`} fill priority sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover object-top" />
-        <span className="absolute inset-0 bg-gradient-to-t from-card via-card/50 to-transparent" aria-hidden="true" />
-        <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1 p-4 lg:p-8">
+        <span className="absolute inset-0 bg-gradient-to-t from-card via-card/50 to-transparent max-sm:from-background max-sm:via-background/45" aria-hidden="true" />
+        <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1 p-4 max-sm:gap-1.5 max-sm:pb-2 lg:p-8">
           <span className="flex w-fit items-center gap-1.5 rounded-md bg-background/90 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-primary">
             <Users className="size-3.5" aria-hidden="true" />
             {meta.players}
           </span>
-          <h2 className="font-display text-3xl font-bold uppercase leading-none text-foreground lg:text-5xl">{meta.title}</h2>
-          <p className="line-clamp-1 text-sm text-muted-foreground lg:line-clamp-none">{meta.short}</p>
+          <h2 className="font-display text-3xl font-bold uppercase leading-none text-foreground max-sm:text-4xl max-sm:normal-case lg:text-5xl">{meta.title}</h2>
+          <p className="line-clamp-1 text-sm text-muted-foreground max-sm:line-clamp-2 max-sm:text-foreground/80 max-sm:text-pretty lg:line-clamp-none">{meta.short}</p>
         </div>
       </div>
 
@@ -704,7 +705,7 @@ function PlayRow({
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-border bg-surface px-4 py-3">
       <div className="flex min-w-0 flex-1 basis-40 flex-col">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{caption}</span>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground max-sm:text-xs max-sm:normal-case max-sm:tracking-normal">{caption}</span>
         <span className="flex flex-wrap items-baseline gap-x-1.5 font-display text-xl font-bold tabular-nums text-primary">
           <span className="whitespace-nowrap">{amount}</span>
           <span className="text-xs font-medium text-muted-foreground">{detail}</span>
@@ -716,7 +717,7 @@ function PlayRow({
         disabled={disabled}
         aria-busy={busy}
         className={cn(
-          'flex shrink-0 grow items-center justify-center gap-2 rounded-xl px-4 py-3 font-display text-sm font-bold uppercase tracking-wide transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 sm:grow-0',
+          'flex shrink-0 grow items-center justify-center gap-2 rounded-xl px-4 py-3 font-display text-sm font-bold uppercase tracking-wide transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 max-sm:text-base max-sm:normal-case max-sm:tracking-normal sm:grow-0',
           primary
             ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/30 glow-gold hover:brightness-110 disabled:shadow-none'
             : 'border border-primary/60 bg-primary/10 text-foreground hover:bg-primary/20',

@@ -110,11 +110,11 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
               />
             </div>
           )}
-          <Topbar social={social} sponsors={searchSponsors} telegram={telegram} />
+          <Topbar social={social} sponsors={searchSponsors} telegram={telegram} chat={chatLive} />
           <div className={CHROME_BAND}>
             <WinnersTicker />
           </div>
-          <main className="mx-auto flex max-w-screen-2xl flex-col gap-10 px-4 py-5 pb-[calc(6rem+var(--app-banner-h,0px))] lg:px-6 lg:pb-[calc(1.25rem+var(--app-banner-h,0px))]">
+          <main data-site-main className="mx-auto flex max-w-screen-2xl flex-col gap-10 px-4 py-5 max-sm:gap-8 pb-[calc(6rem+var(--app-banner-h,0px))] lg:px-6 lg:pb-[calc(1.25rem+var(--app-banner-h,0px))]">
             <TournamentMatchBanner />
             {boosts.length > 0 && (
               <div className={CHROME_BAND}>

@@ -558,7 +558,7 @@ function CemberNotice({
     <div
       role="status"
       aria-live="polite"
-      className="fixed inset-x-3 top-16 z-[85] flex items-center gap-3 rounded-2xl border border-gold/50 bg-popover/95 p-3 shadow-2xl backdrop-blur animate-in fade-in slide-in-from-top-4 duration-500 sm:inset-x-auto sm:left-1/2 sm:w-[26rem] sm:-translate-x-1/2"
+      className="fixed inset-x-3 top-16 z-[85] flex items-center gap-3 rounded-2xl border border-gold/50 bg-popover/95 p-3 shadow-2xl backdrop-blur animate-in fade-in slide-in-from-top-4 duration-500 max-sm:top-auto max-sm:bottom-[calc(7.25rem+env(safe-area-inset-bottom)+var(--app-banner-h,0px)+var(--guest-gate-h,0px))] max-sm:slide-in-from-bottom-4 sm:inset-x-auto sm:left-1/2 sm:w-[26rem] sm:-translate-x-1/2"
     >
       <MascotBadge src="/images/mascots/jako-duyuru.png" className="size-12 border-2" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">

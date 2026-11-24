@@ -14,7 +14,7 @@ function ProductCard({ p }: { p: MarketProduct }) {
   return (
     <Link
       href="/market"
-      className="group relative isolate flex aspect-[4/5] flex-col justify-end overflow-hidden rounded-2xl border border-border bg-card"
+      className="group relative isolate flex aspect-[4/5] flex-col justify-end overflow-hidden rounded-2xl border border-border bg-card transition-[scale] duration-150 active:scale-[0.98] max-sm:w-44 max-sm:shrink-0 max-sm:snap-start"
     >
       <Image
         src={productImage(p)}
@@ -87,7 +87,7 @@ export function MarketTabs({ products, count }: { products: MarketProduct[]; cou
           ))}
         </div>
       )}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="no-scrollbar grid grid-cols-2 gap-3 max-sm:-mx-4 max-sm:flex max-sm:snap-x max-sm:scroll-px-4 max-sm:gap-2.5 max-sm:overflow-x-auto max-sm:px-4 lg:grid-cols-4">
         {list.map((p) => (
           <ProductCard key={p.id} p={p} />
         ))}

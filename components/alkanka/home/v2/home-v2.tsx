@@ -2,8 +2,12 @@ import { HOME_GAME_LABEL, type HomeV2Config } from '@/lib/home-v2-shared'
 import { MemberHeroSlider, type MemberSlide } from './member-hero-slider'
 import type { MarketProduct } from '@/lib/market'
 import type { MiniGame, MiniStatus } from '@/app/actions/wallet'
+import type { HomeTournament } from '@/lib/home-events'
+import type { LeagueMatch } from '@/lib/predictions'
 import { HeroSlider } from './hero-slider'
 import { MarketTabs } from './market-tabs'
+import { StreakStrip } from './streak-strip'
+import { UpNext } from './up-next'
 import {
   DailyGrid,
   FreeGrid,
@@ -24,10 +28,22 @@ const MINI_BY_HREF: Record<string, MiniGame> = {
   '/oyunlar/zar': 'zar',
 }
 
-export function GuestHomeV2({ config, products, weekly, bonus }: { config: HomeV2Config; products: MarketProduct[]; weekly: Row[]; bonus: number }) {
+export function GuestHomeV2({
+  config,
+  products,
+  weekly,
+  bonus,
+  tournaments = [],
+}: {
+  config: HomeV2Config
+  products: MarketProduct[]
+  weekly: Row[]
+  bonus: number
+  tournaments?: HomeTournament[]
+}) {
   const primaryLabel = config.guestPrimaryCta.replace('{bonus}', String(bonus))
   return (
-    <div className="flex flex-col gap-10">
+    <div className="flex flex-col gap-10 max-sm:gap-8">
       <HeroSlider
         slides={config.slides}
         eyebrow={config.guestEyebrow}
@@ -44,6 +60,12 @@ export function GuestHomeV2({ config, products, weekly, bonus }: { config: HomeV
           <SectionHead title={config.freeTitle} sub={config.freeSub} />
           <FreeGrid tiles={config.free} />
         </section>
+      )}
+
+      {tournaments.length > 0 && (
+        <div className="sm:hidden">
+          <UpNext match={null} tournaments={tournaments} />
+        </div>
       )}
 
       {config.games.length > 0 && (
@@ -81,6 +103,9 @@ export function MemberHomeV2Page({
   meId,
   mini,
   products,
+  streak,
+  match = null,
+  tournaments = [],
 }: {
   config: HomeV2Config
   name: string
@@ -92,6 +117,9 @@ export function MemberHomeV2Page({
   meId: string
   mini: MiniStatus | null
   products: MarketProduct[]
+  streak?: { days: number; checkedToday: boolean }
+  match?: LeagueMatch | null
+  tournaments?: HomeTournament[]
 }) {
   const hidden = new Set(mini?.hidden ?? [])
   const daily: DailyState[] = config.daily
@@ -141,19 +169,41 @@ export function MemberHomeV2Page({
 
   return (
     <div className="flex flex-col gap-8">
+      {/* Below the desktop width the two columns dissolve into one list so the balance can lead and the board can close it. */}
       <div className="grid gap-6 lg:grid-cols-[1fr_330px]">
-        <div className="flex min-w-0 flex-col gap-8">
-          <MemberHeroSlider slides={heroSlides} />
+        <div className="flex min-w-0 flex-col gap-8 max-lg:contents">
+          <div className="min-w-0 max-lg:order-2">
+            <MemberHeroSlider slides={heroSlides} />
+          </div>
           {daily.length > 0 && (
-            <section className="flex flex-col gap-4">
+            <section className="flex min-w-0 flex-col gap-4 max-lg:order-3">
               <SectionHead title={config.dailyTitle} sub={dailySub} />
               <DailyGrid items={daily} />
             </section>
           )}
         </div>
-        <aside className="flex flex-col gap-4">
-          {config.showWallet && <WalletCard balance={balance} kp={kp} weeklyRank={weeklyRank} goal={goal} picks={picks} marketHref={config.marketHref} />}
-          {config.showLeaderboard && <Leaderboard title={config.lbTitle} rows={top} me={me} meId={meId} compact />}
+        <aside className="flex flex-col gap-4 max-lg:contents">
+          {config.showWallet && (
+            <div className="min-w-0 max-lg:order-1">
+              <WalletCard balance={balance} kp={kp} weeklyRank={weeklyRank} goal={goal} picks={picks} marketHref={config.marketHref} />
+            </div>
+          )}
+          {/* The phone leads with what is due today; wider screens keep the two columns as they are. */}
+          {streak && (
+            <div className="min-w-0 max-lg:order-1 sm:hidden">
+              <StreakStrip streak={streak.days} checkedToday={streak.checkedToday} />
+            </div>
+          )}
+          {(match || tournaments.length > 0) && (
+            <div className="min-w-0 max-lg:order-3 sm:hidden">
+              <UpNext match={match} tournaments={tournaments} />
+            </div>
+          )}
+          {config.showLeaderboard && (
+            <div className="min-w-0 max-lg:order-4">
+              <Leaderboard title={config.lbTitle} rows={top} me={me} meId={meId} compact />
+            </div>
+          )}
         </aside>
       </div>
       {config.games.length > 0 && (

@@ -208,7 +208,7 @@ function MainSponsorCompact({ sponsor }: { sponsor: Sponsor }) {
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="flex min-w-0 items-center gap-1.5">
+          <span className="flex min-w-0 items-center gap-1.5 max-sm:flex-wrap max-sm:gap-y-0.5">
             <span className="truncate font-display text-sm font-bold text-foreground sm:text-base">{sponsor.name}</span>
             <TierTag tier={sponsor.tier} className="px-1 text-[9px]" />
           </span>
@@ -360,16 +360,17 @@ function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
           <SponsorLogoPlate sponsor={sponsor} compact className="h-full max-h-full w-full max-w-full text-base drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]" />
         </button>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="flex min-w-0 items-center gap-1.5">
+          {/* The name comes first: when both do not fit, the tier tag drops to its own line instead of cutting the name. */}
+          <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
             <span className="truncate font-semibold text-foreground">{sponsor.name}</span>
             <TierTag tier={sponsor.tier} className="px-1 text-[9px]" />
           </span>
           <span className="truncate text-sm font-bold text-primary">{sponsor.welcome}</span>
           <Meta sponsor={sponsor} />
         </div>
-        <div className="flex w-20 shrink-0 flex-col gap-1.5">
-          <GoButton site={sponsor.id} label="Git" className="h-8 w-full px-2" />
-          <button type="button" onClick={() => setPreview(true)} className={cn(inspectClass, 'h-8 w-full text-[11px]')}>
+        <div className="flex w-20 shrink-0 flex-col gap-2">
+          <GoButton site={sponsor.id} label="Git" className="h-10 w-full px-2" />
+          <button type="button" onClick={() => setPreview(true)} className={cn(inspectClass, 'h-10 w-full text-xs')}>
             İncele
           </button>
         </div>

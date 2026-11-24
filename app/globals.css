@@ -2848,3 +2848,15 @@ button.okt-tile { border: 0; padding: 0; font-family: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .bt-deal, .bt-ava[data-turn] { animation: none; }
 }
+
+/*
+ * Phones: headings, display-font titles, buttons and links on the site's pages read in sentence case, and the wide
+ * letter-spacing that goes with capitals is dropped with it. Small labels stay as they are. The ALKANKA wordmark
+ * and game pages keep their own lettering; tablets and desktop are untouched.
+ */
+@media (width < 40rem) {
+  [data-site-main] :is(h1, h2, h3, h4, button, a, dt, th, legend, summary, .font-display).uppercase:not([data-wordmark], [data-game-page] *) {
+    text-transform: none;
+    letter-spacing: normal;
+  }
+}

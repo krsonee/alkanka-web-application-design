@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ArrowRight, Clock, Trophy, Users } from 'lucide-react'
 import { ARENA_GAMES, ARENA_META, botMatchFactor, type ArenaGame, type ArenaSettings } from '@/lib/arena'
 import type { MiniGame } from '@/app/actions/wallet'
+import { cn } from '@/lib/utils'
 import { formatRemaining, useMiniLock } from './mini-status'
 
 function MiniCard({ game, title, text, image, limit, index }: (typeof GAME_CARDS)[number] & { index: number }) {
@@ -16,9 +17,9 @@ function MiniCard({ game, title, text, image, limit, index }: (typeof GAME_CARDS
         href={`/oyunlar/${game}`}
         data-ready={!locked}
         style={{ '--i': index } as CSSProperties}
-        className="mini-card group flex h-full items-stretch overflow-hidden rounded-2xl border border-border bg-card transition-[border-color,transform] duration-300 hover:-translate-y-0.5 hover:border-primary/60 focus-visible:outline-2 focus-visible:outline-primary sm:flex-col"
+        className="mini-card group flex h-full items-stretch overflow-hidden rounded-2xl border border-border bg-card transition-[border-color,transform] duration-300 hover:-translate-y-0.5 hover:border-primary/60 focus-visible:outline-2 focus-visible:outline-primary max-sm:relative max-sm:isolate max-sm:aspect-square max-sm:items-end max-sm:border-foreground/10 max-sm:active:scale-[0.97] sm:flex-col"
       >
-        <div className="relative w-32 shrink-0 overflow-hidden bg-background sm:aspect-[16/10] sm:w-full">
+        <div className="relative w-32 shrink-0 overflow-hidden bg-background max-sm:absolute max-sm:inset-0 max-sm:-z-20 max-sm:w-full sm:aspect-[16/10] sm:w-full">
           <div className="mini-jako absolute inset-0">
             <Image
               src={image || '/placeholder.svg'}
@@ -28,29 +29,32 @@ function MiniCard({ game, title, text, image, limit, index }: (typeof GAME_CARDS
               className="object-cover transition-transform duration-500 group-hover:scale-110"
             />
           </div>
-          <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-foreground/10" aria-hidden="true" />
+          <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-foreground/10 max-sm:hidden" aria-hidden="true" />
         </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-3 sm:p-4">
-          <span className="w-fit rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+        <span aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-background via-background/50 to-transparent sm:hidden" />
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-3 max-sm:p-2.5 sm:p-4">
+          <span className="w-fit rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary max-sm:hidden">
             {limit}
           </span>
-          <h3 className="font-display text-lg font-bold uppercase leading-tight text-foreground">{title}</h3>
-          <p className="line-clamp-2 flex-1 text-xs leading-relaxed text-muted-foreground">{text}</p>
-          <div className="flex items-center justify-between gap-3 pt-1">
+          <h3 className="font-display text-lg font-bold uppercase leading-tight text-foreground max-sm:text-[13px] max-sm:normal-case max-sm:text-balance">{title}</h3>
+          <p className="line-clamp-2 flex-1 text-xs leading-relaxed text-muted-foreground max-sm:hidden">{text}</p>
+          <div className="flex items-center justify-between gap-3 pt-1 max-sm:absolute max-sm:left-2 max-sm:top-2 max-sm:rounded-full max-sm:bg-background/85 max-sm:px-2 max-sm:py-1 max-sm:pt-1">
             {locked ? (
-              <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                <Clock className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
+              <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground max-sm:gap-1 max-sm:text-[11px]">
+                <Clock className="size-3.5 shrink-0 text-primary max-sm:size-3" aria-hidden="true" />
                 <span className="truncate">
-                  Yeni hak: <span className="font-bold tabular-nums text-foreground">{formatRemaining(remaining)}</span>
+                  <span className="max-sm:sr-only">Yeni hak: </span>
+                  <span className="font-bold tabular-nums text-foreground">{formatRemaining(remaining)}</span>
                 </span>
               </span>
             ) : (
-              <span className="flex items-center gap-2 text-xs font-bold text-primary">
-                <span className="mini-dot size-2 rounded-full bg-primary" aria-hidden="true" />
-                {left !== null && left > 1 ? `${left} hakkın var` : 'Hakkın hazır'}
+              <span className="flex items-center gap-2 text-xs font-bold text-primary max-sm:gap-1.5 max-sm:text-[11px]">
+                <span className="mini-dot size-2 rounded-full bg-primary max-sm:size-1.5" aria-hidden="true" />
+                <span className="max-sm:hidden">{left !== null && left > 1 ? `${left} hakkın var` : 'Hakkın hazır'}</span>
+                <span className="sm:hidden">{left !== null && left > 1 ? `${left} hak` : 'Hazır'}</span>
               </span>
             )}
-            <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary px-3 py-1 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-transform group-hover:scale-105">
+            <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary px-3 py-1 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-transform group-hover:scale-105 max-sm:hidden">
               {locked ? 'Göz at' : 'Oyna'}
               <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
             </span>
@@ -85,31 +89,38 @@ const SHORT_PLAYERS: Record<ArenaGame, string> = {
 export function GamesHub({ arena, hiddenMini = [] }: { arena: ArenaSettings; hiddenMini?: string[] }) {
   const tables = ARENA_GAMES.filter((g) => arena[g].enabled)
   const minis = GAME_CARDS.filter((c) => !hiddenMini.includes(c.game))
+  // Phones: with an odd number of games the first one takes the full row, so the two-column grid ends even.
+  const lead = tables.length % 2 === 1
   return (
-    <div className="flex flex-col gap-10">
+    <div className="flex flex-col gap-10 max-sm:gap-8">
       {tables.length > 0 && (
-        <section aria-labelledby="masa-oyunlari" className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-end justify-between gap-3">
+        <section aria-labelledby="masa-oyunlari" className="flex flex-col gap-4 max-sm:gap-3">
+          <div className="flex flex-wrap items-end justify-between gap-3 max-sm:flex-nowrap max-sm:items-center">
             <div className="flex flex-col gap-1">
-              <span className="text-xs font-bold uppercase tracking-[0.2em] text-primary">Kanka Coin ile oyna</span>
-              <h2 id="masa-oyunlari" className="font-display text-2xl font-bold uppercase text-foreground text-balance">
+              <span className="text-xs font-bold uppercase tracking-[0.2em] text-primary max-sm:hidden">Kanka Coin ile oyna</span>
+              <h2 id="masa-oyunlari" className="font-display text-2xl font-bold uppercase text-foreground text-balance max-sm:text-xl max-sm:normal-case">
                 Masa oyunları
               </h2>
             </div>
-            <Link href="/turnuvalar" className="flex items-center gap-2 rounded-lg border border-primary/50 px-4 py-2 text-sm font-bold text-primary hover:bg-primary/10">
+            <Link href="/turnuvalar" className="flex items-center gap-2 rounded-lg border border-primary/50 px-4 py-2 text-sm font-bold text-primary hover:bg-primary/10 max-sm:h-11 max-sm:shrink-0 max-sm:px-3 max-sm:text-xs">
               <Trophy className="size-4" aria-hidden="true" />
-              Turnuvalara göz at
+              <span className="max-sm:hidden">Turnuvalara göz at</span>
+              <span className="sm:hidden">Turnuvalar</span>
             </Link>
           </div>
-          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {tables.map((g) => {
+          <ul className="grid grid-cols-2 gap-3 max-sm:gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {tables.map((g, index) => {
               const meta = ARENA_META[g]
               const s = arena[g]
+              const wide = lead && index === 0
               return (
-                <li key={g}>
+                <li key={g} className={cn(wide && 'max-sm:col-span-2')}>
                   <Link
                     href={`/oyunlar/${g}`}
-                    className="group relative flex aspect-[4/3] flex-col justify-end overflow-hidden rounded-xl border border-border bg-card transition-colors hover:border-primary focus-visible:outline-2 focus-visible:outline-primary"
+                    className={cn(
+                      'group relative flex aspect-[4/3] flex-col justify-end overflow-hidden rounded-xl border border-border bg-card transition-colors hover:border-primary focus-visible:outline-2 focus-visible:outline-primary max-sm:rounded-2xl max-sm:border-foreground/10 max-sm:transition-[scale] max-sm:active:scale-[0.98]',
+                      wide && 'max-sm:aspect-[2/1]',
+                    )}
                   >
                     <Image src={s.image || meta.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 1280px) 20vw, (min-width: 640px) 33vw, 50vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
                     <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
@@ -121,8 +132,8 @@ export function GamesHub({ arena, hiddenMini = [] }: { arena: ArenaSettings; hid
                       <span className="absolute right-2 top-2 rounded bg-primary px-1.5 py-0.5 font-display text-xs font-bold text-primary-foreground">x{botMatchFactor(g, s)?.toLocaleString('tr-TR')}</span>
                     )}
                     <div className="relative flex flex-col gap-1 p-3">
-                      <h3 className="font-display text-lg font-bold uppercase leading-tight text-foreground">{meta.title}</h3>
-                      <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-primary">
+                      <h3 className={cn('font-display text-lg font-bold uppercase leading-tight text-foreground max-sm:normal-case', wide ? 'max-sm:text-2xl' : 'max-sm:text-base')}>{meta.title}</h3>
+                      <span className={cn('flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-primary max-sm:text-xs max-sm:normal-case max-sm:tracking-normal', !wide && 'max-sm:hidden')}>
                         Masaya otur
                         <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-1" aria-hidden="true" />
                       </span>
@@ -135,14 +146,14 @@ export function GamesHub({ arena, hiddenMini = [] }: { arena: ArenaSettings; hid
         </section>
       )}
 
-      <section aria-labelledby="mini-oyunlar" className="flex flex-col gap-4">
+      <section aria-labelledby="mini-oyunlar" className="flex flex-col gap-4 max-sm:gap-3">
         <div className="flex flex-col gap-1">
-          <span className="text-xs font-bold uppercase tracking-[0.2em] text-primary">Ücretsiz</span>
-          <h2 id="mini-oyunlar" className="font-display text-2xl font-bold uppercase text-foreground">
+          <span className="text-xs font-bold uppercase tracking-[0.2em] text-primary max-sm:hidden">Ücretsiz</span>
+          <h2 id="mini-oyunlar" className="font-display text-2xl font-bold uppercase text-foreground max-sm:text-xl max-sm:normal-case">
             Mini oyunlar
           </h2>
         </div>
-            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <ul className="grid grid-cols-1 gap-3 max-sm:grid-cols-3 max-sm:gap-2.5 sm:grid-cols-3">
               {minis.map((g, i) => (
                 <MiniCard key={g.game} {...g} index={i} />
           ))}

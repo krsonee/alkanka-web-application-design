@@ -55,7 +55,8 @@ export function EarnActions({
   const actions = buildActions(rules, today, telegramLinked, chatUrl).filter((a) => rules[a.key] > 0)
 
   return (
-    <ul className="kp-stagger grid grid-cols-2 gap-2 lg:grid-cols-3">
+    // Phones: one row that scrolls sideways, bleeding to the screen edges.
+    <ul className="kp-stagger no-scrollbar grid grid-cols-2 gap-2 max-sm:-mx-4 max-sm:flex max-sm:snap-x max-sm:scroll-px-4 max-sm:overflow-x-auto max-sm:px-4 max-sm:*:w-40 max-sm:*:shrink-0 max-sm:*:snap-start lg:grid-cols-3">
       {actions.map((a, idx) => {
         const pct = a.cap && a.cap.max > 0 ? Math.min(100, Math.round((a.cap.value / a.cap.max) * 100)) : null
         const full = a.done || pct === 100

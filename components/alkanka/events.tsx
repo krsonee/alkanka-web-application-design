@@ -164,13 +164,14 @@ function EventCards() {
               </span>
               <span className="text-primary">{e.prize}</span>
             </div>
-            <div className="mt-auto flex items-stretch gap-2">
+            {/* Narrow cards (phones): the join button takes the full width, the rules link sits under it. */}
+            <div className="mt-auto flex items-stretch gap-2 max-md:flex-col-reverse">
             <DetailButton onClick={() => setDetail(e)} label={(e.rank ?? 'none') === 'none' ? undefined : 'Sıralama & kurallar'} />
             <button
               type="button"
               onClick={() => join(e)}
               disabled={Boolean(closed(e)) || busy === e.id}
-              className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 disabled:bg-primary/15 disabled:text-primary"
+              className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 disabled:bg-primary/15 disabled:text-primary max-md:h-11 max-md:flex-none"
             >
               {closed(e) ?? (e.entry === 0 ? 'Ücretsiz katıl' : (
                 <>

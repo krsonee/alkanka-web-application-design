@@ -190,8 +190,8 @@ export function RadioPlayer() {
         aria-label={playing && current ? `Radyo: ${current.name} çalıyor` : 'Radyo'}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'relative flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2 text-foreground transition-colors sm:px-2.5',
-          open || playing ? 'border-primary/60 bg-primary/10' : 'border-border hover:border-primary/50',
+          'relative flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2 text-foreground transition-colors max-lg:h-10 max-lg:min-w-10 max-lg:justify-center max-lg:rounded-full max-lg:px-2.5 lg:px-2.5',
+          open || playing ? 'border-primary/60 bg-primary/10' : 'border-border hover:border-primary/50 max-lg:border-transparent max-lg:bg-foreground/[0.08]',
         )}
       >
         <RadioReceiver className={cn('size-[18px] text-primary', playing ? 'animate-radio-wave' : 'animate-radio-idle')} aria-hidden="true" />

@@ -430,6 +430,70 @@ export function Sidebar({ social, telegram }: { social: SocialLinks; telegram: T
   )
 }
 
+function MenuTile({ item, pathname, signals, onNavigate }: { item: NavItem; pathname: string; signals: NavSignals; onNavigate?: () => void }) {
+  const isActive = isActiveHref(pathname, item.href)
+  const Icon = item.icon
+  const tasks = item.signal === 'tasks' ? signals.openTasks : 0
+  const live = item.signal === 'live' && signals.tvLive
+  const fresh = !tasks && !live && !!item.newUntil && Date.now() < Date.parse(item.newUntil)
+  return (
+    <Link
+      href={item.href}
+      onClick={onNavigate}
+      data-tour-nav={item.id}
+      aria-current={isActive ? 'page' : undefined}
+      className={cn(
+        'relative flex h-[5.25rem] flex-col items-center justify-center gap-2 rounded-2xl border px-1.5 text-center text-[0.8125rem] font-semibold leading-tight transition-[scale,background-color] duration-150 active:scale-[0.96]',
+        isActive ? 'border-primary/45 bg-primary/10 text-primary' : 'border-border bg-foreground/[0.05] text-foreground active:bg-foreground/10',
+      )}
+    >
+      <Icon className="size-[1.375rem] text-primary" aria-hidden="true" />
+      <span className="w-full truncate">{item.label}</span>
+      {tasks > 0 && (
+        <span className="absolute right-2 top-2 flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-bold leading-5 text-primary-foreground">
+          {tasks > 9 ? '9+' : tasks}
+          <span className="sr-only"> açık görev</span>
+        </span>
+      )}
+      {live && (
+        <span className="absolute right-2 top-2 flex items-center gap-1 text-[11px] font-bold text-destructive">
+          <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-destructive" />
+          Canlı
+        </span>
+      )}
+      {fresh && <span className="absolute right-2 top-2 rounded bg-live/15 px-1.5 py-0.5 text-[11px] font-semibold text-live">Yeni</span>}
+    </Link>
+  )
+}
+
+const MENU_TILES: NavItem[] = NAV_SECTIONS.flatMap((section) =>
+  section.entries.flatMap((entry) => ('kind' in entry && entry.kind === 'group' ? entry.items : [entry as NavItem])),
+)
+
+/** Phone menu: every page on one screen as a three-column grid, instead of a long list to scroll. */
+function MenuSheetBody({ onNavigate, social, telegram }: BodyProps) {
+  const pathname = usePathname()
+  const signals = useNavSignals()
+  return (
+    <div className="flex min-h-0 flex-col gap-4 overflow-y-auto overscroll-contain px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] no-scrollbar">
+      <MemberCard onNavigate={onNavigate} compact={false} />
+      <nav aria-label="Ana menü">
+        <ul className="grid grid-cols-3 gap-2">
+          {MENU_TILES.map((item) => (
+            <li key={item.id}>
+              <MenuTile item={item} pathname={pathname} signals={signals} onNavigate={onNavigate} />
+            </li>
+          ))}
+        </ul>
+      </nav>
+      <TourButton className="w-full" onStart={onNavigate} />
+      <TelegramChannels links={telegram} compact={false} />
+      <SocialIcons links={social} compact={false} />
+      <TelegramCard compact={false} />
+    </div>
+  )
+}
+
 export function MobileDrawer({
   open,
   onClose,
@@ -453,36 +517,40 @@ export function MobileDrawer({
   }, [open, onClose])
 
   return (
-    <div className={cn('fixed inset-0 z-50 lg:hidden', open ? 'pointer-events-auto' : 'pointer-events-none')} aria-hidden={!open}>
+    <div
+      className={cn('fixed inset-0 z-50 flex flex-col justify-end lg:hidden', open ? 'pointer-events-auto' : 'pointer-events-none')}
+      aria-hidden={!open}
+    >
       <button
         type="button"
         aria-label="Menüyü kapat"
         tabIndex={open ? 0 : -1}
         onClick={onClose}
-        className={cn('absolute inset-0 bg-background/80 backdrop-blur-sm transition-opacity', open ? 'opacity-100' : 'opacity-0')}
+        className={cn('absolute inset-0 bg-background/75 backdrop-blur-sm transition-opacity duration-200', open ? 'opacity-100' : 'opacity-0')}
       />
       <aside
         role="dialog"
         aria-modal="true"
         aria-label="Menü"
         className={cn(
-          'absolute inset-y-0 left-0 flex w-80 max-w-[86vw] flex-col border-r border-border bg-surface transition-transform duration-300',
-          open ? 'translate-x-0' : '-translate-x-full',
+          'relative mx-auto flex max-h-[88dvh] w-full max-w-xl flex-col rounded-t-[1.75rem] border-t border-border bg-surface shadow-2xl shadow-background',
+          open ? 'animate-in fade-in slide-in-from-bottom-10 duration-300' : 'invisible',
         )}
       >
-        <div className="flex h-16 shrink-0 items-center justify-between border-b border-border px-5">
-          <BrandLogo size="sm" />
+        <div className="relative flex h-16 shrink-0 items-end justify-between pb-2 pl-5 pr-2">
+          <span aria-hidden="true" className="absolute left-1/2 top-2 h-1 w-10 -translate-x-1/2 rounded-full bg-foreground/15" />
+          <h2 className="pb-1.5 font-display text-lg font-semibold text-foreground">Menü</h2>
           <button
             type="button"
             onClick={onClose}
             tabIndex={open ? 0 : -1}
             aria-label="Menüyü kapat"
-            className="flex size-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground"
+            className="flex size-11 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
           >
             <X className="size-5" aria-hidden="true" />
           </button>
         </div>
-        {open && <SidebarBody onNavigate={onClose} social={social} telegram={telegram} />}
+        {open && <MenuSheetBody onNavigate={onClose} social={social} telegram={telegram} />}
       </aside>
     </div>
   )
