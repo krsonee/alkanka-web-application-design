@@ -99,7 +99,8 @@ function DockPlayer() {
   return (
     <aside
       aria-label="Mini oynatıcı"
-      className="fixed bottom-24 right-3 z-40 flex w-64 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl sm:w-80 lg:bottom-6"
+      data-tv-dock
+      className="fixed bottom-[calc(7rem+var(--safe-bottom))] right-3 z-40 flex w-64 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl sm:w-80 lg:bottom-6"
     >
       <div className="relative aspect-video w-full bg-foreground">
         <iframe
