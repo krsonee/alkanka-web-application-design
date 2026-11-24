@@ -125,6 +125,37 @@ export function StockMeter({ left, total, className }: { left: number; total: nu
   )
 }
 
+/**
+ * What stands for the product on its card. A sponsor's product is the sponsor itself, so its logo fills the
+ * tile on a quiet panel; a picture behind it only fought the logo. Everything else keeps its picture.
+ */
+function ProductMedia({ item, dimmed, sizes }: { item: MarketProduct; dimmed: boolean; sizes: string }) {
+  if (item.kind === 'sponsor' && item.sponsorLogo) {
+    return (
+      <div
+        className={cn(
+          'absolute inset-0 flex items-center justify-center bg-background bg-[radial-gradient(120%_90%_at_50%_0%,color-mix(in_oklch,var(--primary)_22%,transparent),transparent_70%)] px-5 pb-2 pt-7',
+          dimmed && 'opacity-50 grayscale',
+        )}
+      >
+        <span aria-hidden="true" className="absolute inset-0 opacity-[0.06] [background-image:radial-gradient(var(--primary)_1px,transparent_1px)] [background-size:12px_12px]" />
+        {/* eslint-disable-next-line @next/next/no-img-element -- sponsor logos are uploaded files of any size */}
+        <img src={item.sponsorLogo} alt={item.sponsorName ?? ''} className="relative max-h-[52%] w-auto max-w-full object-contain drop-shadow-[0_6px_16px_oklch(0_0_0/0.55)]" />
+      </div>
+    )
+  }
+  return (
+    <>
+      <Image src={productImage(item)} alt="" fill sizes={sizes} className={cn('object-cover', dimmed && 'opacity-50 grayscale')} />
+      {item.kind === 'sponsor' && item.sponsorName && (
+        <div className="absolute inset-x-0 bottom-0 flex p-2">
+          <SponsorTag item={item} />
+        </div>
+      )}
+    </>
+  )
+}
+
 function Price({ value, was, className }: { value: number; was: number; className?: string }) {
   return (
     <span className={cn('flex flex-wrap items-center gap-x-1.5', className)}>
@@ -187,6 +218,7 @@ type CardProps = {
 export function ProductCard({ item, left, used, points, signedIn, pay, taskDone, onBuy, onDetail }: CardProps) {
   const state = buyState(item, left, used, points, signedIn, pay)
   const level = stockLevel(left, item.total)
+  const deal = dealShown(item, taskDone) && Boolean(item.dealTask)
   // Phones: the card is the picture, the name and the price; one tap opens the detail sheet, which carries the button.
   return (
     <li className="panel-gold relative flex flex-col overflow-hidden rounded-xl max-sm:rounded-2xl">
@@ -196,34 +228,30 @@ export function ProductCard({ item, left, used, points, signedIn, pay, taskDone,
         aria-label={`${item.name}: detay ve ${buyLabel(item).toLocaleLowerCase('tr')}`}
         className="absolute inset-0 z-10 rounded-2xl focus-visible:outline-2 focus-visible:outline-primary sm:hidden"
       />
-      <div className="relative aspect-[4/3] overflow-hidden bg-secondary">
-        <Image
-          src={productImage(item)}
-          alt=""
-          fill
-          sizes="(min-width: 1536px) 20vw, (min-width: 768px) 30vw, 50vw"
-          className={cn('object-cover', state.kind === 'out' && 'opacity-50 grayscale')}
-        />
+      <div className="relative aspect-[4/3] overflow-hidden bg-secondary max-sm:aspect-[16/10]">
+        <ProductMedia item={item} dimmed={state.kind === 'out'} sizes="(min-width: 1536px) 20vw, (min-width: 768px) 30vw, 50vw" />
         <div className="absolute inset-x-0 top-0 flex flex-wrap items-start justify-between gap-1 p-2">
-          <span className="rounded bg-background/85 px-1.5 py-0.5 text-xs font-bold tracking-wider text-foreground">{item.type}</span>
+          <span className="rounded bg-background/85 px-1.5 py-0.5 text-xs font-bold tracking-wider text-foreground max-sm:rounded-full max-sm:border max-sm:border-border max-sm:px-2 max-sm:text-[11px] max-sm:tracking-normal">{item.type}</span>
           <SaleTag item={item} />
         </div>
-        {item.kind === 'sponsor' && item.sponsorName && (
-          <div className="absolute inset-x-0 bottom-0 flex p-2">
-            <SponsorTag item={item} />
-          </div>
-        )}
+        {deal ? (
+          <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold leading-4 text-primary-foreground shadow-md shadow-background/50 sm:hidden">
+            <Target className="size-3" aria-hidden="true" />
+            {taskDone ? 'Görev fiyatı' : `Görevle ${formatAC(item.dealPrice)}`}
+          </span>
+        ) : null}
       </div>
-      <div className="flex flex-1 flex-col gap-3 p-3 max-sm:gap-1.5 max-sm:p-2.5">
-        <div className="flex flex-col items-start gap-1.5">
-          <h3 className="text-sm font-semibold leading-snug text-foreground text-pretty max-sm:line-clamp-2">{item.name}</h3>
+      {/* Phone: every card carries the same three lines, so a row never leaves a hole under a shorter name. */}
+      <div className="flex flex-1 flex-col gap-3 p-3 max-sm:gap-1 max-sm:p-2.5">
+        <div className="flex flex-col items-start gap-1.5 max-sm:gap-0.5">
+          <h3 className="text-sm font-semibold leading-snug text-foreground text-pretty max-sm:line-clamp-2 max-sm:min-h-[2.75em]">{item.name}</h3>
           <DeliveryLine item={item} className="max-w-full max-sm:hidden" />
           <span className={cn('text-xs tabular-nums sm:hidden', level === 'out' ? 'font-semibold text-destructive' : level === 'low' ? 'font-semibold text-primary' : 'text-muted-foreground')}>
             {level === 'out' ? 'Stok tükendi' : level === 'low' ? `Son ${left} adet` : item.total > 0 ? `Stok ${left}/${item.total}` : 'Stokta'}
           </span>
         </div>
         <StockMeter left={left} total={item.total} className="max-sm:hidden" />
-        <div className="mt-auto flex flex-col gap-2 max-sm:gap-1">
+        <div className="mt-auto flex flex-col gap-2 max-sm:mt-0 max-sm:gap-1">
           <div className="max-sm:hidden">
             <DealLine item={item} taskDone={taskDone} />
           </div>
@@ -233,11 +261,6 @@ export function ProductCard({ item, left, used, points, signedIn, pay, taskDone,
               <LimitLine item={item} used={used} signedIn={signedIn} />
             </span>
           </div>
-          {dealShown(item, taskDone) && item.dealTask ? (
-            <span className="text-xs font-semibold text-primary sm:hidden">
-              {taskDone ? 'Görev fiyatı uygulandı' : `Görevle ${formatAC(item.dealPrice)} KC`}
-            </span>
-          ) : null}
           <div className="contents max-sm:hidden">
             <BuyButton item={item} state={state} onBuy={onBuy} />
             <DetailButton onClick={onDetail} />
@@ -253,18 +276,7 @@ export function FeaturedCard({ item, left, used, points, signedIn, pay, taskDone
   return (
     <li className="panel-gold flex flex-col overflow-hidden rounded-2xl @lg:flex-row">
       <div className="relative aspect-[16/9] shrink-0 overflow-hidden bg-secondary @lg:aspect-auto @lg:w-2/5">
-        <Image
-          src={productImage(item)}
-          alt=""
-          fill
-          sizes="(min-width: 1024px) 30vw, 90vw"
-          className={cn('object-cover', state.kind === 'out' && 'opacity-50 grayscale')}
-        />
-        {item.kind === 'sponsor' && item.sponsorName && (
-          <div className="absolute inset-x-0 bottom-0 flex p-2">
-            <SponsorTag item={item} />
-          </div>
-        )}
+        <ProductMedia item={item} dimmed={state.kind === 'out'} sizes="(min-width: 1024px) 30vw, 90vw" />
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-3 p-4">
         <div className="flex flex-col items-start gap-1.5">

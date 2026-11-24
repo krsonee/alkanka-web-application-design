@@ -114,7 +114,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
               />
             </div>
           )}
-          <Topbar social={social} sponsors={searchSponsors} telegram={telegram} chat={chatLive} />
+          <Topbar social={social} sponsors={searchSponsors} telegram={telegram} />
           <div className={CHROME_BAND}>
             <WinnersTicker />
           </div>

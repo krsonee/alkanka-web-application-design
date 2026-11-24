@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useState } from 'react'
 import Link from 'next/link'
-import { ChevronDown, Link2, ShieldAlert } from 'lucide-react'
+import { ChevronDown, Link2, ScrollText, ShieldAlert } from 'lucide-react'
 import { linkGoalAccountAction } from '@/app/actions/community'
 import { useAddressChoice } from '@/components/alkanka/use-address-choice'
 import {
@@ -50,23 +50,27 @@ function ordered(matches: GoalMatch[], now: number) {
 
 function Fact({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5 rounded-lg bg-background px-3 py-2">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
+    <div className="flex min-w-0 flex-col gap-0.5 rounded-lg border border-border bg-background/70 px-2.5 py-1.5">
+      <dt className="text-[11px] leading-tight text-muted-foreground">{label}</dt>
       <dd className={cn('font-display text-sm font-bold tabular-nums', strong ? 'text-primary' : 'text-foreground')}>{value}</dd>
     </div>
   )
 }
 
-/** The event's rules, always on the page: closed by the visitor, never hidden by default. */
+/** The event's rules, one tap away: the card opens closed so the matches below stay in reach. */
 function RuleBox({ event }: { event: GoalEventView }) {
   const lines = goalRuleLines(event)
   return (
-    <details open className="group rounded-lg border border-border bg-background">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-xs font-bold text-foreground [&::-webkit-details-marker]:hidden">
-        Kurallar
-        <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+    <details className="group rounded-lg border border-border bg-background/70 open:bg-background">
+      <summary className="flex h-10 cursor-pointer list-none items-center justify-between gap-2 px-3 text-xs font-bold text-foreground [&::-webkit-details-marker]:hidden">
+        <span className="flex items-center gap-2">
+          <ScrollText className="size-3.5 text-primary" aria-hidden="true" />
+          Kurallar
+          <span className="rounded-full bg-foreground/10 px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums text-muted-foreground">{lines.length} madde</span>
+        </span>
+        <ChevronDown className="size-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180" aria-hidden="true" />
       </summary>
-      <ul className="flex list-disc flex-col gap-1.5 px-3 pb-3 pl-7 text-xs leading-relaxed text-muted-foreground marker:text-primary">
+      <ul className="flex list-disc flex-col gap-1.5 border-t border-border px-3 pb-3 pl-7 pt-2.5 text-xs leading-relaxed text-muted-foreground marker:text-primary">
         {lines.map((line) => (
           <li key={line}>{line}</li>
         ))}
@@ -142,10 +146,11 @@ function EventBlock({ event, now, me }: { event: GoalEventView; now: number; me:
   const linkFieldId = `gol-hesap-${event.id}`
   return (
     <section aria-label={event.title} className="flex flex-col gap-3">
-      <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
+      <div className="relative flex flex-col gap-3 overflow-hidden rounded-xl border border-primary/30 bg-card bg-gradient-to-b from-primary/[0.09] to-transparent p-3.5 shadow-[inset_0_1px_0_0_oklch(1_0_0/0.06)] @2xl:p-4">
+        <span aria-hidden="true" className="absolute inset-y-3 left-0 w-0.5 rounded-full bg-primary" />
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 basis-56 flex-col gap-0.5">
-            <h3 className="font-display text-lg font-bold text-foreground text-balance">{event.title}</h3>
+            <h3 className="font-display text-lg font-bold leading-tight text-foreground text-balance">{event.title}</h3>
             <p className="text-xs text-muted-foreground">{sponsor ? `${event.siteName ?? 'Sponsor'} etkinliği · ödülü sponsor verir` : 'Alkanka etkinliği · ödül KC olarak yatar'}</p>
           </div>
           <dl className="flex flex-wrap gap-2">
@@ -159,7 +164,7 @@ function EventBlock({ event, now, me }: { event: GoalEventView; now: number; me:
         <RuleBox event={event} />
         {sponsor && me && !blocked && <AccountBox event={event} account={account} fieldId={linkFieldId} />}
       </div>
-      <div className="grid items-start gap-3 @4xl:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-3 @4xl:grid-cols-2">
         {ordered(event.matches, now).map((m) =>
           sponsor ? (
             <CouponMatchCard key={m.id} event={event} m={m} now={now} account={usable} blocked={blocked} lock={lock} linkFieldId={linkFieldId} />
@@ -203,7 +208,7 @@ export function GoalBoard({
 
   return (
     <section aria-labelledby="gol-yagmuru" className="@container flex flex-col gap-5">
-      <header className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
+      <header className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3.5 @2xl:gap-4 @2xl:p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 basis-64 flex-col gap-1">
             <h2 id="gol-yagmuru" className="font-display text-xl font-bold text-foreground text-balance">
@@ -217,8 +222,9 @@ export function GoalBoard({
                 const on = category === c.id
                 const open = openIn(c.id)
                 return (
-                  <button key={c.id} type="button" role="tab" aria-selected={on} onClick={() => setChosen(c.id)} className={cn(segmentItem(on), 'h-11 px-3 text-sm @2xl:px-5')}>
-                    <span className="truncate">{c.label}</span>
+                  <button key={c.id} type="button" role="tab" aria-selected={on} aria-label={c.label} onClick={() => setChosen(c.id)} className={cn(segmentItem(on), 'h-10 px-3 text-sm @2xl:h-11 @2xl:px-5')}>
+                    <span className="truncate @md:hidden">{c.short}</span>
+                    <span className="hidden truncate @md:inline">{c.label}</span>
                     {open > 0 && (
                       <span className={segmentCount(on)}>
                         {open}
@@ -232,20 +238,25 @@ export function GoalBoard({
           )}
         </div>
 
-        <ol className={cn('grid gap-2', category === 'sponsor' ? '@2xl:grid-cols-4' : '@2xl:grid-cols-3')}>
-          {STEPS[category].map((s, i) => (
-            <li key={s.title} className="flex items-start gap-2.5 rounded-lg bg-background px-3 py-2.5">
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 font-display text-xs font-bold text-primary" aria-hidden="true">
-                {i + 1}
+        {/* Narrow: one quiet list with a rail between the numbers; wide: a box per step. */}
+        <ol className={cn('grid rounded-lg bg-background/60 px-3 py-2.5 @2xl:gap-2 @2xl:bg-transparent @2xl:p-0', category === 'sponsor' ? '@2xl:grid-cols-4' : '@2xl:grid-cols-3')}>
+          {STEPS[category].map((s, i, all) => (
+            <li key={s.title} className="flex items-stretch gap-2.5 @2xl:items-start @2xl:rounded-lg @2xl:bg-background @2xl:px-3 @2xl:py-2.5">
+              <span className="flex flex-col items-center gap-1" aria-hidden="true">
+                <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary font-display text-[11px] font-bold text-primary-foreground @2xl:size-6 @2xl:bg-primary/15 @2xl:text-xs @2xl:text-primary">
+                  {i + 1}
+                </span>
+                {i < all.length - 1 && <span className="w-px flex-1 bg-primary/30 @2xl:hidden" />}
               </span>
-              <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-sm font-bold text-foreground">{s.title}</span>
-                <span className="text-xs leading-relaxed text-muted-foreground">{s.line}</span>
+              <span className={cn('min-w-0 text-xs leading-relaxed text-muted-foreground @2xl:flex @2xl:flex-col @2xl:gap-0.5 @2xl:pb-0', i < all.length - 1 && 'pb-2')}>
+                <span className="font-bold text-foreground @2xl:text-sm">{s.title}</span>
+                <span className="@2xl:hidden">{' · '}</span>
+                <span>{s.line}</span>
               </span>
             </li>
           ))}
         </ol>
-        <p className="text-xs text-muted-foreground">Maç saatleri ve gün hesabı: {TR_ZONE_NOTE}.</p>
+        <p className="text-[11px] text-muted-foreground">Maç saatleri ve gün hesabı: {TR_ZONE_NOTE}.</p>
       </header>
 
       {flag && (

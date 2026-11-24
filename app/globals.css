@@ -896,6 +896,10 @@
   animation: kp-sweep 7s ease-in-out infinite;
   animation-delay: calc(var(--i, 0) * 0.45s);
 }
+/* On a phone the cards sit in a narrow rail; the passing shine reads as a stripe stuck on each card. */
+@media (width < 40rem) {
+  .kp-card::after { display: none; }
+}
 .kp-card:hover,
 .kp-card:focus-visible {
   transform: translateY(-3px);

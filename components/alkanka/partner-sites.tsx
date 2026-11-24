@@ -350,27 +350,29 @@ function SponsorCard({ sponsor }: { sponsor: Sponsor }) {
   return (
     <li className={cn('panel-gold group overflow-hidden rounded-xl transition-colors hover:border-primary/60', TIER_FRAME[sponsor.tier])}>
       <SponsorPreview sponsor={sponsor} open={preview} onClose={() => setPreview(false)} />
-      <div className="flex items-center gap-3 p-3 sm:hidden">
-        <button
-          type="button"
-          onClick={() => setPreview(true)}
-          aria-label={`${sponsor.name} detayları`}
-          className="sponsor-logo-plate flex h-14 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-primary/25 bg-background px-2 py-1.5"
-        >
-          <SponsorLogoPlate sponsor={sponsor} compact className="h-full max-h-full w-full max-w-full text-base drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]" />
-        </button>
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          {/* The name comes first: when both do not fit, the tier tag drops to its own line instead of cutting the name. */}
-          <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
-            <span className="truncate font-semibold text-foreground">{sponsor.name}</span>
+      {/* Phone: the logo, the name and the way in share the top line; the offer gets the full width below so it is never cut. */}
+      <div className="flex flex-col gap-2 p-3 sm:hidden">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setPreview(true)}
+            aria-label={`${sponsor.name} detayları`}
+            className="sponsor-logo-plate flex h-12 w-[5.5rem] shrink-0 items-center justify-center overflow-hidden rounded-lg border border-primary/25 bg-background px-2 py-1.5"
+          >
+            <SponsorLogoPlate sponsor={sponsor} compact className="h-full max-h-full w-full max-w-full text-base drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]" />
+          </button>
+          <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
+            <span className="max-w-full truncate font-semibold leading-tight text-foreground">{sponsor.name}</span>
             <TierTag tier={sponsor.tier} className="px-1 text-[9px]" />
-          </span>
-          <span className="truncate text-sm font-bold text-primary">{sponsor.welcome}</span>
-          <Meta sponsor={sponsor} />
+          </div>
+          <GoButton site={sponsor.id} label="Git" className="h-10 w-[4.5rem] shrink-0 px-2" />
         </div>
-        <div className="flex w-20 shrink-0 flex-col gap-2">
-          <GoButton site={sponsor.id} label="Git" className="h-10 w-full px-2" />
-          <button type="button" onClick={() => setPreview(true)} className={cn(inspectClass, 'h-10 w-full text-xs')}>
+        <p className="line-clamp-2 text-sm font-bold leading-snug text-primary text-pretty [overflow-wrap:anywhere]">{sponsor.welcome}</p>
+        <div className="flex items-center justify-between gap-3">
+          <span className="min-w-0 overflow-hidden">
+            <Meta sponsor={sponsor} />
+          </span>
+          <button type="button" onClick={() => setPreview(true)} className={cn(inspectClass, 'relative h-8 shrink-0 rounded-full px-3.5 text-xs after:absolute after:-inset-1.5')}>
             İncele
           </button>
         </div>
@@ -497,8 +499,9 @@ export function SponsorDirectory({ sponsors = [] }: { sponsors?: Sponsor[]; main
       />
 
       <div className="-mx-1 flex flex-col gap-2 rounded-xl border border-border bg-surface/95 p-2 backdrop-blur-md lg:sticky lg:top-[calc(4rem+var(--tg-strip-h,0px))] lg:z-20 lg:flex-row lg:items-center lg:gap-3 lg:p-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto no-scrollbar">
+        <div className="flex min-w-0 items-start gap-2 lg:items-center">
+          {/* Every category stays in sight; the chips wrap rather than slide off the edge. */}
+          <div className="flex min-w-0 flex-1 flex-wrap gap-1.5 sm:gap-2">
             {filters.map((f) => (
               <Chip key={f.id} active={tier === f.id} onClick={() => update(setTier)(tier === f.id ? 'all' : f.id)}>
                 {f.label}

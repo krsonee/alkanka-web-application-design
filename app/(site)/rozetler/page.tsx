@@ -175,17 +175,20 @@ export default async function BadgesPage() {
             const role = ROLE_BADGES[b.id] ?? (b.roleStyle ? { tier: b.roleStyle, label: 'Özel rol' } : undefined)
             const tier = role?.tier ?? b.tier
             return (
-              <li key={b.id} className={cn('flex w-[calc(50%-0.375rem)] shrink-0 snap-start flex-col gap-2 rounded-2xl border p-3 sm:gap-3 sm:p-4 xl:w-[calc((100%-1.5rem)/3)]', TIER_BG[tier])}>
-                <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-4">
+              <li key={b.id} className={cn('flex w-[78%] shrink-0 snap-start flex-col gap-2 rounded-2xl border p-3 shadow-[inset_0_1px_0_0_oklch(1_0_0/0.06)] sm:w-[calc(50%-0.375rem)] sm:gap-3 sm:p-4 xl:w-[calc((100%-1.5rem)/3)]', TIER_BG[tier])}>
+                <div className="flex items-center gap-3 sm:gap-4">
                   <SpecialEmblem icon={b.icon} tier={tier} size="md" className="sm:hidden" />
                   <SpecialEmblem icon={b.icon} tier={tier} size="lg" className="hidden sm:flex" />
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:gap-1">
                     <span className={cn('text-[10px] font-bold uppercase tracking-widest', TIER_TEXT[tier])}>{role?.label ?? TIER_NAMES[b.tier]}</span>
-                    <span className="font-display text-sm font-bold leading-tight text-foreground sm:text-base">{b.name}</span>
-                    {b.bonus > 0 && <span className="font-display text-xs font-bold text-gold sm:text-sm">+{fmt(b.bonus)} KP</span>}
+                    <span className="truncate font-display text-sm font-bold leading-tight text-foreground sm:whitespace-normal sm:text-base">{b.name}</span>
+                    {b.bonus > 0 && <span className="font-display text-xs font-bold text-gold max-sm:hidden sm:text-sm">+{fmt(b.bonus)} KP</span>}
                   </div>
+                  {b.bonus > 0 && (
+                    <span className="shrink-0 self-start rounded-full bg-gold/15 px-2 py-0.5 font-display text-xs font-bold tabular-nums text-gold sm:hidden">+{fmt(b.bonus)} KP</span>
+                  )}
                 </div>
-                <p className="line-clamp-3 text-pretty text-xs leading-relaxed text-muted-foreground sm:line-clamp-none">{b.description}</p>
+                <p className="line-clamp-2 text-pretty text-xs leading-relaxed text-muted-foreground sm:line-clamp-none">{b.description}</p>
                 <div className="flex flex-wrap gap-1.5 text-[10px] font-bold">
                   <span className="rounded-full bg-background/70 px-2 py-0.5 text-foreground">{rarityLabel(rarity[b.id])}</span>
                   {(b.perkPct ?? 0) > 0 && <span className="rounded-full bg-gold/15 px-2 py-0.5 text-gold">Markette %{b.perkPct} indirim</span>}
@@ -197,7 +200,7 @@ export default async function BadgesPage() {
                 </div>
                 {b.auto && <p className="hidden text-[11px] text-muted-foreground sm:block">{AUTO_LABELS[b.auto]}</p>}
                 {showcase?.leaders[b.id] && (
-                  <p className="rounded-lg bg-background/70 px-2 py-1.5 text-[11px] leading-snug text-foreground">
+                  <p className="rounded-lg bg-background/70 px-2 py-1.5 text-[11px] leading-snug text-foreground max-sm:truncate">
                     <span className="font-bold text-gold">Şu an önde:</span> {showcase.leaders[b.id].name} · {showcase.leaders[b.id].detail}
                   </p>
                 )}

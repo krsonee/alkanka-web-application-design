@@ -6,6 +6,7 @@ import { siteComplaints, siteReviews, siteTrustTable, type SiteTrust } from '@/l
 import type { Sponsor } from '@/components/alkanka/data'
 import { SponsorLogoPlate } from '@/components/alkanka/partner-sites'
 import { TrustForms } from '@/components/alkanka/community/trust-forms'
+import { TrustViews } from '@/components/alkanka/community/trust-views'
 import { COMPLAINT_STATUS } from '@/components/alkanka/community/labels'
 import { PageHero } from '@/components/alkanka/page-hero'
 import { SnapSlider } from '@/components/alkanka/home/snap-slider'
@@ -273,30 +274,18 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
             </p>
           </section>
 
-          <div role="tablist" aria-label="İçerik" className="grid w-full grid-cols-3 gap-1 rounded-lg border border-border bg-card p-1 sm:w-fit">
-            {(
-              [
-                ['yorum', `Yorum (${reviews.length})`],
-                ['sikayet', `Şikâyet (${complaints.length})`],
-                ['cekim', `Çekim (${withdraws.length})`],
-              ] as const
-            ).map(([id, label]) => (
-              <Link
-                key={id}
-                role="tab"
-                aria-selected={view === id}
-                href={href(current.slug, id)}
-                scroll={false}
-                className={cn('flex h-9 items-center justify-center rounded-md px-2 text-[11px] font-bold uppercase tracking-wide sm:px-4 sm:text-xs', view === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
-              >
-                {label}
-              </Link>
-            ))}
-          </div>
-
-          {view === 'cekim' ? (
+          <TrustViews
+            initial={view}
+            tabs={[
+              { id: 'yorum', label: `Yorum (${reviews.length})` },
+              { id: 'sikayet', label: `Şikâyet (${complaints.length})` },
+              { id: 'cekim', label: `Çekim (${withdraws.length})` },
+            ]}
+            panels={{
+              cekim: (
             <WithdrawWall shares={withdraws} showSite={false} className="xl:grid-cols-3" empty={`${current.name} için henüz onaylı çekim yok. İlk çekimini paylaş, ödülünü al.`} />
-          ) : view === 'yorum' ? (
+              ),
+              yorum:
             reviews.length ? (
               <ul className="flex flex-col gap-3">
                 {reviews.map((r) => (
@@ -330,8 +319,8 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
               <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
                 {current.name} için henüz yorum yok. İlk yorumu sen yaz, Güvenilir ses rozetini kap.
               </p>
-            )
-          ) : complaints.length ? (
+            ),
+              sikayet: complaints.length ? (
             <ul className="flex flex-col gap-3">
               {complaints.map((c) => (
                 <li key={c.id} className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4">
@@ -357,7 +346,9 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
             </ul>
           ) : (
             <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">{current.name} için kayıtlı şikâyet yok.</p>
-          )}
+          ),
+            }}
+          />
         </div>
 
         <aside className="flex flex-col gap-3 xl:sticky xl:top-20 xl:self-start">

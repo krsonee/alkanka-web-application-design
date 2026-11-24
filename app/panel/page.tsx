@@ -93,6 +93,7 @@ import { ThemeManager } from '@/components/panel/theme-manager'
 import { getThemeCatalog } from '@/lib/table-themes-server'
 import { DEFAULT_OFFERS } from '@/lib/table-themes'
 import { GrowthManager } from '@/components/panel/growth-manager'
+import { cleanWagerBox, WAGER_BOX_KEY } from '@/lib/wager-box'
 import { CampaignsManager, EarningsManager, TrackingEditor } from '@/components/panel/marketing-manager'
 import { MarketingGuide } from '@/components/panel/area-guides'
 import { getTracking, listCampaigns, listEarnings } from '@/lib/marketing'
@@ -834,6 +835,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           flagged={flagged}
           accounts={accounts}
           period={currentPeriod()}
+          wagerBox={cleanWagerBox(content[WAGER_BOX_KEY])}
           siteUrl={SITE_URL}
           campaignsHref={can('marketing') ? '/panel?b=marketing&s=campaigns' : null}
           linksHref={linksHref}
