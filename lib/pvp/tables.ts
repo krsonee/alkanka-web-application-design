@@ -4,6 +4,7 @@ import { pool } from '@/lib/db'
 import { credit, debit, recordHistory, type Member } from '@/lib/member'
 import { getArenaSettings } from '@/lib/arena-server'
 import { botProfitToday } from '@/lib/solo-sessions'
+import { withBotPayoutGate } from '@/lib/bot-gate'
 import { BOT_DAILY_PROFIT_CAP, TURN_SECONDS, botFillSeconds, botWinMultiplier, isBotTableGame, isFullPotGame, quickSeats, tablePot } from '@/lib/arena'
 import {
   autoMove,
@@ -987,13 +988,16 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>, end: Tabl
     const reveal = t.state?.kind === 'okey' ? t.state.reveal : null
     const factor = won && reveal && reveal.seat === p.seat ? Math.max(1, reveal.penalty / 2) : 1
     let gross = won ? Math.floor(t.stake * botWinMultiplier('okey', settings) * factor) : 0
-    if (gross > t.stake) {
-      const room = Math.max(0, BOT_DAILY_PROFIT_CAP - (await botProfitToday(p.id)))
-      gross = Math.min(gross, t.stake + room)
-    }
-    const payout = await capPayout(p.id, t.stake, gross)
-    if (payout) await credit(p.id, payout, `Masa ödemesi (${t.game})`)
-    await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'bot', opponent: 'Alkanka Bot', stake: t.stake, result: won ? 'win' : 'loss', delta: payout - t.stake, tableId: t.id })
+    await withBotPayoutGate([p.id], async () => {
+      if (gross > t.stake) {
+        const room = Math.max(0, BOT_DAILY_PROFIT_CAP - (await botProfitToday(p.id)))
+        gross = Math.min(gross, t.stake + room)
+      }
+      const payout = await capPayout(p.id, t.stake, gross)
+      if (payout) await credit(p.id, payout, `Masa ödemesi (${t.game})`)
+      await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'bot', opponent: 'Alkanka Bot', stake: t.stake, result: won ? 'win' : 'loss', delta: payout - t.stake, tableId: t.id })
+      // The table is already closed above, so a gate that cannot be had must not cost the player the payout.
+    }, 'run')
     return
   }
 
@@ -1009,42 +1013,46 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>, end: Tabl
   // Papaz Kimde pays by finishing place: winnerSeats is ordered first-out first, earlier places weigh more.
   const weightOf = (p: TableRow['players'][number]) => (t.game === 'papaz' ? winnerSeats.length - winnerSeats.indexOf(p.seat) : 1)
   const totalWeight = humanWinners.reduce((a, p) => a + weightOf(p), 0)
-  const paid = new Map<string, number>()
   const { boosted } = await import('@/lib/boosts')
-  for (const p of humanWinners) {
-    const share = totalWeight ? Math.floor((net * weightOf(p)) / totalWeight) : 0
-    const overBotCap = botBonus > 0 && (await botWinsToday(p.id)) >= BOT_DAILY_PAID_WINS
-    const prizeEach = overBotCap ? Math.min(share, t.stake) : share
-    // The weekend festival multiplies only the profit, never the returned stake.
-    const profit = Math.max(0, prizeEach - t.stake)
-    let boostedPrize = t.stake > 0 ? Math.min(prizeEach, t.stake) + (await boosted('arena', profit)) : prizeEach
-    if (botBonus > 0 && isFullPotGame(t.game) && boostedPrize > t.stake) {
-      const room = Math.max(0, BOT_DAILY_PROFIT_CAP - (await botProfitToday(p.id)))
-      boostedPrize = Math.min(boostedPrize, t.stake + room)
+  // Only winnings against bots count towards the daily bot ceilings, so only those winners wait at the gate.
+  // It stays shut until their history rows are written: that is what the next payout's ceiling reads.
+  await withBotPayoutGate(botBonus > 0 ? humanWinners.map((p) => p.id) : [], async () => {
+    const paid = new Map<string, number>()
+    for (const p of humanWinners) {
+      const share = totalWeight ? Math.floor((net * weightOf(p)) / totalWeight) : 0
+      const overBotCap = botBonus > 0 && (await botWinsToday(p.id)) >= BOT_DAILY_PAID_WINS
+      const prizeEach = overBotCap ? Math.min(share, t.stake) : share
+      // The weekend festival multiplies only the profit, never the returned stake.
+      const profit = Math.max(0, prizeEach - t.stake)
+      let boostedPrize = t.stake > 0 ? Math.min(prizeEach, t.stake) + (await boosted('arena', profit)) : prizeEach
+      if (botBonus > 0 && isFullPotGame(t.game) && boostedPrize > t.stake) {
+        const room = Math.max(0, BOT_DAILY_PROFIT_CAP - (await botProfitToday(p.id)))
+        boostedPrize = Math.min(boostedPrize, t.stake + room)
+      }
+      const amount = await capPayout(p.id, t.stake, boostedPrize)
+      paid.set(p.id, amount)
+      await credit(p.id, amount, `Masa kazancı (${t.game})`)
     }
-    const amount = await capPayout(p.id, t.stake, boostedPrize)
-    paid.set(p.id, amount)
-    await credit(p.id, amount, `Masa kazancı (${t.game})`)
-  }
-  // Mars hold: every player gets the blocked coins back, minus what a mars costs the loser.
-  // The loser's extra (1x for mars, 2x for ağır mars) goes to the winner after commission.
-  const hold = t.options.hold ?? 0
-  const marsExtra = hold ? Math.min(hold, Math.max(0, (outcome.mult ?? 1) - 1) * t.stake) : 0
-  const losers = people.filter((p) => !paid.has(p.id))
-  const marsGain = humanWinners.length && losers.length ? Math.floor((marsExtra * losers.length * (1 - (settings?.commission ?? 0) / 100)) / humanWinners.length) : 0
-  const extra = new Map<string, number>()
-  if (hold) {
+    // Mars hold: every player gets the blocked coins back, minus what a mars costs the loser.
+    // The loser's extra (1x for mars, 2x for ağır mars) goes to the winner after commission.
+    const hold = t.options.hold ?? 0
+    const marsExtra = hold ? Math.min(hold, Math.max(0, (outcome.mult ?? 1) - 1) * t.stake) : 0
+    const losers = people.filter((p) => !paid.has(p.id))
+    const marsGain = humanWinners.length && losers.length ? Math.floor((marsExtra * losers.length * (1 - (settings?.commission ?? 0) / 100)) / humanWinners.length) : 0
+    const extra = new Map<string, number>()
+    if (hold) {
+      for (const p of people) {
+        const back = paid.has(p.id) ? hold + marsGain : hold - marsExtra
+        extra.set(p.id, paid.has(p.id) ? marsGain : -marsExtra)
+        if (back > 0) await credit(p.id, back, `Masa iadesi (${t.game})`)
+      }
+    }
     for (const p of people) {
-      const back = paid.has(p.id) ? hold + marsGain : hold - marsExtra
-      extra.set(p.id, paid.has(p.id) ? marsGain : -marsExtra)
-      if (back > 0) await credit(p.id, back, `Masa iadesi (${t.game})`)
+      const won = paid.has(p.id)
+      const bonus = extra.get(p.id) ?? 0
+      await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'pvp', opponent: rivalName(t, p.id), stake: t.stake, result: won ? 'win' : 'loss', delta: (won ? (paid.get(p.id) ?? 0) - t.stake : -t.stake) + bonus, tableId: t.id })
     }
-  }
-  for (const p of people) {
-    const won = paid.has(p.id)
-    const bonus = extra.get(p.id) ?? 0
-    await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'pvp', opponent: rivalName(t, p.id), stake: t.stake, result: won ? 'win' : 'loss', delta: (won ? (paid.get(p.id) ?? 0) - t.stake : -t.stake) + bonus, tableId: t.id })
-  }
+  }, 'run')
 }
 
 /** Closes a tournament table nobody won: the match is a loss for both players. */

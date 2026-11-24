@@ -155,7 +155,8 @@ export function ArenaStage({ game, settings, setup }: { game: ArenaGame; setting
   const linkTarget = (query: string) => {
     const params = new URLSearchParams(query)
     const id = params.get('masa')
-    if (id) return { id }
+    // The id ends up inside request addresses (/api/tables/<id>), so anything that is not a plain id is ignored.
+    if (id && /^[\w-]{1,64}$/.test(id)) return { id }
     return wizardEnabledFor(setup, game) && params.has('masa-ac') ? { id: null } : null
   }
   const openLinked = (query: string) => {

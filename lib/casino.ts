@@ -4,11 +4,20 @@ export type Card = { r: number; s: number }
 export const SUITS = ['♠', '♥', '♦', '♣']
 export const RANKS = ['', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
 
+/** Unbiased, unpredictable integer in [0, max): the shoe decides who wins coins, so its order must not be guessable. */
+function secureInt(max: number) {
+  const limit = Math.floor(0x100000000 / max) * max
+  const buf = new Uint32Array(1)
+  do globalThis.crypto.getRandomValues(buf)
+  while (buf[0] >= limit)
+  return buf[0] % max
+}
+
 export function shoe(decks = 4): Card[] {
   const cards: Card[] = []
   for (let d = 0; d < decks; d++) for (let s = 0; s < 4; s++) for (let r = 1; r <= 13; r++) cards.push({ r, s })
   for (let i = cards.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
+    const j = secureInt(i + 1)
     ;[cards[i], cards[j]] = [cards[j], cards[i]]
   }
   return cards
