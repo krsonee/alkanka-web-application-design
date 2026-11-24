@@ -164,7 +164,7 @@ function EventBlock({ event, now, me }: { event: GoalEventView; now: number; me:
         <RuleBox event={event} />
         {sponsor && me && !blocked && <AccountBox event={event} account={account} fieldId={linkFieldId} />}
       </div>
-      <div className="grid items-start gap-3 @4xl:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-3 @4xl:grid-cols-2">
         {ordered(event.matches, now).map((m) =>
           sponsor ? (
             <CouponMatchCard key={m.id} event={event} m={m} now={now} account={usable} blocked={blocked} lock={lock} linkFieldId={linkFieldId} />

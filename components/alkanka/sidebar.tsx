@@ -489,7 +489,6 @@ function MenuSheetBody({ onNavigate, social, telegram }: BodyProps) {
       <TourButton className="w-full" onStart={onNavigate} />
       <TelegramChannels links={telegram} compact={false} />
       <SocialIcons links={social} compact={false} />
-      <TelegramCard compact={false} />
     </div>
   )
 }

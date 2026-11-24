@@ -26,7 +26,7 @@ const when = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', 
 const dayName = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', timeZone: TR_TZ })
 const fmt = (n: number) => n.toLocaleString('tr-TR')
 
-const matchCard = 'flex flex-col gap-2.5 rounded-xl border border-border bg-card p-3 shadow-[inset_0_1px_0_0_oklch(1_0_0/0.04)] @2xl:p-3.5'
+const matchCard = 'flex min-w-0 flex-col gap-2.5 rounded-xl border border-border bg-card p-3 shadow-[inset_0_1px_0_0_oklch(1_0_0/0.04)] @2xl:p-3.5'
 const matchMeta = 'text-xs text-muted-foreground'
 const smallAction = 'flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-bold transition-[opacity,scale] duration-150 active:scale-[0.97]'
 
