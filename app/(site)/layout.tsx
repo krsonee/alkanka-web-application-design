@@ -22,6 +22,8 @@ import { TextsProvider } from '@/components/alkanka/texts-context'
 import { getAppSettings } from '@/lib/app-settings'
 import { PwaProvider } from '@/components/alkanka/app/pwa-provider'
 import { AppPrompts } from '@/components/alkanka/app/app-prompts'
+import { FreshBuild } from '@/components/alkanka/app/fresh-build'
+import { BUILD } from '@/lib/build-id'
 import { SiteTour } from '@/components/alkanka/app/site-tour'
 import { getTourSettings } from '@/lib/tour'
 import { ReferralLinker } from '@/components/alkanka/community/referral-linker'
@@ -92,11 +94,13 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       <TvDockProvider>
         <Sidebar social={social} telegram={telegram} />
         {chatLive && <LiveRail />}
+        {/* In the installed app on an iPhone the page starts under the clock; this keeps scrolled content from showing through it. */}
+        <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 top-0 z-[47] h-[var(--safe-top)] bg-background lg:hidden" />
         <div
           className={
             chatLive
-              ? 'min-h-dvh transition-[padding] duration-200 lg:pl-[var(--sidebar-w)] xl:pr-80'
-              : 'min-h-dvh transition-[padding] duration-200 lg:pl-[var(--sidebar-w)]'
+              ? 'min-h-dvh transition-[padding] duration-200 max-lg:pt-[var(--safe-top)] lg:pl-[var(--sidebar-w)] xl:pr-80'
+              : 'min-h-dvh transition-[padding] duration-200 max-lg:pt-[var(--safe-top)] lg:pl-[var(--sidebar-w)]'
           }
         >
           {tgPromo.enabled && (
@@ -114,7 +118,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
           <div className={CHROME_BAND}>
             <WinnersTicker />
           </div>
-          <main data-site-main className="mx-auto flex max-w-screen-2xl flex-col gap-10 px-4 py-5 max-sm:gap-8 pb-[calc(6rem+var(--app-banner-h,0px))] lg:px-6 lg:pb-[calc(1.25rem+var(--app-banner-h,0px))]">
+          <main data-site-main className="mx-auto flex max-w-screen-2xl flex-col gap-10 px-4 py-5 max-sm:gap-8 pb-[calc(6rem+var(--safe-bottom)+var(--app-banner-h,0px))] lg:px-6 lg:pb-[calc(1.25rem+var(--app-banner-h,0px))]">
             <TournamentMatchBanner />
             {boosts.length > 0 && (
               <div className={CHROME_BAND}>
@@ -130,6 +134,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         <AuthModal signupClosed={signupClosed} />
         <GuestGate />
         <AppPrompts />
+        <FreshBuild build={BUILD} />
         <SiteTour settings={tourSettings} />
         <ReferralLinker />
         <KpHeartbeat />

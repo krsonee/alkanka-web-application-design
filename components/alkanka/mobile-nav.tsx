@@ -46,7 +46,7 @@ export function MobileNav() {
     <nav
       aria-label="Hızlı menü"
       className={cn(
-        'fixed inset-x-2.5 bottom-[calc(0.5rem+env(safe-area-inset-bottom))] z-30 mx-auto max-w-md rounded-3xl border border-border bg-surface/95 shadow-2xl shadow-background backdrop-blur-xl transition-transform duration-300 lg:hidden',
+        'fixed inset-x-2.5 bottom-[calc(0.5rem+var(--safe-bottom))] z-30 mx-auto max-w-md rounded-3xl border border-border bg-surface/95 shadow-2xl shadow-background backdrop-blur-xl transition-transform duration-300 lg:hidden',
         hidden && 'translate-y-[calc(100%+3.5rem)]',
       )}
     >

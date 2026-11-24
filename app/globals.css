@@ -114,6 +114,9 @@
 
 :root {
   color-scheme: dark;
+  /* Zero in a browser tab. The installed app on an iPhone draws under the clock and over the home bar, so it gets real values there. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
   --background: oklch(0.135 0.014 262);
   --surface: oklch(0.16 0.017 262);
   --foreground: oklch(0.96 0.006 85);

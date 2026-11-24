@@ -598,7 +598,7 @@ function ChannelsTab({ channels, selected, onSelect }: { channels: Channel[]; se
         <div
           className={cn(
             'overflow-hidden rounded-xl border',
-            floating ? 'fixed bottom-24 right-3 z-40 aspect-video w-60 shadow-2xl sm:w-80' : 'absolute inset-0',
+            floating ? 'fixed bottom-24 right-3 z-40 max-lg:bottom-[calc(7rem+var(--safe-bottom))] aspect-video w-60 shadow-2xl sm:w-80' : 'absolute inset-0',
             showPlayer ? 'border-border bg-foreground' : 'border-primary/30 bg-card',
           )}
         >

@@ -191,7 +191,7 @@ export function JakoAlerts() {
     <section
       aria-label="Bildirimler"
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-3 top-20 z-[55] flex flex-col items-end gap-3 sm:left-auto sm:w-96 lg:right-6 xl:right-[21.5rem]"
+      className="pointer-events-none fixed inset-x-3 top-[calc(5rem+var(--safe-top))] z-[55] flex flex-col items-end gap-3 sm:left-auto sm:w-96 lg:right-6 xl:right-[21.5rem]"
     >
       {alerts.map((alert) =>
         alert.kind === 'message' ? (
