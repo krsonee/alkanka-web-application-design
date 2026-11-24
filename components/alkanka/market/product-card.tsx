@@ -271,7 +271,7 @@ export function ProductCard({ item, left, used, points, signedIn, pay, taskDone,
               level === 'out' ? 'font-semibold text-destructive' : level === 'low' ? 'font-semibold text-primary' : 'text-muted-foreground',
             )}
           >
-            <Package className="size-3" aria-hidden="true" />
+            {level !== 'out' && <Package className="size-3" aria-hidden="true" />}
             <span className="sr-only">Stok: </span>
             {level === 'out' ? 'Tükendi' : level === 'low' ? `Son ${left}` : item.total > 0 ? `${left}/${item.total}` : 'Var'}
           </span>
