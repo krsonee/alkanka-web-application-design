@@ -46,7 +46,7 @@ import { optimisticState } from '@/lib/pvp/optimistic'
 import { TableThemeField, TableThemeScope } from './table-theme'
 import { arenaThemeGame } from '@/lib/table-themes'
 import { TableSetupWizard } from './table-setup-wizard'
-import { BOT_QUICK, PlayChooser, type PlayTab } from './play-chooser'
+import { PlayChooser, type PlayTab } from './play-chooser'
 import { isWizardGame, wizardEnabledFor, type SetupConfig } from '@/lib/home-v2-shared'
 import { MATCH_END_LABEL, type MatchEnd, type MyMatch, type TableTour } from '@/lib/tournaments-shared'
 import { Countdown, useSecondsLeft } from './tournament-countdown'
@@ -139,6 +139,7 @@ export function TableLobby({
 }) {
   const { member, points, requireLogin, refresh } = usePoints()
   const [wizardOpen, setWizardOpen] = useState(openWizard)
+  const [botSetup, setBotSetup] = useState(false)
   const [playTab, setPlayTab] = useState<PlayTab>('kanka')
   const [activeId, setActiveIdState] = useState<string | null>(null)
   // The open table lives in the URL so a page refresh drops the player straight back into it.
@@ -236,6 +237,31 @@ export function TableLobby({
   }
 
   const wizardOn = wizardEnabledFor(setup, game)
+  if (botSetup && setup && isWizardGame(game)) {
+    return (
+      <TableSetupWizard
+        game={game}
+        config={setup}
+        bets={settings.bets}
+        balance={member ? points : null}
+        commission={settings.commission}
+        busy={busy}
+        error={error}
+        solo={{ stake }}
+        onClose={() => {
+          setBotSetup(false)
+          setError(null)
+        }}
+        onCreate={async (s, options) => {
+          const r = await run(() => openTable(game, s, options))
+          if (r?.ok && r.id) {
+            setBotSetup(false)
+            setActiveId(r.id)
+          }
+        }}
+      />
+    )
+  }
   if (wizardOn && setup && isWizardGame(game) && wizardOpen) {
     return (
       <TableSetupWizard
@@ -422,11 +448,9 @@ export function TableLobby({
         commission={settings.commission}
         openCount={data ? allOpen.length : null}
         tables={chooserTables}
-        onBot={async () => {
-          const quick = BOT_QUICK[game]
-          if (!quick) return
-          const r = await run(() => openTable(game, stake, quick as Parameters<typeof openTable>[2]))
-          if (r?.ok && r.id) setActiveId(r.id)
+        onBot={() => {
+          setError(null)
+          setBotSetup(true)
         }}
         onWizard={() => setWizardOpen(true)}
       />
@@ -1333,6 +1357,11 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
   }
 
   const immersive = ['pisti', 'papaz', 'okey101', 'batak', 'monopoly', 'bilardo'].includes(data.game) && data.status === 'oynaniyor'
+  // Okey, 101, Batak and Pişti carry a chat button on the table itself. The rest lose the header's chat pill
+  // once the table goes fullscreen, so the fullscreen layer brings its own.
+  const layerChat = ['okey', 'okey101', 'batak', 'pisti'].includes(data.game)
+    ? undefined
+    : (spot: string) => <MobileTableChat key={`l-${id}`} tableId={id} placement="layer" buttonClassName={spot} />
 
   return (
     <RoomShell
@@ -1516,7 +1545,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
               </FitToScreen>
             ) : spectator ? (
               // Same stable landscape layer players get; FitToScreen re-measured the reflowing table in a loop on phones.
-              <LandscapeFit force={data.game === 'tavla' || data.game === 'okey' || data.game === 'okey101' || data.game === 'batak' || data.game === 'pisti' || data.game === 'monopoly'} menu={<SoundToggle />}>
+              <LandscapeFit force={data.game === 'tavla' || data.game === 'okey' || data.game === 'okey101' || data.game === 'batak' || data.game === 'pisti' || data.game === 'monopoly'} menu={<SoundToggle />} chat={layerChat}>
                 <div className={cn(data.game !== 'okey' && 'pointer-events-none')}>
                   <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
                 </div>
@@ -1528,6 +1557,7 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
                 expandable={data.status === 'oynaniyor'}
                 force={data.game === 'tavla' || data.game === 'okey' || data.game === 'okey101' || data.game === 'batak' || data.game === 'pisti' || data.game === 'monopoly'}
                 menuRight={data.game === 'pisti'}
+                chat={layerChat}
                 menu={
                   <>
                     {mySeat >= 0 && data.status === 'oynaniyor' && (

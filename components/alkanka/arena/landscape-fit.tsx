@@ -54,7 +54,10 @@ export function LandscapeFit({
   menu,
   menuRight = false,
   expandable = false,
+  chat,
 }: {
+  /** Table chat for a game whose table carries no chat button; `spot` is the free place under the layer's own buttons. */
+  chat?: (spot: string) => ReactNode
   children: ReactNode
   label?: string
   /** Puts the table menu in the top-right corner (Pişti) instead of the left rail. */
@@ -347,6 +350,15 @@ export function LandscapeFit({
             </div>
           )}
         </>
+      )}
+      {fullscreen && chat && (
+        <div className="pointer-events-none absolute inset-0 z-[105]">
+          {chat(
+            force && !manual
+              ? 'size-7 left-[max(0.25rem,env(safe-area-inset-left))] top-[4.25rem]'
+              : 'size-7 left-[max(0.5rem,env(safe-area-inset-left))] top-[5.25rem]',
+          )}
+        </div>
       )}
       {fullscreen && force && !manual ? (
         <button

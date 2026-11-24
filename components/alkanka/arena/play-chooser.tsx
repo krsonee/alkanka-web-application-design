@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import type { ReactNode } from 'react'
-import { Bot, Loader2, Play, Plus, UserPlus, Users } from 'lucide-react'
+import { Bot, Loader2, Play, Plus, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { tablePot, type ArenaGame } from '@/lib/arena'
 
@@ -19,14 +19,6 @@ export const BOT_QUICK: Partial<Record<ArenaGame, Record<string, unknown>>> = {
   monopoly: { seats: 4, bots: 3, extras: [] },
 }
 
-const BOT_HINT: Partial<Record<ArenaGame, string>> = {
-  okey: '3 botla tekli masa. Beklemeden başlar.',
-  okey101: '3 botla tekli masa, tek el. Beklemeden başlar.',
-  batak: '3 botla klasik batak, tek el. Beklemeden başlar.',
-  pisti: 'Bire bir bota karşı, 151 puan. Beklemeden başlar.',
-  papaz: '3 botla masa. Beklemeden başlar.',
-  monopoly: '3 botla masa. Beklemeden başlar.',
-}
 
 export function PlayChooser({
   game,
@@ -87,7 +79,7 @@ export function PlayChooser({
           </h2>
           <p className="hidden text-pretty text-sm leading-relaxed text-muted-foreground sm:block">
             {hasBot
-              ? 'Beklemeden botlara karşı başla ya da oyuncuların açtığı bir masaya otur. İstersen kendi masanı da açabilirsin.'
+              ? 'Kurallarını seçip botlara karşı başla ya da oyuncuların açtığı bir masaya otur. İstersen kendi masanı da açabilirsin.'
               : 'Oyuncuların açtığı bir masaya otur ya da kurallarını seçip kendi masanı aç.'}
           </p>
           {guest && (
@@ -102,7 +94,7 @@ export function PlayChooser({
         <div className="grid grid-cols-2 gap-1 rounded-2xl border border-border bg-card p-1 lg:hidden" role="tablist" aria-label="Oyun şekli">
           {(
             [
-              ['bot', 'Bota karşı', 'Hemen başla', Bot],
+              ['bot', 'Bota karşı', 'Kuralları sen seç', Bot],
               ['kanka', 'Oyuncularla', openLabel, Users],
             ] as const
           ).map(([k, label, sub, Icon]) => (
@@ -135,7 +127,7 @@ export function PlayChooser({
               active === 'bot' ? 'flex' : 'hidden lg:flex',
             )}
           >
-            <CardHead icon={<Bot className="size-5" aria-hidden="true" />} title="Bota karşı hemen oyna" hint={BOT_HINT[game] ?? 'Beklemeden başlar.'} />
+            <CardHead icon={<Bot className="size-5" aria-hidden="true" />} title="Bota karşı oyna" hint="Kuralları sen seç, masa botlarla beklemeden başlar." />
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between gap-2 text-xs font-semibold text-muted-foreground">
                 <span>Bahis (KC)</span>
@@ -175,14 +167,8 @@ export function PlayChooser({
               onClick={onBot}
               className="mt-auto inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
             >
-              {busy ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-              ) : guest ? (
-                <UserPlus className="size-4" aria-hidden="true" />
-              ) : (
-                <Play className="size-4" aria-hidden="true" />
-              )}
-              {guest ? 'Üye ol ve oyna' : 'Bota karşı hemen oyna'}
+              {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}
+              Kuralları seç ve başla
             </button>
           </div>
         )}

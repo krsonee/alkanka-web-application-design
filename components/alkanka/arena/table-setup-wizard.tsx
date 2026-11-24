@@ -81,7 +81,7 @@ function seatCount(game: WizardGame, p: Picks): number {
   return 2
 }
 
-function buildSteps(game: WizardGame, p: Picks, config: SetupConfig, bets: number[], balance: number | null): Step[] {
+function buildSteps(game: WizardGame, p: Picks, config: SetupConfig, bets: number[], balance: number | null, solo = false): Step[] {
   const seats = seatCount(game, p)
   const steps: Step[] = []
   switch (game) {
@@ -152,6 +152,8 @@ function buildSteps(game: WizardGame, p: Picks, config: SetupConfig, bets: numbe
     case 'bilardo':
       break
   }
+  // Against bots every other seat is a bot and the bet is already chosen, so only the rules are asked.
+  if (solo) return steps.filter((s) => s.key !== 'bots')
   steps.push({ key: 'stake', title: 'Bahis', choices: bets.map((b) => ({ value: String(b), label: `${fmt(b)} KC`, disabled: balance != null && b > balance })) })
   return steps
 }
@@ -218,8 +220,8 @@ function buildResult(game: WizardGame, p: Picks): { options: TableOptions | unde
   }
 }
 
-function prune(game: WizardGame, p: Picks, config: SetupConfig, bets: number[], balance: number | null): Picks {
-  const steps = buildSteps(game, p, config, bets, balance)
+function prune(game: WizardGame, p: Picks, config: SetupConfig, bets: number[], balance: number | null, solo = false): Picks {
+  const steps = buildSteps(game, p, config, bets, balance, solo)
   const next: Picks = {}
   for (const s of steps) {
     const v = p[s.key]
@@ -243,8 +245,11 @@ export function TableSetupWizard({
   onCreate,
   onClose,
   embedded = false,
+  solo,
 }: {
   embedded?: boolean
+  /** "Bota karşı oyna": the bet is already chosen and every other seat is a bot, so only the rules are picked. */
+  solo?: { stake: number }
   game: WizardGame
   config: SetupConfig
   bets: number[]
@@ -257,14 +262,15 @@ export function TableSetupWizard({
 }) {
   const gameCfg = config.games[game]
   const guest = balance == null
-  const storeKey = `alkanka:masa-ac:${game}`
+  const isSolo = solo != null
+  const storeKey = isSolo ? `alkanka:bot-oyna:${game}` : `alkanka:masa-ac:${game}`
   const [picks, setPicks] = useState<Picks>((): Picks => {
     const base: Picks = game === 'okey' ? { seats: '4' } : {}
     // Only the guest "Üye ol ve oyna" handoff restores picks; every other visit starts empty.
     try {
       const saved = JSON.parse(window.sessionStorage.getItem(storeKey) ?? 'null') as Picks | null
       window.sessionStorage.removeItem(storeKey)
-      if (saved && typeof saved === 'object') return prune(game, { ...base, ...saved }, config, bets, balance)
+      if (saved && typeof saved === 'object') return prune(game, { ...base, ...saved }, config, bets, balance, isSolo)
     } catch {}
     return base
   })
@@ -276,7 +282,7 @@ export function TableSetupWizard({
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState<string[]>(DEFAULT_EXTRAS[game] ?? [])
 
-  const steps = buildSteps(game, picks, config, bets, balance)
+  const steps = buildSteps(game, picks, config, bets, balance, isSolo)
   const current = editing ?? steps.find((s) => picks[s.key] == null)?.key ?? null
   const currentStep = steps.find((s) => s.key === current)
   const complete = current == null
@@ -294,10 +300,10 @@ export function TableSetupWizard({
     setPicks((p) => {
       const next: Picks = { ...p, [key]: value }
       if (p[key] != null && p[key] !== value) {
-        const order = buildSteps(game, p, config, bets, balance).map((s) => s.key)
+        const order = buildSteps(game, p, config, bets, balance, isSolo).map((s) => s.key)
         for (const later of order.slice(order.indexOf(key) + 1)) delete next[later]
       }
-      return prune(game, next, config, bets, balance)
+      return prune(game, next, config, bets, balance, isSolo)
     })
     setEditing(null)
   }
@@ -308,20 +314,22 @@ export function TableSetupWizard({
     setEditing(s.key)
   }
 
-  const stake = Number(picks.stake ?? 0)
-  const result = buildResult(game, picks)
-  const split = tablePot(game, stake, commission, { humans: result.humans, bots: Number(picks.bots ?? 0) })
+  const seated: Picks = isSolo ? { ...picks, bots: String(seatCount(game, picks) - 1) } : picks
+  const stake = solo ? solo.stake : Number(picks.stake ?? 0)
+  const result = buildResult(game, seated)
+  const split = tablePot(game, stake, commission, { humans: result.humans, bots: result.bots })
   const prize = Math.floor(split.net)
-  const intro = gameCfg?.intro || config.intro
+  const title = isSolo ? 'Bota karşı oyna' : config.title
+  const intro = isSolo ? 'Kuralları seç, masa botlarla beklemeden başlar.' : gameCfg?.intro || config.intro
   const rule = game === 'okey' ? '' : gameCfg?.rule
   const themeGame = arenaThemeGame(game)
 
   return (
-    <section aria-label={`${WIZARD_GAME_LABEL[game]} ${config.title}`} className={embedded ? 'flex flex-col gap-4' : 'flex flex-col gap-5 rounded-3xl border border-border bg-card p-5 sm:p-7'}>
+    <section aria-label={`${WIZARD_GAME_LABEL[game]} ${title}`} className={embedded ? 'flex flex-col gap-4' : 'flex flex-col gap-5 rounded-3xl border border-border bg-card p-5 sm:p-7'}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <span className="text-xs font-bold uppercase tracking-wider text-primary">{WIZARD_GAME_LABEL[game]}</span>
-          <h2 className={embedded ? 'text-lg font-black text-foreground' : 'text-2xl font-black text-foreground'}>{config.title}</h2>
+          <h2 className={embedded ? 'text-lg font-black text-foreground' : 'text-2xl font-black text-foreground'}>{title}</h2>
           {intro && <p className="text-pretty text-sm leading-relaxed text-muted-foreground">{intro}</p>}
         </div>
         <button type="button" onClick={onClose} aria-label="Kapat" className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:text-foreground">
@@ -331,7 +339,7 @@ export function TableSetupWizard({
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-foreground">Masa ayarların</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-foreground">{isSolo ? 'Oyun kuralların' : 'Masa ayarların'}</span>
           <span className="text-xs font-semibold text-muted-foreground">
             {`${steps.filter((s) => picks[s.key] != null && s.key !== current).length}/${steps.length} seçildi`}
           </span>
@@ -380,7 +388,7 @@ export function TableSetupWizard({
         </ul>
         {!complete && (
           <p className="text-xs leading-relaxed text-muted-foreground">
-            <span className="font-bold text-primary">*</span> Tüm alanlar zorunlu ve sırayla seçilir. Hepsini seçmeden masa açılmaz.
+            <span className="font-bold text-primary">*</span> {isSolo ? 'Kurallar sırayla seçilir. Hepsini seçince oyun başlar.' : 'Tüm alanlar zorunlu ve sırayla seçilir. Hepsini seçmeden masa açılmaz.'}
           </p>
         )}
       </div>
@@ -454,11 +462,17 @@ export function TableSetupWizard({
             ))}
             <div className="flex flex-col">
               <dt className="text-xs text-muted-foreground">{game === 'papaz' ? 'Dağıtılan' : picks.mode === 'team' ? 'Takıma' : 'Kazanırsan'}</dt>
-              <dd className="font-bold tabular-nums text-primary">{`${fmt(prize)} KC`}</dd>
+              <dd className="font-bold tabular-nums text-primary">{stake ? `${fmt(prize)} KC` : 'Bahissiz'}</dd>
             </div>
+            {isSolo && stake > 0 && (
+              <div className="flex flex-col">
+                <dt className="text-xs text-muted-foreground">Bahis</dt>
+                <dd className="font-bold tabular-nums text-foreground">{`${fmt(stake)} KC`}</dd>
+              </div>
+            )}
           </dl>
           <p className="text-pretty text-xs leading-relaxed text-muted-foreground">
-            {`Pot ${fmt(split.pot)} KC${split.botStake ? (isFullPotGame(game) ? ' (her bot kendi bahsini koyar)' : ' (botlar birlikte tek bahis koyar)') : ''}, %${split.cut} kesinti düşülür.${split.botStake && isFullPotGame(game) ? ` Botlu masalarda günde en çok ${fmt(BOT_DAILY_PROFIT_CAP)} KC kâr edilir.` : ''}`}
+            {stake === 0 ? 'Pratik maçı: bahis yok, KC ve Kanka Puanı kazandırmaz.' : `Pot ${fmt(split.pot)} KC${split.botStake ? (isFullPotGame(game) ? ' (her bot kendi bahsini koyar)' : ' (botlar birlikte tek bahis koyar)') : ''}, %${split.cut} kesinti düşülür.${split.botStake && isFullPotGame(game) ? ` Botlu masalarda günde en çok ${fmt(BOT_DAILY_PROFIT_CAP)} KC kâr edilir.` : ''}`}
           </p>
           {rule && <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{rule}</p>}
           {gameNotes(game, picks).map((note) => (
@@ -486,7 +500,7 @@ export function TableSetupWizard({
             className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
           >
             {busy && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
-            {guest ? 'Üye ol ve oyna' : `Masayı aç · ${fmt(stake)} KC`}
+            {guest ? 'Üye ol ve oyna' : !isSolo ? `Masayı aç · ${fmt(stake)} KC` : stake ? `Oyunu başlat · ${fmt(stake)} KC` : 'Pratik maçını başlat'}
           </button>
           {guest && (
             <p className="text-center text-xs text-muted-foreground">Seçimlerini koruruz. Giriş yapınca masan bu ayarlarla hazır olur.</p>

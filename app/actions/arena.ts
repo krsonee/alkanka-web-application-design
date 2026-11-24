@@ -369,11 +369,15 @@ export async function openTable(game: string, stake: number, options?: { seats?:
 }
 
 /** "Bota karşı hemen oyna": every other seat is a bot, so the table is already running when this returns. */
-export async function playBotsNow(game: string, stake: number) {
+export async function playBotsNow(
+  game: string,
+  stake: number,
+  rules?: { seats?: number; team?: boolean; rounds?: number; variant?: string; extras?: string[] },
+) {
   try {
     const m = await member()
     await assertCanPlay(m.id)
-    const id = await quickSoloTable(m, game, stake)
+    const id = await quickSoloTable(m, game, stake, rules)
     return { ok: true as const, id }
   } catch (e) {
     return fail(e)

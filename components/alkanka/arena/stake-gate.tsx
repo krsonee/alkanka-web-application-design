@@ -26,6 +26,8 @@ export type QuickPlay = {
   pvp: boolean
   /** The member now sits at this table. */
   onTable: (id: string, stake: number) => void
+  /** A bot table asks for its rules first: this opens the rules step for the chosen bet instead of starting on the spot. */
+  onBotSetup?: (stake: number) => void
   /** Waiting tables and the custom-table entry, shown under the play buttons. */
   tables?: ReactNode
 }
@@ -499,7 +501,14 @@ export function StakeGate({
   const guestTrial = guest && trialGame && !trialUsed
   const themeGame = arenaThemeGame(game)
 
+  const rulesFirst = quick.bot === 'table' && quick.onBotSetup != null
+
   async function playBots() {
+    // The rules step sends a guest to sign in on its own last button, so it opens without the login wall.
+    if (quick.bot === 'table' && quick.onBotSetup) {
+      if (!busy) quick.onBotSetup(bet)
+      return
+    }
     if (busy || !requireLogin()) return
     if (quick.bot === 'session') return start(bet)
     setBusy('bot')
@@ -603,7 +612,7 @@ export function StakeGate({
             <PlayRow
               icon={Bot}
               primary={!guestTrial}
-              label="Bota karşı hemen oyna"
+              label={rulesFirst ? 'Bota karşı oyna, kuralları seç' : 'Bota karşı hemen oyna'}
               busy={busy === 'bot' || checking}
               disabled={busy != null || checking || blocked || pending != null}
               onClick={() => void playBots()}

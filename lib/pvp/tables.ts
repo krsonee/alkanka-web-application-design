@@ -375,7 +375,7 @@ function quickSetup(game: string, bots: boolean): Partial<TableOptions> {
 }
 
 /** "Bota karşı hemen oyna": a table where every other seat is a bot, so it starts on the spot. */
-export async function quickSoloTable(m: Member, game: string, stake: number) {
+export async function quickSoloTable(m: Member, game: string, stake: number, rules?: Partial<TableOptions>) {
   if (!isBotTableGame(game)) throw new Error('Bu oyunda bota karşı masa açılamıyor.')
   const mine = await pool.query<{ id: string }>(
     `SELECT id FROM game_tables WHERE status = 'oynaniyor' AND tournament_id IS NULL AND game = $1 AND stake = $2
@@ -383,7 +383,16 @@ export async function quickSoloTable(m: Member, game: string, stake: number) {
     [game, stake, JSON.stringify([{ id: m.id }])],
   )
   if (mine.rows[0]) return String(mine.rows[0].id)
-  return createTable(m, game, stake, quickSetup(game, true), 'solo')
+  return createTable(m, game, stake, soloSetup(game, rules), 'solo')
+}
+
+/** The member's own rules for a bot table. Whatever seat count they pick, every other seat stays a bot. */
+function soloSetup(game: string, rules?: Partial<TableOptions>): Partial<TableOptions> {
+  const base = quickSetup(game, true)
+  if (!rules || typeof rules !== 'object') return base
+  const picked = { ...base, ...rules }
+  const seats = normalizeOptions(game, picked).seats
+  return { ...picked, seats, bots: seats - 1 }
 }
 
 /** "Hemen eşleş": sits at the oldest waiting table with this stake, or opens one that bots fill if nobody comes. */
