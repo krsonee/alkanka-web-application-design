@@ -23,9 +23,10 @@ export type GoalStatus = 'open' | 'settled' | 'void'
  */
 export type GoalApproval = 'pending' | 'approved' | 'rejected'
 
-export const GOAL_CATEGORIES: { id: GoalCategory; label: string; hint: string }[] = [
-  { id: 'alkanka', label: 'Alkanka etkinlikleri', hint: "Maça katıl, maç günü Alkanka'daki şartı tamamla; maçtaki her gol KC olarak hesabına yatsın." },
-  { id: 'sponsor', label: 'Sponsor etkinlikleri', hint: 'Sponsorda bahsini al, kupon numaranı gir; maçtaki her gol ödül kazandırır.' },
+/** `short` is the tab's name where the full one does not fit beside its count. */
+export const GOAL_CATEGORIES: { id: GoalCategory; label: string; short: string; hint: string }[] = [
+  { id: 'alkanka', label: 'Alkanka etkinlikleri', short: 'Alkanka', hint: "Maça katıl, maç günü Alkanka'daki şartı tamamla; maçtaki her gol KC olarak hesabına yatsın." },
+  { id: 'sponsor', label: 'Sponsor etkinlikleri', short: 'Sponsor', hint: 'Sponsorda bahsini al, kupon numaranı gir; maçtaki her gol ödül kazandırır.' },
 ]
 
 export const GOAL_MAX_PER_GOAL = 10_000

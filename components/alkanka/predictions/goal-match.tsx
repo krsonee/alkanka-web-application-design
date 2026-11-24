@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Check, CircleDashed, Lock, Ticket } from 'lucide-react'
+import { Check, ChevronDown, CircleDashed, Lock, Ticket } from 'lucide-react'
 import { joinGoalMatchAction, submitGoalCouponAction } from '@/app/actions/community'
 import { usePoints } from '@/components/alkanka/points-context'
 import {
@@ -26,14 +26,18 @@ const when = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short', 
 const dayName = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', timeZone: TR_TZ })
 const fmt = (n: number) => n.toLocaleString('tr-TR')
 
+const matchCard = 'flex flex-col gap-2.5 rounded-xl border border-border bg-card p-3 shadow-[inset_0_1px_0_0_oklch(1_0_0/0.04)] @2xl:p-3.5'
+const matchMeta = 'text-xs text-muted-foreground'
+const smallAction = 'flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-bold transition-[opacity,scale] duration-150 active:scale-[0.97]'
+
 type Outcome = { text: string; tone: 'good' | 'plain' | 'bad' }
 
 function Crest({ name, src }: { name: string; src: string | null }) {
-  if (!src) return <TeamLogo name={name} className="size-7 border-0" />
+  if (!src) return <TeamLogo name={name} className="size-6 border-0" />
   return (
-    <span className="flex size-7 shrink-0 items-center justify-center">
+    <span className="flex size-6 shrink-0 items-center justify-center">
       {/* eslint-disable-next-line @next/next/no-img-element -- crests come from the fixture feed's image host */}
-      <img src={src} alt="" width={28} height={28} loading="lazy" className="size-7 object-contain" />
+      <img src={src} alt="" width={24} height={24} loading="lazy" className="size-6 object-contain" />
     </span>
   )
 }
@@ -137,7 +141,7 @@ function Conditions({ event, m, now }: { event: GoalEventView; m: GoalMatch; now
 function RuleList({ event, m }: { event: GoalEventView; m: GoalMatch }) {
   const many = event.rules.length > 1
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-border bg-background px-3 py-2.5">
+    <div className="flex flex-col gap-2">
       <p className="text-xs font-bold text-foreground">
         Ödül için {dayName.format(new Date(m.kickoff))} günü Alkanka&apos;da {many ? (event.ruleMode === 'any' ? 'bunlardan birini yap' : 'bunların hepsini yap') : 'bunu yap'}
       </p>
@@ -164,38 +168,51 @@ export function JoinMatchCard({ event, m, now }: { event: GoalEventView; m: Goal
   const fee = event.entryFee
 
   return (
-    <article className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 @2xl:p-4">
+    <article className={matchCard}>
       <MatchHead m={m} now={now} open={open && ready} label={open && !ready ? 'Şart bekleniyor' : undefined} />
 
-      <div className="flex flex-col gap-2 rounded-lg border border-border bg-background px-3 py-2.5">
-        <TeamLine name={m.home} logo={m.homeLogo} goals={m.homeGoals} />
-        <TeamLine name={m.away} logo={m.awayLogo} goals={m.awayGoals} />
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Her gol <b className="text-primary">{goalAmount(m.perGoal, event.unit)}</b> · {fmt(m.picks)} katılım
-      </p>
-
-      {open && ready && (
-        <div className="flex flex-col gap-3 rounded-lg bg-secondary/60 p-3">
-          <RuleList event={event} m={m} />
-          <p className="text-xs leading-relaxed text-foreground">
-            Takım seçmek yok: maçta atılan her gol <b className="text-primary">{goalAmount(m.perGoal, event.unit)}</b> kazandırır; örneğin maç 3 golle biterse {goalAmount(goalReward(m.perGoal, 3), event.unit)}.
-            {fee > 0 && (
-              <>
-                {' '}
-                Katıldığında <b>{goalAmount(fee, GOAL_KC_UNIT)}</b> katılım ücreti bakiyenden düşer; şartı tamamlamazsan geri verilmez.
-              </>
-            )}
-          </p>
+      <div className="flex items-end gap-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <TeamLine name={m.home} logo={m.homeLogo} goals={m.homeGoals} />
+          <TeamLine name={m.away} logo={m.awayLogo} goals={m.awayGoals} />
+        </div>
+        {open && ready && (
           <button
             type="button"
             disabled={pending}
             onClick={() => run(() => joinGoalMatchAction(m.id), (r) => (r.balance === undefined ? refresh() : setBalance(r.balance)))}
-            className="h-11 self-start rounded-lg bg-primary px-6 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+            className="h-10 shrink-0 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground transition-[opacity,scale] duration-150 hover:opacity-90 active:scale-[0.97] disabled:opacity-40"
           >
-            {pending ? 'Kaydediliyor...' : fee > 0 ? `Maça katıl (${goalAmount(fee, GOAL_KC_UNIT)})` : 'Maça katıl'}
+            {pending ? 'Kaydediliyor...' : fee > 0 ? `Katıl (${goalAmount(fee, GOAL_KC_UNIT)})` : 'Maça katıl'}
           </button>
-        </div>
+        )}
+      </div>
+      <p className={matchMeta}>
+        Her gol <b className="text-primary">{goalAmount(m.perGoal, event.unit)}</b> · {fmt(m.picks)} katılım
+      </p>
+
+      {/* A paid entry keeps its condition open: nobody should pay a fee for a condition they did not read. */}
+      {open && ready && (
+        <details open={fee > 0} className="group rounded-lg border border-border bg-background/70">
+          <summary className="flex h-9 cursor-pointer list-none items-center justify-between gap-2 px-3 text-xs font-semibold text-foreground [&::-webkit-details-marker]:hidden">
+            <span>
+              Ödül şartı: <span className="text-primary">{event.rules.length} şart</span>
+            </span>
+            <ChevronDown className="size-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180" aria-hidden="true" />
+          </summary>
+          <div className="flex flex-col gap-2.5 border-t border-border p-3">
+            <RuleList event={event} m={m} />
+            <p className="text-xs leading-relaxed text-foreground">
+              Takım seçmek yok: maçta atılan her gol <b className="text-primary">{goalAmount(m.perGoal, event.unit)}</b> kazandırır; örneğin maç 3 golle biterse {goalAmount(goalReward(m.perGoal, 3), event.unit)}.
+              {fee > 0 && (
+                <>
+                  {' '}
+                  Katıldığında <b>{goalAmount(fee, GOAL_KC_UNIT)}</b> katılım ücreti bakiyenden düşer; şartı tamamlamazsan geri verilmez.
+                </>
+              )}
+            </p>
+          </div>
+        </details>
       )}
       {open && !ready && <p className="text-xs leading-relaxed text-muted-foreground">{GOAL_NO_RULE}</p>}
 
@@ -231,10 +248,10 @@ function couponOutcome(event: GoalEventView, m: GoalMatch): Outcome | null {
 
 function TeamLine({ name, logo, goals }: { name: string; logo: string | null; goals: number | null }) {
   return (
-    <span className="flex min-w-0 items-center gap-2.5">
+    <span className="flex min-w-0 items-center gap-2">
       <Crest name={name} src={logo} />
       <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{name}</span>
-      {goals !== null && <span className="font-display text-xl font-bold tabular-nums text-foreground">{goals}</span>}
+      {goals !== null && <span className="font-display text-lg font-bold leading-none tabular-nums text-foreground">{goals}</span>}
     </span>
   )
 }
@@ -246,47 +263,26 @@ function TeamLine({ name, logo, goals }: { name: string; logo: string | null; go
 export type CouponLock = 'guest' | 'none' | 'pending' | 'rejected'
 
 const LOCK_NOTE: Record<CouponLock, (site: string) => string> = {
-  guest: (site) => `Kupon numarası girmek için önce Alkanka'ya giriş yap, sonra ${site} hesabını bağla.`,
-  none: (site) => `${site} hesabını bir kez bağlarsın. Ekibimiz kullanıcı adını onayladıktan sonra her maçta doğrudan kupon numaranı girersin.`,
-  pending: (site) => `${site} kullanıcı adın ekibimizin onayını bekliyor. Onaylanınca kupon alanı kendiliğinden açılır; bu sırada bir şey yapmana gerek yok.`,
-  rejected: (site) => `Bağladığın ${site} hesabı onaylanmadı. Doğru kullanıcı adını bağlamadan kupon numarası girilemez.`,
+  guest: (site) => `Kupon girmek için giriş yap, sonra ${site} hesabını bağla.`,
+  none: (site) => `Kupon için ${site} hesabını bir kez bağla; onaylanınca alan açılır.`,
+  pending: (site) => `${site} hesabın onay bekliyor; onaylanınca kupon alanı açılır.`,
+  rejected: (site) => `${site} hesabın onaylanmadı; doğru kullanıcı adını bağla.`,
 }
 
-const stepDot = 'flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold'
 
-/** The coupon field stays closed until the member's account at this sponsor is linked and approved; this says which step is missing. */
+/** The coupon field stays closed until the member's account at this sponsor is linked and approved; one line says which step is missing. */
 function AccountLock({ site, lock, linkFieldId, canLink }: { site: string; lock: CouponLock; linkFieldId: string; canLink: boolean }) {
-  const waiting = lock === 'pending'
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-primary/40 bg-primary/5 p-3">
-      <ol className="flex flex-col gap-2 text-sm">
-        <li className={cn('flex items-center gap-2', waiting ? 'text-muted-foreground' : 'font-semibold text-foreground')}>
-          <span className={cn(stepDot, waiting ? 'bg-success/15 text-success' : 'bg-primary text-primary-foreground')} aria-hidden="true">
-            {waiting ? <Check className="size-3.5" /> : 1}
-          </span>
-          {lock === 'guest' ? 'Giriş yap ve hesabını bağla' : waiting ? `${site} hesabını bağladın` : `${site} hesabını bağla`}
-        </li>
-        <li className={cn('flex items-center gap-2', waiting ? 'font-semibold text-foreground' : 'text-muted-foreground')}>
-          <span className={cn(stepDot, waiting ? 'bg-primary text-primary-foreground' : 'border border-border bg-background')} aria-hidden="true">
-            {waiting ? 2 : <Lock className="size-3" />}
-          </span>
-          {waiting ? 'Ekibimiz hesabını onaylıyor' : 'Ekibimiz hesabını onaylar'}
-        </li>
-        <li className="flex items-center gap-2 text-muted-foreground">
-          <span className={cn(stepDot, 'border border-border bg-background')} aria-hidden="true">
-            <Lock className="size-3" />
-          </span>
-          Kupon numaranı gir
-        </li>
-      </ol>
-      <p className="text-xs leading-relaxed text-muted-foreground">{LOCK_NOTE[lock](site)}</p>
+    <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/[0.06] py-1.5 pl-2.5 pr-1.5">
+      <Lock className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
+      <p className="min-w-0 flex-1 text-xs leading-snug text-muted-foreground text-pretty">{LOCK_NOTE[lock](site)}</p>
       {lock === 'guest' ? (
-        <a href="#kayit" className="flex h-11 items-center justify-center rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90">
-          Giriş yap ya da kayıt ol
+        <a href="#kayit" className={cn(smallAction, 'bg-primary text-primary-foreground hover:opacity-90')}>
+          Giriş yap
         </a>
       ) : (
         canLink &&
-        !waiting && (
+        lock !== 'pending' && (
           <button
             type="button"
             onClick={() => {
@@ -294,9 +290,9 @@ function AccountLock({ site, lock, linkFieldId, canLink }: { site: string; lock:
               field?.scrollIntoView({ block: 'center', behavior: 'smooth' })
               field?.focus({ preventScroll: true })
             }}
-            className="h-11 rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90"
+            className={cn(smallAction, 'bg-primary text-primary-foreground hover:opacity-90')}
           >
-            {site} hesabını bağla
+            Hesabı bağla
           </button>
         )
       )}
@@ -329,7 +325,9 @@ export function CouponMatchCard({
   const { pending, status, run } = useAction()
   const [coupon, setCoupon] = useState('')
   const [editing, setEditing] = useState(false)
+  const [entering, setEntering] = useState(false)
   const fieldId = useId()
+  const formId = useId()
   const pick = m.myPick
   const running = m.status === 'open' && Date.parse(m.kickoff) > now
   const linked = account !== null && lock === null
@@ -338,21 +336,39 @@ export function CouponMatchCard({
   const result = couponOutcome(event, m)
   const checked = checkCoupon(coupon)
 
+  // The field waits behind one button so a list of twenty matches is not twenty open forms.
+  const formOpen = canEnter && (entering || editing)
+
   return (
-    <article className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 @2xl:p-4">
+    <article className={matchCard}>
       <MatchHead m={m} now={now} open={running && !pick} />
 
-      <div className="flex flex-col gap-2 rounded-lg border border-border bg-background px-3 py-2.5">
-        <TeamLine name={m.home} logo={m.homeLogo} goals={m.homeGoals} />
-        <TeamLine name={m.away} logo={m.awayLogo} goals={m.awayGoals} />
+      <div className="flex items-end gap-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <TeamLine name={m.home} logo={m.homeLogo} goals={m.homeGoals} />
+          <TeamLine name={m.away} logo={m.awayLogo} goals={m.awayGoals} />
+        </div>
+        {canEnter && !pick && (
+          <button
+            type="button"
+            aria-expanded={formOpen}
+            aria-controls={formId}
+            onClick={() => setEntering((v) => !v)}
+            className={cn(smallAction, 'h-10 px-3.5', formOpen ? 'border border-border bg-background text-foreground' : 'bg-primary text-primary-foreground hover:opacity-90')}
+          >
+            <Ticket className="size-3.5" aria-hidden="true" />
+            {formOpen ? 'Vazgeç' : 'Kupon gir'}
+          </button>
+        )}
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className={matchMeta}>
         Her gol <b className="text-primary">{goalAmount(m.perGoal, event.unit)}</b> · {fmt(m.picks)} katılım
       </p>
 
-      {canEnter && (
+      {formOpen && (
         <form
-          className="flex flex-col gap-2 rounded-lg bg-secondary/60 p-3"
+          id={formId}
+          className="flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/[0.05] p-2.5 animate-in fade-in slide-in-from-top-1 duration-200"
           onSubmit={(e) => {
             e.preventDefault()
             if (!checked.ok) return
@@ -361,31 +377,32 @@ export function CouponMatchCard({
               () => {
                 setCoupon('')
                 setEditing(false)
+                setEntering(false)
               },
             )
           }}
         >
-          <label htmlFor={fieldId} className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-            <Ticket className="size-3.5 text-primary" aria-hidden="true" />
+          <label htmlFor={fieldId} className="sr-only">
             Kupon numarası
           </label>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex gap-2">
             <input
               id={fieldId}
               value={coupon}
               maxLength={40}
+              autoFocus
               autoComplete="off"
               autoCapitalize="characters"
               spellCheck={false}
               placeholder={`${event.siteName ?? 'Sponsor'} kupon numaran`}
               onChange={(e) => setCoupon(e.target.value)}
-              className="h-11 min-w-0 flex-1 basis-44 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+              className="h-10 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 text-base text-foreground sm:text-sm"
             />
-            <button type="submit" disabled={pending || !checked.ok} className="h-11 rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
-              {pending ? 'Kaydediliyor...' : pick ? 'Kuponu güncelle' : 'Talebi gönder'}
+            <button type="submit" disabled={pending || !checked.ok} className="h-10 shrink-0 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
+              {pending ? 'Kaydediliyor...' : pick ? 'Güncelle' : 'Gönder'}
             </button>
           </div>
-          <span className="text-xs leading-relaxed text-muted-foreground">
+          <span className="text-xs leading-snug text-muted-foreground">
             Talebine <b className="text-foreground">{account}</b> kullanıcı adın eklenir. Kupon bu maça, maç başlamadan önce alınmış olmalı.
           </span>
         </form>

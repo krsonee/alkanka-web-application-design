@@ -56,7 +56,7 @@ export function EarnActions({
 
   return (
     // Phones: one row that scrolls sideways, bleeding to the screen edges.
-    <ul className="kp-stagger no-scrollbar grid grid-cols-2 gap-2 max-sm:-mx-4 max-sm:flex max-sm:snap-x max-sm:scroll-px-4 max-sm:overflow-x-auto max-sm:px-4 max-sm:*:w-40 max-sm:*:shrink-0 max-sm:*:snap-start lg:grid-cols-3">
+    <ul className="kp-stagger no-scrollbar grid grid-cols-2 gap-2 max-sm:-mx-4 max-sm:flex max-sm:snap-x max-sm:scroll-px-4 max-sm:overflow-x-auto max-sm:px-4 max-sm:py-0.5 max-sm:*:w-[9.25rem] max-sm:*:shrink-0 max-sm:*:snap-start lg:grid-cols-3">
       {actions.map((a, idx) => {
         const pct = a.cap && a.cap.max > 0 ? Math.min(100, Math.round((a.cap.value / a.cap.max) * 100)) : null
         const full = a.done || pct === 100
@@ -68,16 +68,17 @@ export function EarnActions({
               href={a.href}
               {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
               className={cn(
-                'kp-card group flex h-full flex-col gap-2 rounded-xl border bg-card p-3 hover:border-gold/50',
+                'kp-card group flex h-full flex-col gap-2 rounded-xl border bg-card p-3 shadow-[inset_0_1px_0_0_oklch(1_0_0/0.05)] hover:border-gold/50 max-sm:rounded-2xl max-sm:p-2.5',
                 full ? 'border-live/30' : 'border-border',
               )}
             >
-              <span className="flex items-center gap-2.5">
+              {/* Phone: the icon and the reward share the top line and the name gets a line of its own, so nothing is squeezed. */}
+              <span className="flex items-center gap-2.5 max-sm:flex-wrap max-sm:gap-x-2 max-sm:gap-y-1.5">
                 <span className={cn('kp-icon grid size-8 shrink-0 place-items-center rounded-lg', full ? 'bg-live/15 text-live' : 'bg-gold/15 text-gold')}>
                   {full ? <Check className="size-4" aria-hidden /> : <Icon className="size-4" aria-hidden />}
                 </span>
-                <span className="min-w-0 flex-1 text-sm font-semibold leading-tight text-foreground">{a.label}</span>
-                <span className="shrink-0 rounded-full bg-gold/15 px-2 py-0.5 font-display text-xs font-bold tabular-nums text-gold">
+                <span className="min-w-0 flex-1 text-sm font-semibold leading-tight text-foreground max-sm:order-last max-sm:line-clamp-2 max-sm:min-h-[2.5em] max-sm:basis-full">{a.label}</span>
+                <span className="shrink-0 rounded-full bg-gold/15 px-2 py-0.5 font-display text-xs font-bold tabular-nums text-gold max-sm:ml-auto">
                   +{rules[a.key]}
                 </span>
               </span>

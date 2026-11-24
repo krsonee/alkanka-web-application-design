@@ -204,7 +204,12 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
       )}
 
       <div className="flex flex-col gap-4">
-        <div role="tablist" aria-label="Market kategorisi" className="flex max-w-full gap-1 self-start overflow-x-auto rounded-xl border border-border bg-card p-1 [scrollbar-width:none] max-sm:[&>button]:py-3">
+        {/* Every category stays in sight: the chips wrap onto a second line instead of scrolling off the edge. */}
+        <div
+          role="tablist"
+          aria-label="Market kategorisi"
+          className="flex max-w-full flex-wrap gap-1.5 self-start sm:gap-1 sm:rounded-xl sm:border sm:border-border sm:bg-card sm:p-1"
+        >
           {categories.map((c) => (
             <button
               key={c.id}
@@ -215,15 +220,17 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
               aria-controls="market-icerik"
               onClick={() => setCategory(c.id)}
               className={cn(
-                'whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-semibold',
-                shown === c.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+                'whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-semibold transition-[background-color,color,scale] duration-150 active:scale-[0.97] max-sm:flex max-sm:h-9 max-sm:items-center max-sm:gap-1.5 max-sm:rounded-full max-sm:border max-sm:px-3 max-sm:py-0 max-sm:text-[0.8125rem]',
+                shown === c.id
+                  ? 'bg-primary text-primary-foreground max-sm:border-primary'
+                  : 'text-muted-foreground hover:text-foreground max-sm:border-border max-sm:bg-card max-sm:text-foreground/85',
               )}
             >
               {c.label}
               {counts[c.id] != null && (
                 <>
                   {' '}
-                  <span className="tabular-nums opacity-80">
+                  <span className="tabular-nums opacity-80 max-sm:rounded-full max-sm:bg-foreground/10 max-sm:px-1.5 max-sm:py-0.5 max-sm:text-[11px] max-sm:leading-none max-sm:opacity-100">
                     <span className="sr-only">(</span>
                     {counts[c.id]}
                     <span className="sr-only"> ürün)</span>
