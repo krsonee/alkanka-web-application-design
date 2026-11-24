@@ -8,6 +8,11 @@ export type BodyBlock =
   | { type: 'h2' | 'h3' | 'p' | 'quote'; text: string }
   | { type: 'ul' | 'ol'; items: string[] }
   | { type: 'faq'; items: FaqItem[] }
+  | { type: 'table'; head: string[]; rows: string[][] }
+
+const isTableRow = (l: string) => l.length > 1 && l.startsWith('|') && l.endsWith('|')
+const isTableRule = (l: string) => /^\|[\s:|-]+\|$/.test(l) && l.includes('-')
+const tableCells = (l: string) => l.slice(1, -1).split('|').map((c) => c.trim())
 
 const isFaqLine = (l: string) => /^(S|C):\s/.test(l)
 
@@ -36,6 +41,11 @@ export function parseBody(body: string): BodyBlock[] {
       if (chunk.startsWith('## ')) return { type: 'h2', text: chunk.slice(3).trim() }
       const lines = chunk.split('\n').map((l) => l.trim())
       if (lines[0].startsWith('S: ') && lines.some(isFaqLine)) return { type: 'faq', items: parseFaq(lines) }
+      if (lines.length > 2 && isTableRule(lines[1]) && lines.every(isTableRow)) {
+        const head = tableCells(lines[0])
+        const rows = lines.slice(2).map((l) => tableCells(l).slice(0, head.length))
+        return { type: 'table', head, rows }
+      }
       if (lines.every((l) => l.startsWith('> '))) return { type: 'quote', text: lines.map((l) => l.slice(2)).join(' ') }
       if (lines.every((l) => l.startsWith('- '))) return { type: 'ul', items: lines.map((l) => l.slice(2)) }
       if (lines.every((l) => /^\d+\.\s/.test(l))) return { type: 'ol', items: lines.map((l) => l.replace(/^\d+\.\s/, '')) }
@@ -96,6 +106,29 @@ export function BlogBody({ body }: { body: string }) {
                   </details>
                 ))}
               </section>
+            )
+          case 'table':
+            return (
+              <div key={i} className="overflow-x-auto rounded-xl border border-border bg-card">
+                <table className="w-full border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-secondary">
+                      {block.head.map((cell, j) => (
+                        <th key={j} scope="col" className="px-4 py-2.5 font-semibold text-secondary-foreground">{renderInline(cell)}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {block.rows.map((row, j) => (
+                      <tr key={j} className="border-b border-border last:border-b-0">
+                        {block.head.map((_, k) => (
+                          <td key={k} className="px-4 py-2.5 tabular-nums">{renderInline(row[k] ?? '')}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )
           default:
             return <p key={i} className="text-pretty">{renderInline(block.text)}</p>

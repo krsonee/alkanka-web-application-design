@@ -313,7 +313,7 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
                 value: detail.deliveryMode === 'auto' && detail.reward ? (detail.reward.kind === 'rozet' ? 'Anında, profiline' : `Anında: ${rewardText(detail.reward)}`) : 'Ekip onayıyla',
               },
             ],
-            rules: [...detail.rules, ...COMMON_RULES],
+            rules: [...new Set([...detail.rules, ...COMMON_RULES].map((rule) => rule.trim()).filter(Boolean))],
             note: detail.delivery,
           }
         }
