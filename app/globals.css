@@ -225,6 +225,57 @@
     0 0 0 1px color-mix(in oklch, var(--gold) 40%, transparent),
     0 0 36px -10px color-mix(in oklch, var(--gold) 60%, transparent);
 }
+/* The bought profile frame: a gold ring whose highlight travels around the avatar. Drawn inside the avatar's shell. */
+@property --frame-turn {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.avatar-frame-gold {
+  padding: 2px;
+  background: conic-gradient(
+    from var(--frame-turn),
+    var(--gold) 0deg,
+    oklch(0.98 0.04 95) 40deg,
+    var(--gold) 90deg,
+    oklch(0.56 0.11 75) 180deg,
+    var(--gold) 270deg,
+    oklch(0.98 0.04 95) 320deg,
+    var(--gold) 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  filter: drop-shadow(0 0 3px oklch(0.8 0.135 86 / 0.55));
+  animation: avatar-frame-turn 3.2s linear infinite;
+}
+
+.avatar-frame-gold[data-weight='sm'] {
+  padding: 1.5px;
+  filter: none;
+}
+
+.avatar-frame-gold[data-weight='lg'] {
+  padding: 4px;
+}
+
+@keyframes avatar-frame-turn {
+  to {
+    --frame-turn: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avatar-frame-gold {
+    animation: none;
+  }
+}
+
 @property --flow-angle {
   syntax: '<angle>';
   initial-value: 0deg;

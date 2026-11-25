@@ -229,7 +229,7 @@ function MemberCard({ onNavigate, compact }: { onNavigate?: () => void; compact:
   if (compact) {
     return (
       <Link href="/profil" title={member.name} className="self-center rounded-full ring-2 ring-primary/50 ring-offset-2 ring-offset-surface">
-        <AvatarFace src={look?.avatar} name={member.name} size="sm" />
+        <AvatarFace userId={member.id} src={look?.avatar} name={member.name} size="sm" />
         <span className="sr-only">Profilim</span>
       </Link>
     )
@@ -243,7 +243,7 @@ function MemberCard({ onNavigate, compact }: { onNavigate?: () => void; compact:
       className="flex items-center gap-3 rounded-xl border border-border bg-card/60 p-3 transition-colors hover:border-primary/40"
     >
       <span className="rounded-full ring-2 ring-primary/50 ring-offset-2 ring-offset-card">
-        <AvatarFace src={look?.avatar} name={member.name} size="md" />
+        <AvatarFace userId={member.id} src={look?.avatar} name={member.name} size="md" />
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex items-center justify-between gap-2">

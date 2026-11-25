@@ -59,6 +59,26 @@ export const ROLE_BADGES = [
 
 export const ROLE_BADGE_IDS: readonly string[] = ROLE_BADGES.map((b) => b.id)
 
+/** Bought in the market, never earned. The ids match GOLD_BADGE and FRAME_BADGE in lib/badge-value.ts. */
+const MARKET_BADGES = [
+  {
+    id: 'altin-kanka',
+    name: 'Altın Kanka',
+    description: 'Avatarında altın çerçeve, sohbette ve sıralamada adının yanında Altın Kanka rozeti, markette Alkanka ürünlerinde kalıcı %10 indirim.',
+    icon: 'crown',
+    sort: 40,
+    perk: 10,
+  },
+  {
+    id: 'ozel-cerceve',
+    name: 'Özel Profil Çerçevesi',
+    description: 'Avatarının etrafında ışığı dönen altın çerçeve. Profilinde, sohbette, sıralamada ve menüde görünür.',
+    icon: 'gem',
+    sort: 41,
+    perk: 0,
+  },
+]
+
 let limitColumns = false
 
 /** Public pages read rankings without running the setup, so the split limit columns may not exist yet right after a deploy. */
@@ -118,6 +138,11 @@ export function ensureKp() {
     if (perks.length) {
       await rows(sql`UPDATE kp_badges SET perk_pct = CASE tier WHEN 'efsane' THEN 10 WHEN 'elmas' THEN 5 ELSE 3 END
         WHERE perk_pct = 0 AND id NOT IN ('moderator', 'sponsor-destek')`)
+    }
+    // The two badges the market sells. Without them the products had nothing to hand over.
+    for (const b of MARKET_BADGES) {
+      await rows(sql`INSERT INTO kp_badges (id, name, description, icon, tier, bonus, auto, sort, perk_pct)
+        VALUES (${b.id}, ${b.name}, ${b.description}, ${b.icon}, 'altin', 0, NULL, ${b.sort}, ${b.perk}) ON CONFLICT DO NOTHING`)
     }
   })().catch((error) => {
     ready = null
@@ -720,6 +745,8 @@ export async function awardBadge(badgeId: string, userId: string, period = 'tek'
   const r = await rows(sql`INSERT INTO kp_awards (badge_id, user_id, period, note) VALUES (${badgeId}, ${userId}, ${period}, ${note?.slice(0, 120) ?? null})
     ON CONFLICT DO NOTHING RETURNING id`)
   if (!r.length) return false
+  // The frame around the avatar follows the badges held, so a new badge shows without waiting for the cache.
+  await import('@/lib/badge-value').then((m) => m.dropFrameCache()).catch(() => {})
   if (Number(badge.bonus) > 0) {
     await rows(sql`INSERT INTO kp_events (user_id, source, points, ref, note)
       VALUES (${userId}, 'rozet', ${Number(badge.bonus)}, ${`${badgeId}:${period}`}, ${badge.name}) ON CONFLICT DO NOTHING`)
@@ -731,6 +758,7 @@ export async function revokeAward(awardId: number) {
   await ensureKp()
   const [a] = await rows<{ badge_id: string; user_id: string; period: string }>(sql`DELETE FROM kp_awards WHERE id = ${awardId} RETURNING badge_id, user_id, period`)
   if (!a) throw new Error('Kayıt bulunamadı.')
+  await import('@/lib/badge-value').then((m) => m.dropFrameCache()).catch(() => {})
   await rows(sql`DELETE FROM kp_events WHERE user_id = ${a.user_id} AND source = 'rozet' AND ref = ${`${a.badge_id}:${a.period}`}`)
 }
 

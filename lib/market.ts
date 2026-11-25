@@ -129,6 +129,16 @@ function ensure() {
         reward_kind = CASE id WHEN 'cark-hakki' THEN 'cark' WHEN 'zar-hakki' THEN 'zar' WHEN 'seri-kalkani' THEN 'kalkan' END,
         reward_amount = CASE id WHEN 'cark-hakki' THEN 3 WHEN 'zar-hakki' THEN 5 WHEN 'seri-kalkani' THEN 1 ELSE 0 END
       WHERE delivery_mode IS NULL`)
+    // The gold badge and the profile frame were sold with nothing behind them. Each now hands over its own badge
+    // the moment it is bought. Only the untouched rows are converted, so a reward set in the panel is left alone.
+    await rows(sql`UPDATE market_items SET
+        delivery_mode = 'auto', reward_kind = 'rozet', reward_amount = 1,
+        reward_ref = CASE id WHEN 'altin-rozet' THEN 'altin-kanka' ELSE 'ozel-cerceve' END,
+        delivery = 'Satın alır almaz hesabına işlenir.',
+        description = CASE id
+          WHEN 'altin-rozet' THEN 'Avatarına altın çerçeve, sohbette ve sıralamada adının yanında Altın Kanka rozeti, markette Alkanka ürünlerinde kalıcı %10 indirim.'
+          ELSE 'Avatarının etrafında ışığı dönen altın çerçeve. Profilinde, sohbette, sıralamada ve menüde görünür.' END
+      WHERE id IN ('altin-rozet', 'profil-cercevesi') AND delivery_mode = 'manual' AND (reward_kind IS NULL OR reward_kind = 'none')`)
   })().catch((e) => {
     ready = null
     throw e
