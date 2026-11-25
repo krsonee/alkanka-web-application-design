@@ -112,9 +112,10 @@ const DUEL = ['blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu']
 
 /*
   A spectator cannot touch the table, but a window the table opens over itself (a hand's score, a round's result)
-  is theirs to read and close: without this its "Devam" button is as dead as the cards under it.
+  is theirs to read and close: without this its "Devam" button is as dead as the cards under it. `data-watcher`
+  marks the few controls that only move the watcher's own screen (turn the phone, leave the table).
 */
-const WATCH_ONLY = 'pointer-events-none [&_[role=dialog]]:pointer-events-auto'
+const WATCH_ONLY = 'pointer-events-none [&_[role=dialog]]:pointer-events-auto [&_[data-watcher]]:pointer-events-auto'
 const SEAT_GAME_RULES: Record<string, { seats: number[]; rounds: number[] }> = {
   okey101: { seats: [4], rounds: [1, 3, 5] },
   batak: { seats: [4], rounds: [31, 1, 51, 101] },

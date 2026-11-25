@@ -1482,6 +1482,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
         <aside className="flex w-40 shrink-0 flex-col gap-1.5 overflow-y-auto">
           <a
             href="/oyunlar"
+            data-watcher
             onClick={() => {
               if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
             }}
@@ -1560,6 +1561,7 @@ export function Bilardo({ finish, remote }: { finish?: GameApi['finish']; remote
           </p>
           <button
             type="button"
+            data-watcher
             onClick={goLandscape}
             className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground shadow-md transition hover:brightness-110 active:scale-95"
           >
