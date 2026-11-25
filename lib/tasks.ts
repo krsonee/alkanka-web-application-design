@@ -38,7 +38,11 @@ export type TaskRecord = {
   days: string[] | null
   /** A super task's own conditions; empty means "every other task of the period". */
   parts: TaskPart[]
+  /** Market products a member buys cheaper once this task is done. Set by the market, read-only here. */
+  deals?: TaskDeal[]
 }
+
+export type TaskDeal = { itemId: string; name: string; price: number; dealPrice: number }
 
 export const DAILY_PICKS = 5
 export const WEEKLY_PICKS = 4
@@ -229,7 +233,30 @@ export async function listTasks(): Promise<TaskRecord[]> {
   await seedPlanOnce().catch((error) => console.error('[tasks] plan seed', (error as Error).message))
   const found = await rows(sql`SELECT id, title, detail, points, link, needs_approval, active, sort, period, starts_at, ends_at, kind, target, param,
     category, pool, chain, chain_step, badge, cap, archived, days, parts FROM tasks ORDER BY sort, id`)
-  return found.map(mapTask)
+  const deals = await taskDeals()
+  return found.map(mapTask).map((task) => (deals.has(task.id) ? { ...task, deals: deals.get(task.id) } : task))
+}
+
+export const TASK_DEALS_KEY = 'tasks:market-deals'
+
+/**
+ * The market's task prices, by task. The same for every member and read on every task list, so it is
+ * shared for a minute; the market forgets it when a product is saved.
+ */
+async function taskDeals(): Promise<Map<number, TaskDeal[]>> {
+  const { sharedRead } = await import('@/lib/shared-read')
+  const found = await sharedRead(TASK_DEALS_KEY, 60_000, () =>
+    rows<{ id: string; name: string; price: number; deal_task_id: number; deal_price: number }>(sql`SELECT id, name, price, deal_task_id, deal_price
+      FROM market_items WHERE active AND deal_task_id IS NOT NULL AND deal_price > 0 AND deal_price < price ORDER BY deal_price, name`)
+      // A site whose market has never been opened has no such table yet: no task carries a discount then.
+      .catch(() => []),
+  )
+  const out = new Map<number, TaskDeal[]>()
+  for (const row of found) {
+    const taskId = Number(row.deal_task_id)
+    out.set(taskId, [...(out.get(taskId) ?? []), { itemId: String(row.id), name: String(row.name), price: Number(row.price), dealPrice: Number(row.deal_price) }])
+  }
+  return out
 }
 
 /** Whether a task is on the site at this moment: switched on, inside its window and, when it names days, on one of them. */
@@ -275,18 +302,22 @@ export type ChainState = 'done' | 'current' | 'locked'
 /**
  * What a member actually sees: rotated daily/weekly pools (5 / 4 picks), all non-pool tasks,
  * and chain steps tagged done/current/locked. Guests get the rotation seeded by "misafir".
+ *
+ * A pool task the market has tied a price to is shown to everyone, every period: the discount is
+ * promised on the product's card, so no member may be dealt a day without the task that unlocks it.
  */
 export function visibleTasksFor(userId: string | null, tasks: TaskRecord[], doneIds: Set<number>) {
   const seed = userId ?? 'misafir'
   const out: TaskRecord[] = []
   // A task that is always on already covers its kind for the period, so the rotation never hands out a second one of it.
   const sameThing = (t: TaskRecord) => `${t.period}:${t.kind}:${t.param ?? ''}`
-  const fixed = new Set(tasks.filter((t) => !t.pool && !t.chain).map(sameThing))
+  const rotates = (t: TaskRecord) => t.pool && !t.deals?.length
+  const fixed = new Set(tasks.filter((t) => !rotates(t) && !t.chain).map(sameThing))
   for (const period of ['daily', 'weekly'] as const) {
-    const pool = tasks.filter((t) => t.pool && t.period === period && !t.chain && !fixed.has(sameThing(t)))
+    const pool = tasks.filter((t) => rotates(t) && t.period === period && !t.chain && !fixed.has(sameThing(t)))
     out.push(...pickPool(pool, `${seed}:${periodKey(period)}`, period === 'daily' ? DAILY_PICKS : WEEKLY_PICKS))
   }
-  out.push(...tasks.filter((t) => !t.pool && !t.chain))
+  out.push(...tasks.filter((t) => !rotates(t) && !t.chain))
   const chainState: Record<number, ChainState> = {}
   const chains = new Map<string, TaskRecord[]>()
   for (const t of tasks) if (t.chain) chains.set(t.chain, [...(chains.get(t.chain) ?? []), t])

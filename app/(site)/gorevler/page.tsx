@@ -55,6 +55,7 @@ export default async function TasksPage() {
     chainState: view.chainState[task.id] ?? null,
     badge: task.badge,
     cap: task.cap,
+    deals: task.deals,
     parts: partsOf.get(task.id),
   }))
   return (

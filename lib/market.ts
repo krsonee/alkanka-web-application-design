@@ -316,6 +316,8 @@ export async function saveProduct(input: ProductInput) {
       delivery_mode = EXCLUDED.delivery_mode, reward_kind = EXCLUDED.reward_kind, reward_amount = EXCLUDED.reward_amount,
       reward_ref = EXCLUDED.reward_ref, featured = EXCLUDED.featured,
       deal_task_id = EXCLUDED.deal_task_id, deal_price = EXCLUDED.deal_price`)
+  // The task list shows this price on the task itself; it reads a shared copy, which is stale the moment a product changes.
+  await import('@/lib/shared-read').then((m) => m.forgetSharedRead('tasks:market-deals'))
   return id
 }
 

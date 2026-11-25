@@ -213,6 +213,11 @@ export function TasksManager({ tasks, claims, sites = [] }: { tasks: TaskRecord[
                 ) : task.needsApproval ? <span className="ml-2 text-xs font-normal text-muted-foreground">Onay gerekir</span> : null}
                 {task.period !== 'once' ? <span className="ml-2 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-bold uppercase text-primary">{PERIOD_LABEL[task.period]}</span> : null}
                 {task.days ? <span className="ml-2 text-xs font-normal text-muted-foreground">{`Takvim: ${task.days.length} gün`}</span> : null}
+                {task.deals?.map((deal) => (
+                  <span key={deal.itemId} className="ml-2 rounded-full bg-gold/15 px-2 py-0.5 text-xs font-bold text-gold" title="Market → ürünü düzenle → Görevle indirim bölümünden değiştirilir. Bu görev, ürün indirimde kaldıkça her üyeye her dönem gösterilir.">
+                    {`Market indirimi: ${deal.name} ${deal.price.toLocaleString('tr-TR')} → ${deal.dealPrice.toLocaleString('tr-TR')} KC`}
+                  </span>
+                ))}
                 {task.endsAt && Date.parse(task.endsAt) < Date.now() ? <span className="ml-2 text-xs font-normal text-destructive">Süresi doldu</span> : null}
                 {task.parts.length ? <span className="mt-0.5 block text-xs font-normal text-muted-foreground">{`Şartlar: ${partsSummary(task.parts, tasks)}`}</span> : null}
               </span>

@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState, useTransition } from 'react'
-import { Calendar, CalendarCheck, Check, ChevronDown, Flame, Info, LayoutGrid, Link2, ListChecks, Lock, Send, Users, type LucideIcon } from 'lucide-react'
+import Link from 'next/link'
+import { Calendar, CalendarCheck, Check, ChevronDown, Flame, Info, LayoutGrid, Link2, ListChecks, Lock, Send, Tag, Users, type LucideIcon } from 'lucide-react'
 import { checkInAction, completeTaskAction } from '@/app/actions/tasks'
 import { PERIODS, STREAK_DAYS, type TaskPeriod } from '@/lib/task-period'
 import { isSocialCheckKind, KIND_META, kindHref, TASK_CATEGORIES, type TaskCategory, type TaskKind } from '@/lib/task-kinds'
@@ -32,11 +33,49 @@ export type PublicTask = {
   chainState?: 'done' | 'current' | 'locked' | null
   badge?: string | null
   cap?: number
+  /** Market products that get cheaper for a member who finishes this task. */
+  deals?: { itemId: string; name: string; price: number; dealPrice: number }[]
   /** A super task's own conditions with where the member stands on each. */
   parts?: { label: string; progress: number; target: number; done: boolean }[]
 }
 
 type InviteRow = { userId: string; name: string; count: number }
+
+const DEAL_LASTS: Record<TaskPeriod, string> = {
+  once: 'İndirimin açık',
+  daily: 'İndirimin bugün açık',
+  weekly: 'İndirimin bu hafta açık',
+  monthly: 'İndirimin bu ay açık',
+}
+
+/** The market price this task unlocks: said on the task, where the member decides whether to do it. */
+function TaskDeals({ task, done, small }: { task: Pick<PublicTask, 'deals' | 'period'>; done: boolean; small?: boolean }) {
+  if (!task.deals?.length) return null
+  return (
+    <ul className="flex flex-col gap-1">
+      {task.deals.map((deal) => (
+        <li key={deal.itemId}>
+          <Link
+            href={`/market/${deal.itemId}`}
+            className={cn(
+              'flex min-h-9 items-center gap-2 rounded-lg border border-gold/40 bg-gold/10 px-2.5 py-1.5 font-semibold text-foreground transition-colors hover:bg-gold/20',
+              small ? 'text-[11px]' : 'text-xs',
+            )}
+          >
+            <Tag className="size-3.5 shrink-0 text-gold" aria-hidden="true" />
+            <span className="min-w-0 flex-1 text-pretty">
+              <span className="text-gold">{done ? DEAL_LASTS[task.period] : 'Market indirimi'}</span>
+              {`: ${deal.name}`}
+            </span>
+            <span className="shrink-0 tabular-nums">
+              <s className="font-normal text-muted-foreground">{formatAC(deal.price)}</s> {formatAC(deal.dealPrice)} KC
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 const DAYS = STREAK_DAYS
 const PERIOD_LABEL = Object.fromEntries(PERIODS.map((p) => [p.value, p.label])) as Record<TaskPeriod, string>
@@ -324,6 +363,7 @@ export function Tasks({
                 {(task.cap ?? 0) > 0 ? <span className="rounded-full border border-border px-2 py-0.5 text-xs font-semibold text-muted-foreground">İlk {task.cap} kanka</span> : null}
               </div>
             ) : null}
+            <TaskDeals task={task} done={state === 'done'} />
             {task.kind === 'secret_code' && state === 'open' ? (
               <label className="flex flex-col gap-1">
                 <span className="sr-only">Gizli kod</span>
@@ -671,6 +711,7 @@ export function Tasks({
                       {(task.cap ?? 0) > 0 ? <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-bold text-muted-foreground">İlk {task.cap} kanka</span> : null}
                     </div>
                   ) : null}
+                  <TaskDeals task={task} done={state === 'done'} small />
                   {task.kind === 'secret_code' && state === 'open' ? (
                     <label className="flex flex-col gap-1">
                       <span className="sr-only">Gizli kod</span>
