@@ -145,6 +145,13 @@ export async function finishBotGame(sessionId: string, result: 'win' | 'loss' | 
       const s = (await getArenaSettings())[game]
       let gross = botMatchGross(game, s, stake, final, score)
       if (gross > stake) {
+        // A running campaign multiplies the profit only, never the returned stake; the daily ceiling below still holds.
+        const { boostedBy, multLabel } = await import('@/lib/boosts')
+        const lift = await boostedBy('arena', gross - stake)
+        if (lift.mult > 1) {
+          gross = stake + lift.amount
+          note = `Kampanya çarpanı ${multLabel(lift.mult)} işledi: kârın ${lift.amount.toLocaleString('tr-TR')} KC oldu.`
+        }
         const room = Math.max(0, BOT_DAILY_PROFIT_CAP - (await botProfitToday(m.id)))
         if (gross - stake > room) {
           gross = stake + room

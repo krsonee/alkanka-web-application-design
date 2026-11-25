@@ -67,6 +67,16 @@ export async function boosted(source: BoostSource, amount: number) {
   return cfg ? applyMult(amount, boostFor(cfg, source)) : amount
 }
 
+/** The boosted amount with the multiplier behind it, for payouts that tell the member a campaign was applied. */
+export async function boostedBy(source: BoostSource, amount: number) {
+  if (amount <= 0) return { amount, mult: 1 }
+  const cfg = await getBoostConfig().catch(() => null)
+  const mult = cfg ? boostFor(cfg, source) : 1
+  return { amount: applyMult(amount, mult), mult }
+}
+
+export const multLabel = (mult: number) => `x${String(mult).replace('.', ',')}`
+
 let ready: Promise<void> | null = null
 function ensure() {
   ready ??= (async () => {

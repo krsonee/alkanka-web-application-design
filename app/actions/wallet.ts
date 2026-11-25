@@ -182,6 +182,14 @@ async function playMiniLocked(
     outcome = { game, chest: c, prizes, points: prizes[c] }
   }
 
+  const { boostedBy } = await import('@/lib/boosts')
+  const lift = await boostedBy('mini', outcome.points)
+  if (lift.mult > 1) {
+    outcome.points = lift.amount
+    // The opened chest shows what was actually paid.
+    if (outcome.game === 'sandik') outcome.prizes[outcome.chest] = lift.amount
+  }
+
   await credit(member.id, outcome.points, `Mini oyun ödülü (${game})`)
   await recordHistory({ userId: member.id, userName: member.name, game, mode: 'odul', opponent: limit.label, stake: 0, result: big ? 'win' : 'draw', delta: outcome.points, tableId: paid ? EXTRA_PLAY_REF : undefined })
   return { ok: true, balance: await getBalance(member.id), ...outcome }
