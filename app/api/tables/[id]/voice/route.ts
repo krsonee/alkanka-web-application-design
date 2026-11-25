@@ -4,6 +4,7 @@ import { getMember } from '@/lib/member'
 import { getTableRow } from '@/lib/pvp/tables'
 import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
 import { isSeatedAt } from '@/lib/blackjack-live'
+import { mintIceServers } from '@/lib/turn'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,7 @@ const MAX_SDP = 20000
 type Body = {
   action?: 'join' | 'beat' | 'signal' | 'leave'
   muted?: boolean
+  ice?: boolean
   to?: string
   kind?: 'offer' | 'answer' | 'bye'
   payload?: unknown
@@ -92,9 +94,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     pool.query(`DELETE FROM voice_signals WHERE room = $1 AND to_id = $2 RETURNING id, from_id, kind, payload`, [room, m.id]),
   ])
 
+  // Relay credentials expire, so a long session asks again; the separate limit keeps one client from minting them every beat.
+  const wantsIce = body.action === 'join' || body.ice === true
+  const ice = wantsIce && !(await hitRateLimit(`voice-ice:${m.id}`, 8, 600)) ? (await mintIceServers()).iceServers : undefined
+
   return NextResponse.json({
     me: m.id,
     canSpeak,
+    ice,
     peers: peers.rows.map((p) => ({ id: String(p.user_id), name: String(p.name), canSpeak: Boolean(p.can_speak), muted: Boolean(p.muted) })),
     signals: signals.rows
       .sort((a, b) => Number(a.id) - Number(b.id))
