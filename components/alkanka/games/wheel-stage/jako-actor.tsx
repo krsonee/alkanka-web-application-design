@@ -45,6 +45,8 @@ export type ActorCast = {
    * again. Nothing moves between the two, so the player may skip from anywhere in between to `back`.
    */
   beats?: Partial<Record<ActorState, { hold: number; back: number }>>
+  /** How fast a reaction's way back is played when another reaction is waiting for it; BACK_RATE unless given. */
+  backRate?: number
 }
 
 /** What is on screen right now, for a stage that moves things in step with a clip. */
@@ -304,7 +306,7 @@ export function JakoActor({
     function leave(video: HTMLVideoElement, at?: number) {
       homing = true
       if (at !== undefined && video.currentTime < at) video.currentTime = at
-      video.playbackRate = BACK_RATE
+      video.playbackRate = cast.backRate ?? BACK_RATE
       clearTimeout(homeTimer)
       homeTimer = setTimeout(arrive, HOME_LIMIT_MS + 600)
     }
