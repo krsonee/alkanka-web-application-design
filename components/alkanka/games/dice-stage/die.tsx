@@ -63,6 +63,19 @@ const TONES = {
   },
 }
 
+/** One face drawn flat, for the pay tiles: its size follows the text around it. */
+export function MiniDie({ value }: { value: number }) {
+  return (
+    <span aria-hidden="true" className="grid size-[1.2em] shrink-0 grid-cols-3 grid-rows-3 rounded-[22%] bg-gold p-[12%]">
+      {Array.from({ length: 9 }, (_, i) => (
+        <span key={i} className="flex items-center justify-center">
+          {PIPS[value].includes(i) && <span className="size-[74%] rounded-full bg-gold-foreground" />}
+        </span>
+      ))}
+    </span>
+  )
+}
+
 export function Die({
   value,
   turn,

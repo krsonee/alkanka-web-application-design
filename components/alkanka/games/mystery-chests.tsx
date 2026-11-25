@@ -1,10 +1,10 @@
 'use client'
 
 /*
-  Gizemli Sandık on the Şans Çarkı terrace: Jako on the left, the three chests on the right (the middle one raised
-  on the dais, the other two on the floor in front of it), and between them the title plaque, each chest's reward
-  range and what to do next. On phones (stage under 600 wide) Jako is behind the balustrade, the chests fill the
-  foot of the stage and the ranges sit under it as chips.
+  Gizemli Sandık in its own room: a vault with three plinths, one chest on each (the middle one on the taller
+  plinth; on phones the three stand as a triangle). Each chest's reward range is on a plate on its plinth, and the
+  plate turns into what the chest held once one is opened. The win is written across the top of the vault, Jako
+  leans in at the lower right and says what to do (lower left on phones, where the stage is 9 : 16).
 
   Which chest pays what is decided on the server (playMini) once a chest is chosen; this component shows the chosen
   chest opening and what the other two held.
@@ -24,10 +24,9 @@ import { DetailButton, DetailModal } from '../detail-modal'
 import { usePoints } from '../points-context'
 import type { MiniGameProps } from './lucky-wheel'
 import { formatRemaining } from './mini-status'
+import { CallerBubble, JakoCaller, StageResult, StageShade, StageTitle, type CallerMood } from './mini-stage/caller'
 import { burst } from './wheel-stage/burst'
-import type { ActorState } from './wheel-stage/jako-actor'
-import { ActionButton, ActionNote, PayChips, PayRows, StagePlaque, type PayRow } from './wheel-stage/parts'
-import { StageBackdrop } from './wheel-stage/stage'
+import { ActionButton } from './wheel-stage/parts'
 
 const rulesFor = (dailyPlays: number) => [
   `Günde ${dailyPlays} sandık hakkın var, haklar her gün 00:00’da yenilenir.`,
@@ -54,17 +53,17 @@ const OPEN_MS = 1300
 
 const rewardRange = (rewards: number[]) => `${Math.min(...rewards)}–${Math.max(...rewards)} KC`
 
-/** "Altın Sandık" as "Altın": the narrow pay rows sit under a plaque that already says what they are. */
+/** "Altın Sandık" as "Altın": the plate sits under the chest it names. */
 const shortName = (name: string) => name.replace(/\s+sandık$/i, '') || name
 
 /*
-  Where each chest stands, by its place in the list: left and right on the floor, the middle one on the dais.
-  Percentages of the stage; the chest art has a margin of its own, so the boxes overlap a little.
+  Where each chest stands, by its place in the list: on the left, middle and right plinth of the vault art.
+  Percentages of the stage; the chest art has a margin of its own under it, which is where the plate goes.
 */
 const SPOTS = [
-  'left-[19.5%] bottom-[3%] z-[2] w-[36%] @min-[600px]:left-[56.8%] @min-[600px]:bottom-[2%] @min-[600px]:w-[15.5%]',
-  'left-1/2 bottom-[14%] z-[1] w-[46%] @min-[600px]:left-[69.7%] @min-[600px]:bottom-[17.5%] @min-[600px]:w-[21%]',
-  'left-[80.5%] bottom-[3%] z-[2] w-[36%] @min-[600px]:left-[83.6%] @min-[600px]:bottom-[2%] @min-[600px]:w-[15.5%]',
+  'left-[21.8%] bottom-[21.6%] z-[2] w-[37%] @min-[600px]:left-[30.2%] @min-[600px]:bottom-[19.6%] @min-[600px]:w-[17.5%]',
+  'left-1/2 bottom-[31.4%] z-[1] w-[45%] @min-[600px]:bottom-[20.7%] @min-[600px]:w-[21.5%]',
+  'left-[78.2%] bottom-[19.8%] z-[2] w-[37%] @min-[600px]:left-[69.6%] @min-[600px]:bottom-[19.6%] @min-[600px]:w-[17.5%]',
 ]
 
 /** `draw` is where an opened chest's outcome comes from: the server, unless a preview passes its own. */
@@ -80,7 +79,7 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
   const [contents, setContents] = useState<number[]>([])
   const [won, setWon] = useState(0)
   const [error, setError] = useState('')
-  const [actor, setActor] = useState<ActorState>('idle')
+  const [mood, setMood] = useState<CallerMood>('idle')
   const [rules, setRules] = useState(false)
   const chestRefs = useRef<(HTMLButtonElement | null)[]>([])
 
@@ -89,13 +88,13 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
     setPicked(index)
     setPhase('opening')
     setError('')
-    setActor('spin')
+    setMood('busy')
     playSound('chip')
     const [res] = await Promise.all([draw(index), new Promise((done) => setTimeout(done, reduced ? 0 : OPEN_MS))])
     if (!res.ok) {
       setPhase('idle')
       setPicked(null)
-      setActor('idle')
+      setMood('idle')
       setError(res.error)
       if (typeof res.balance === 'number') setBalance(res.balance)
       return
@@ -104,7 +103,7 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
     setWon(res.points)
     setPhase('opened')
     setBalance(res.balance)
-    setActor('win')
+    setMood('win')
     playSound('win')
     const box = chestRefs.current[index]?.getBoundingClientRect()
     if (box) burst(box.left + box.width / 2, box.top + box.height * 0.45, res.points >= jackpot ? 48 : 28)
@@ -114,23 +113,22 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
   function reset() {
     setPhase('idle')
     setPicked(null)
-    setActor('idle')
+    setMood('idle')
   }
 
   const revealed = phase === 'opened'
   const plays = Math.max(1, playsLeft ?? 1)
-  const rows: PayRow[] = chests.map((chest, i) => ({
-    name: shortName(chest.name),
-    prize: revealed ? `${(i === picked ? won : (contents[i] ?? 0)).toLocaleString('tr-TR')} KC` : rewardRange(chest.rewards),
-  }))
-  const lit = revealed ? picked : null
-  const hint = error
+  const says = error
     ? error
     : phase === 'opening'
-      ? 'Sandık açılıyor…'
-      : locked && !revealed
-        ? 'Bugünkü sandık hakkın bitti.'
-        : 'Bir sandığa dokun, içindeki ödül senin.'
+      ? 'Kilit dönüyor…'
+      : revealed
+        ? won >= jackpot
+          ? 'Jackpot! Helal kanka.'
+          : 'Helal kanka, cebe girdi.'
+        : locked
+          ? 'Bugünkü sandığını açtın, yarın yine gel.'
+          : 'Bir sandığa dokun kanka, içindeki senin.'
 
   return (
     <article className="flex min-w-0 flex-col gap-3">
@@ -139,65 +137,31 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
           Gizemli Sandık
         </h3>
         <div className="relative isolate aspect-[9/16] w-full overflow-hidden rounded-2xl border border-gold/25 bg-background @min-[600px]:aspect-[2/1] @min-[600px]:max-h-[600px]">
-          <StageBackdrop state={actor} armed={!locked && phase === 'idle'} />
+          <Image src="/images/chests/vault-mobile.webp" alt="" fill sizes="100vw" priority className="object-cover @min-[600px]:hidden" />
+          <Image
+            src="/images/chests/vault-desktop.webp"
+            alt=""
+            fill
+            sizes="(min-width: 1280px) 1024px, 100vw"
+            priority
+            className="hidden object-cover @min-[600px]:block"
+          />
+          <StageShade />
           <TableBrand center={false} corners={false} jako={false} plaque="top" />
-          <StagePlaque long>Gizemli Sandık</StagePlaque>
+          <StageTitle
+            title="Gizemli Sandık"
+            sub={
+              <>
+                En büyük ödül <span className="text-gold">{jackpot} KC</span>
+                {' · '}
+                {locked ? 'yeni sandık 00:00’da' : playsLeft == null ? `günde ${config.dailyPlays} sandık` : `${plays} hakkın var`}
+              </>
+            }
+          />
 
-          <div className="absolute top-[23.5%] left-[31.5%] hidden w-[19.5%] @min-[600px]:block">
-            <PayRows label="Sandıklardaki ödüller" rows={rows} lit={lit} />
-          </div>
-
-          <div
-            className={cn(
-              'absolute left-1/2 flex w-[84%] -translate-x-1/2 flex-col items-stretch gap-2 text-center @min-[600px]:top-[49%] @min-[600px]:bottom-[6%] @min-[600px]:left-[31.5%] @min-[600px]:w-[19.5%] @min-[600px]:translate-x-0',
-              revealed || locked ? 'top-[35.5%]' : 'top-[42%]',
-            )}
-          >
-            {revealed ? (
-              <div className="wheel-rise flex flex-col items-center">
-                <p className="text-[clamp(13px,3.6cqw,16px)] font-bold text-foreground [text-shadow:0_1px_0_rgb(0_0_0/0.7)] @min-[600px]:text-[clamp(11px,1.4cqw,14px)]">
-                  {won >= jackpot ? 'Jackpot! Helal kanka' : 'Helal kanka!'}
-                </p>
-                <p className="flex items-baseline gap-1.5 font-display text-[clamp(34px,11cqw,48px)] leading-[1.1] font-extrabold tracking-tight text-gold tabular-nums [text-shadow:0_2px_0_rgb(0_0_0/0.6)] @min-[600px]:text-[clamp(22px,3.6cqw,40px)]">
-                  +{won.toLocaleString('tr-TR')}
-                  <span className="text-[0.42em] font-bold tracking-normal">KC</span>
-                </p>
-              </div>
-            ) : (
-              <p
-                className={cn(
-                  'text-[clamp(13px,3.6cqw,16px)] leading-relaxed font-semibold [text-shadow:0_1px_0_rgb(0_0_0/0.7)] @min-[600px]:text-[clamp(11px,1.4cqw,14px)]',
-                  error ? 'text-destructive' : 'text-foreground/85',
-                )}
-              >
-                {hint}
-              </p>
-            )}
-            <div className="flex flex-col items-stretch gap-1.5 @min-[600px]:mt-auto">
-              {(revealed || locked) && (
-                <ActionButton onClick={reset} disabled={locked}>
-                  {locked ? (
-                    <>
-                      <Clock className="size-4" aria-hidden="true" />
-                      <span className="sr-only">Sonraki sandık: </span>
-                      {formatRemaining(lockedFor)}
-                    </>
-                  ) : (
-                    'Tekrar dene'
-                  )}
-                </ActionButton>
-              )}
-              <div className={cn(revealed && 'hidden @min-[600px]:block')}>
-                <ActionNote>
-                  {locked
-                    ? 'Yeni sandık 00:00’da açılır.'
-                    : playsLeft == null
-                      ? `Günde ${config.dailyPlays} sandık hakkın var.`
-                      : `${plays} sandık hakkın var.`}
-                </ActionNote>
-              </div>
-            </div>
-          </div>
+          {revealed && picked !== null && (
+            <StageResult className="top-[13%] @min-[600px]:top-[8%]" points={won} label={chests[picked]?.name ?? 'Sandık'} />
+          )}
 
           {chests.map((chest, i) => {
             const isPicked = picked === i
@@ -215,56 +179,95 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
                 disabled={!waiting}
                 aria-label={revealed ? `${chest.name}: ${amount} Kanka Coin` : `${chest.name} aç, ${rewardRange(chest.rewards)}`}
                 className={cn(
-                  'absolute aspect-square -translate-x-1/2 rounded-2xl outline-offset-[-6px] transition-[filter,translate] duration-300 [-webkit-tap-highlight-color:transparent] disabled:cursor-default',
+                  'group absolute aspect-square -translate-x-1/2 rounded-2xl outline-offset-[-6px] [-webkit-tap-highlight-color:transparent] disabled:cursor-default',
                   SPOTS[i] ?? SPOTS[0],
-                  waiting && 'hover:-translate-y-[3%] hover:brightness-110 active:translate-y-0',
                 )}
               >
+                {opened && (
+                  <span
+                    aria-hidden="true"
+                    className="vault-beam absolute bottom-[38%] left-1/2 h-[190%] w-[86%] origin-bottom -translate-x-1/2 bg-linear-to-b from-transparent via-gold/20 to-gold/50 [clip-path:polygon(38%_0,62%_0,100%_100%,0_100%)]"
+                  />
+                )}
                 <span
                   className={cn(
-                    'absolute inset-0 transition-[filter] duration-300',
+                    'absolute inset-0 transition-[filter,translate,scale] duration-300',
+                    waiting && 'chest-wait group-hover:scale-[1.06] group-hover:brightness-115 group-active:scale-100',
                     isPicked && phase === 'opening' && 'chest-rattle',
-                    (phase !== 'idle' || locked) && !isPicked && 'brightness-[0.5] saturate-[0.55]',
+                    (phase !== 'idle' || locked) && !isPicked && 'brightness-[0.45] saturate-[0.5]',
                   )}
+                  style={{ animationDelay: `${i * -1.1}s` }}
                 >
                   <Image
                     src={`/images/chests/stage/${chest.id}-closed.webp`}
                     alt=""
                     fill
-                    sizes="(min-width: 640px) 220px, 42vw"
-                    className={cn('object-contain drop-shadow-[0_1.2cqw_1cqw_rgb(0_0_0/0.55)]', opened && 'opacity-0')}
+                    sizes="(min-width: 640px) 200px, 45vw"
+                    className={cn('object-contain drop-shadow-[0_1cqw_0.8cqw_rgb(0_0_0/0.6)]', opened && 'opacity-0')}
                   />
                   <Image
                     src={`/images/chests/stage/${chest.id}-open.webp`}
                     alt=""
                     fill
-                    sizes="(min-width: 640px) 220px, 42vw"
-                    className={cn('object-contain drop-shadow-[0_1.2cqw_1cqw_rgb(0_0_0/0.55)]', opened ? 'chest-open' : 'opacity-0')}
+                    sizes="(min-width: 640px) 200px, 45vw"
+                    className={cn('object-contain drop-shadow-[0_1cqw_0.8cqw_rgb(0_0_0/0.6)]', 'origin-[50%_86%] scale-[1.18]', opened ? 'chest-open' : 'opacity-0')}
                   />
                 </span>
                 <span
+                  key={revealed ? 'held' : 'range'}
                   className={cn(
-                    'absolute left-1/2 -translate-x-1/2 rounded-md px-2 py-0.5 text-[clamp(11px,3cqw,13px)] leading-5 font-extrabold whitespace-nowrap tabular-nums @min-[600px]:text-[clamp(10px,1.25cqw,13px)]',
-                    revealed
-                      ? isPicked
-                        ? 'wheel-rise bottom-[90%] bg-gold text-gold-foreground'
-                        : 'wheel-rise bottom-[84%] bg-background/85 text-foreground/80 inset-ring inset-ring-foreground/15'
-                      : 'bottom-0 bg-background/80 text-foreground inset-ring inset-ring-gold/35',
+                    'absolute top-[91%] left-1/2 flex -translate-x-1/2 items-baseline gap-[0.4em] rounded-md px-[0.7em] py-[0.25em] text-[clamp(10px,2.9cqw,12px)] leading-tight font-extrabold whitespace-nowrap tabular-nums @min-[600px]:text-[clamp(10px,1.2cqw,13px)]',
+                    revealed && 'wheel-rise',
+                    opened
+                      ? 'bg-gold text-gold-foreground'
+                      : revealed
+                        ? 'bg-background/85 text-foreground/70 inset-ring inset-ring-foreground/15'
+                        : 'bg-background/85 text-foreground inset-ring inset-ring-gold/40',
                   )}
                 >
-                  {revealed ? `${isPicked ? '+' : ''}${amount.toLocaleString('tr-TR')} KC` : chest.name}
+                  {revealed ? (
+                    `${opened ? '+' : ''}${amount.toLocaleString('tr-TR')} KC`
+                  ) : (
+                    <>
+                      {shortName(chest.name)}
+                      <span className="font-bold text-gold">{rewardRange(chest.rewards)}</span>
+                    </>
+                  )}
                 </span>
               </button>
             )
           })}
+
+          <JakoCaller mood={mood} className="left-[-10%] w-[48%] @min-[600px]:hidden" />
+          <JakoCaller mood={mood} mirrored className="right-[-5%] hidden w-[28%] @min-[600px]:block" />
+
+          <div className="absolute right-[4%] bottom-[2.5%] left-[33%] flex flex-col items-stretch gap-1.5 @min-[600px]:contents">
+            <div className="flex @min-[600px]:absolute @min-[600px]:right-[19.5%] @min-[600px]:bottom-[6%] @min-[600px]:w-[20%] @min-[600px]:justify-end">
+              <CallerBubble tail="left" tone={error ? 'error' : 'plain'} className="@min-[600px]:hidden">
+                {says}
+              </CallerBubble>
+              <CallerBubble tail="right" tone={error ? 'error' : 'plain'} className="hidden @min-[600px]:block">
+                {says}
+              </CallerBubble>
+            </div>
+            {(revealed || locked) && (
+              <div className="flex flex-col items-stretch @min-[600px]:absolute @min-[600px]:bottom-[4.5%] @min-[600px]:left-1/2 @min-[600px]:w-[20%] @min-[600px]:-translate-x-1/2">
+                <ActionButton onClick={reset} disabled={locked}>
+                  {locked ? (
+                    <>
+                      <Clock className="size-4" aria-hidden="true" />
+                      <span className="sr-only">Sonraki sandık: </span>
+                      {formatRemaining(lockedFor)}
+                    </>
+                  ) : (
+                    'Tekrar dene'
+                  )}
+                </ActionButton>
+              </div>
+            )}
+          </div>
         </div>
       </section>
-
-      <div className="@container">
-        <div className="@min-[600px]:hidden">
-          <PayChips label="Sandıklardaki ödüller" rows={rows} lit={lit} columns={3} />
-        </div>
-      </div>
 
       <section aria-label="Sandıklardan çıkabilecek ödüller" className="flex flex-col gap-2 rounded-xl border border-border bg-card px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
