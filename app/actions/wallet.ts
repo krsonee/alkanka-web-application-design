@@ -6,7 +6,7 @@ import { getCatalog, getHidden, getRewardConfig } from '@/lib/catalog'
 import { isHidden } from '@/lib/hidden-shared'
 import { PREDICTION_PAYOUT, predictionClosesAt, predictionPayout } from '@/lib/catalog-shared'
 import { getPredictionVoteCounts, getUserPredictionPicks, savePredictionPick } from '@/lib/prediction-picks'
-import { diceReward, wheelBigIndices, type RewardConfig } from '@/lib/rewards-shared'
+import { diceReward, pickChest, wheelBigIndices, type RewardConfig } from '@/lib/rewards-shared'
 import { rows, sql } from '@/lib/db'
 import { credit, debit, getBalance, getMember, recordHistory } from '@/lib/member'
 import { consumeExtraPlay, extraPlays } from '@/lib/mini-extras'
@@ -125,16 +125,16 @@ export async function getHouseWinRate() {
 export type MiniOutcome =
   | { game: 'cark'; index: number; points: number; segments: RewardConfig['wheel']['segments'] }
   | { game: 'zar'; dice: [number, number]; points: number }
-  | { game: 'sandik'; prizes: number[]; points: number }
+  | { game: 'sandik'; chest: number; prizes: number[]; points: number }
 
-export async function playMini(game: MiniGame, chest = 0): Promise<({ ok: true; balance: number } & MiniOutcome) | { ok: false; error: string; balance?: number }> {
+export async function playMini(game: MiniGame): Promise<({ ok: true; balance: number } & MiniOutcome) | { ok: false; error: string; balance?: number }> {
   const member = await getMember()
   if (!member) return { ok: false, error: 'Oynamak için giriş yapmalısın.' }
   if (await hitRateLimit(`mini:${member.id}`, 6, 30)) return { ok: false, error: RATE_LIMIT_MESSAGE }
   const limit = REWARD_LIMITS[game]
   if (!limit) return { ok: false, error: 'Geçersiz oyun.' }
   try {
-    return await withUserLock(`mini:${member.id}`, () => playMiniLocked(member, game, chest, limit.label))
+    return await withUserLock(`mini:${member.id}`, () => playMiniLocked(member, game, limit.label))
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Bir hata oluştu.' }
   }
@@ -143,7 +143,6 @@ export async function playMini(game: MiniGame, chest = 0): Promise<({ ok: true; 
 async function playMiniLocked(
   member: { id: string; name: string },
   game: MiniGame,
-  chest: number,
   label: string,
 ): Promise<({ ok: true; balance: number } & MiniOutcome) | { ok: false; error: string; balance?: number }> {
   const limit = { label }
@@ -174,12 +173,13 @@ async function playMiniLocked(
     outcome = { game, dice: [a, b], points: diceReward(a, b, config.dice).points }
   } else {
     const chests = config.chest.chests
-    const c = Math.max(0, Math.min(chests.length - 1, Math.floor(Number(chest)) || 0))
+    /* the member does not choose: the chest is drawn here, by the chances set in the panel */
+    const c = pickChest(chests, randomInt)
     const prizes = chests.map((ch) => pickFrom(ch.rewards))
     const pool = chests[c].rewards
     const split = Math.floor(pool.length / 2)
     prizes[c] = pickFrom(big ? pool.slice(split) : pool.slice(0, split))
-    outcome = { game, prizes, points: prizes[c] }
+    outcome = { game, chest: c, prizes, points: prizes[c] }
   }
 
   await credit(member.id, outcome.points, `Mini oyun ödülü (${game})`)

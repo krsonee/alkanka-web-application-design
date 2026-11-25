@@ -5,7 +5,7 @@ import { askConfirm } from '@/components/panel/confirm-dialog'
 import { useState, useTransition } from 'react'
 import { Dices, Gift, Loader2, RotateCcw, Save, Target } from 'lucide-react'
 import { resetCatalog, saveRewards } from '@/app/panel/catalog-actions'
-import { WHEEL_TONES, type RewardConfig } from '@/lib/rewards-shared'
+import { chestShares, MAX_CHEST_WEIGHT, WHEEL_TONES, type RewardConfig } from '@/lib/rewards-shared'
 import { cn } from '@/lib/utils'
 import { HideButton } from '@/components/panel/hide-button'
 import { WheelPreview } from '@/components/panel/wheel-preview'
@@ -114,19 +114,26 @@ export function RewardsEditor({
         </div>
       </Card>
 
-      <Card icon={Gift} game="sandik" hidden={hidden.includes('sandik')} title="Gizemli sandık" hint="Her sandıktan ödüllerden biri rastgele çıkar. Ödülleri virgülle yaz (ör. 40, 60, 90).">
+      <Card icon={Gift} game="sandik" hidden={hidden.includes('sandik')} title="Gizemli sandık" hint="Üye sandık seçmez: “Sandığı aç” düğmesine basar, hangi sandığın açılacağını aşağıdaki seçilme şanslarına göre Jako belirler. Açılan sandıktan ödüllerinden biri rastgele çıkar. Ödülleri virgülle yaz (ör. 40, 60, 90).">
         <Num text="Günlük hak" value={cfg.chest.dailyPlays} min={1} max={20} onChange={(n) => patch('chest', { dailyPlays: n })} />
         <div className="grid gap-3 md:grid-cols-3">
           {cfg.chest.chests.map((c, i) => {
             const set = (v: Partial<typeof c>) => patch('chest', { chests: cfg.chest.chests.map((x, j) => (j === i ? { ...x, ...v } : x)) })
+            const share = chestShares(cfg.chest.chests)[i]
             return (
               <div key={i} className="flex flex-col gap-2 rounded-xl border border-border p-3">
                 <label className={label}>
                   Adı
                   <input className={input} maxLength={30} value={c.name} onChange={(e) => set({ name: e.target.value })} />
                 </label>
+                <Num text="Seçilme şansı (ağırlık)" value={c.weight} max={MAX_CHEST_WEIGHT} onChange={(n) => set({ weight: n })} />
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Her 100 açılışın yaklaşık{' '}
+                  <b className="text-foreground tabular-nums">{(share * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}</b> tanesinde bu sandık
+                  açılır. 0 yazarsan hiç açılmaz.
+                </p>
                 <label className={label}>
-                  Şans etiketi
+                  Şans etiketi (üyenin gördüğü yazı)
                   <input className={input} maxLength={12} value={c.odds} onChange={(e) => set({ odds: e.target.value })} />
                 </label>
                 <label className={label}>

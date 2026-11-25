@@ -2,9 +2,11 @@
 
 /*
   Zar At at its own table: a navy felt dice table fills the stage and Jako, the croupier, stands at its lower left
-  with a dice cup. A throw sweeps the dice on the felt back to his cup; when his hand lets go they fly in, land,
-  bounce twice and slide to a stop (dice-stage/throw.ts), raising dust and a ring on the felt at each landing
-  (mini-stage/room-fx.tsx). While they are in the air the pay tiles light up in turn, and the one the throw made
+  with a dice cup. There is one pair of dice, the two on the felt: his clips show the cup and never dice of their
+  own. A throw makes them jump into the cup; he tips it toward the table and the same two come out of its mouth,
+  at the frame of his clip where the cup is tipped (the stage follows the clip's clock, and measures where the
+  mouth is on screen). They land, bounce twice and slide to a stop (dice-stage/throw.ts), raising dust and a ring
+  on the felt at each landing (mini-stage/room-fx.tsx). While they are in the air the pay tiles light up in turn, and the one the throw made
   stays lit; coins spill onto the felt for what was won, and a double or better makes the dice jump. Across the
   top are the game's name and the four things a throw can be, each drawn with the dice that make it; what Jako
   says is beside him and the throw button is at the lower right (the stage is 9 : 16 on phones instead of 2 : 1).
@@ -34,7 +36,7 @@ import { formatRemaining } from './mini-status'
 import { CallerBubble, StageResult, StageShade, StageTitle } from './mini-stage/caller'
 import { RoomFx, type RoomFxHandle, type Zone } from './mini-stage/room-fx'
 import { burst } from './wheel-stage/burst'
-import { JakoActor, type ActorCast, type ActorState } from './wheel-stage/jako-actor'
+import { JakoActor, type ActorCast, type ActorClock, type ActorState } from './wheel-stage/jako-actor'
 import { ActionButton, ActionNote } from './wheel-stage/parts'
 
 type Pair = [number, number]
@@ -59,8 +61,18 @@ function highPair(min: number): Pair {
   return [a, Math.min(6, Math.max(1, min - a))]
 }
 
-/** How long after the button Jako's hand lets go: the dice wait for it, however fast the server answers. */
-const RELEASE_MS = 950
+/*
+  The throw clip, in seconds: the cup is tipped with its mouth to the table from TIPPED_S and starts back up at
+  UPRIGHT_S. The dice leave it at TIPPED_S, however fast the server answers.
+*/
+const TIPPED_S = 1.25
+const UPRIGHT_S = 2.25
+/** The clip is given this long to reach TIPPED_S; with no clip on screen (the still picture) the dice wait STILL_MS. */
+const TIP_LIMIT_MS = 3200
+const STILL_MS = 700
+/** Where the cup's mouth is on Jako's picture, as fractions of it: standing, and tipped. */
+const RIM = { left: '87.7%', top: '27.4%' }
+const MOUTH = { left: '71.1%', top: '46.7%' }
 const START: Pair = [5, 3]
 /** How far each die is turned away from the viewer at rest. */
 const LEANS = [24, -18]
@@ -69,22 +81,28 @@ const COINS = [30, 16, 9, 4]
 /** Where dust hangs in the lamp light over the felt. */
 const DUST: { wide: Zone; tall: Zone } = { wide: { x: [0.28, 0.92], y: [0.06, 0.8] }, tall: { x: [0.02, 0.98], y: [0.2, 0.84] } }
 
-const wait = (ms: number) => new Promise<void>((done) => setTimeout(done, ms))
-
-/** The croupier: cup in hand while waiting, the throw, and the cup raised for a double or better. Every throw pays. */
+/*
+  The croupier: cup in hand while waiting, the cup tipped to the table for the throw, and the cup raised for a
+  double or better. Every throw pays. Each clip is played out and back over the same frames, so it ends on the
+  frame it began on.
+*/
 const CROUPIER: ActorCast = {
   still: '/images/dice/jako.webp',
   clips: { idle: '/video/dice/jako-idle.mp4', spin: '/video/dice/jako-spin.mp4', win: '/video/dice/jako-win.mp4' },
-  frame: { width: 916, height: 570 },
+  frame: { width: 932, height: 602 },
+  mirrored: true,
+  beats: { spin: { hold: TIPPED_S, back: UPRIGHT_S }, win: { hold: 2, back: 2 } },
 }
+/** Jako's picture on the stage; the cup's two mouths are placed on the same box. */
+const CROUPIER_BOX = 'pointer-events-none absolute bottom-0 left-[-34.65%] aspect-[932/602] w-[93.6%] @min-[600px]:left-[-10.46%] @min-[600px]:w-[51.89%]'
 
 /*
   Where the dice come to rest on the felt (percentages of the stage) and how big they are; the nearer one is larger.
-  --from-x / --from-y is where they are thrown in from: under Jako's throwing hand, off the stage's lower edge.
+  --from-x / --from-y, where the cup's mouth is from there, is measured before each move (aim).
 */
 const RESTS = [
-  'top-[57.5%] left-[37%] [--s:22cqw] [--from-x:4cqw] [--from-y:78cqw] @min-[600px]:top-[56%] @min-[600px]:left-[46%] @min-[600px]:[--s:9cqw] @min-[600px]:[--from-x:-12cqw] @min-[600px]:[--from-y:26cqw]',
-  'top-[65%] left-[64%] [--s:25cqw] [--from-x:-20cqw] [--from-y:66cqw] @min-[600px]:top-[63.5%] @min-[600px]:left-[57.5%] @min-[600px]:[--s:10.5cqw] @min-[600px]:[--from-x:-22cqw] @min-[600px]:[--from-y:22cqw]',
+  'top-[57.5%] left-[37%] [--s:22cqw] @min-[600px]:top-[56%] @min-[600px]:left-[51%] @min-[600px]:[--s:9cqw]',
+  'top-[65%] left-[64%] [--s:25cqw] @min-[600px]:top-[63.5%] @min-[600px]:left-[62.5%] @min-[600px]:[--s:10.5cqw]',
 ]
 
 /** A little scatter per throw (in die widths, and degrees of lean), so two throws never land on the same spot. */
@@ -115,7 +133,14 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
   const [mood, setMood] = useState<ActorState>('idle')
   const [rules, setRules] = useState(false)
   const [chase, setChase] = useState<number | null>(null)
+  /** The dice have left the cup. */
+  const [flying, setFlying] = useState(false)
   const feltRef = useRef<HTMLSpanElement>(null)
+  const rimRef = useRef<HTMLSpanElement>(null)
+  const mouthRef = useRef<HTMLSpanElement>(null)
+  /** Which of Jako's clips is on screen and how far into it, written by his player on every frame. */
+  const clock = useRef<ActorClock>({ clip: null, time: 0 })
+  const gone = useRef(false)
   const fx = useRef<RoomFxHandle>(null)
   const rests = useRef<(HTMLDivElement | null)[]>([])
   const movers = useRef<(HTMLDivElement | null)[]>([])
@@ -125,13 +150,42 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
   const throwLoop = useRef<Frames | null>(null)
   const hopLoop = useRef<Frames | null>(null)
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    gone.current = false
+    return () => {
+      gone.current = true
       throwLoop.current?.cancel()
       hopLoop.current?.cancel()
-    },
-    [],
-  )
+    }
+  }, [])
+
+  /** Points each die at one of the cup's mouths: how far it is from the die's resting place, on screen. */
+  function aim(target: HTMLElement | null) {
+    const to = target?.getBoundingClientRect()
+    if (!to) return
+    for (const rest of rests.current) {
+      const box = rest?.getBoundingClientRect()
+      if (!rest || !box) continue
+      rest.style.setProperty('--from-x', `${to.left - (box.left + box.width / 2)}px`)
+      rest.style.setProperty('--from-y', `${to.top - (box.top + box.height / 2)}px`)
+    }
+  }
+
+  const cupTipped = () => clock.current.clip === 'spin' && clock.current.time >= TIPPED_S && clock.current.time < UPRIGHT_S
+
+  /** Waits for the frame of the throw clip where the cup is tipped to the table. */
+  function tip() {
+    return new Promise<void>((done) => {
+      const started = performance.now()
+      const check = () => {
+        const waited = performance.now() - started
+        const limit = clock.current.clip === null ? STILL_MS : TIP_LIMIT_MS
+        if (gone.current || cupTipped() || waited >= limit) done()
+        else setTimeout(check, 25)
+      }
+      check()
+    })
+  }
 
   /* while the dice are in the air the pay tiles light up one after another */
   useEffect(() => {
@@ -170,13 +224,21 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
     hopLoop.current?.cancel()
     const loop = (throwLoop.current ??= pacedFrames(60))
     setRolling(true)
+    setFlying(false)
     setError('')
     setMood('spin')
     const lying = reduced ? null : rigsFor(throws)
-    const cleared = lying ? scoop(loop, lying, shown) : Promise.resolve()
-    const release = wait(reduced ? 0 : RELEASE_MS)
+    /* the dice on the felt go into the cup while it still stands */
+    if (lying) aim(rimRef.current)
+    const cleared = lying
+      ? scoop(loop, lying, shown, (die) => {
+          playSound('tile', 0.5)
+          if (die === 0) buzz(8)
+        })
+      : Promise.resolve()
     const res = await draw()
-    await Promise.all([release, cleared])
+    await Promise.all([reduced ? null : tip(), cleared])
+    if (gone.current) return
     if (!res.ok) {
       lying?.forEach((rig, i) => settle(rig, shown[i]))
       setRolling(false)
@@ -185,15 +247,19 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
       if (typeof res.balance === 'number') setBalance(res.balance)
       return
     }
-    /* the dice are out of sight: move them to this throw's resting places before they come back in */
+    /* the dice are in the cup: move them to this throw's resting places before they come out of it */
     const count = throws + 1
     flushSync(() => {
       setResult(null)
       setShown(res.dice)
       setThrows(count)
+      setFlying(true)
     })
     const dice = reduced ? null : rigsFor(count)
     if (dice) {
+      /* out of the tipped mouth; out of the top if the cup is standing (no clip, or a very late answer) */
+      aim(cupTipped() ? mouthRef.current : rimRef.current)
+      playSound('dice', 0.6)
       await throwDice(loop, dice, res.dice, (die, landing, power) => {
         const at = fx.current?.spot(dice[die].shade) ?? null
         fx.current?.puff(at, power)
@@ -202,6 +268,7 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
         if (landing === 0 && die === 0) buzz(12)
       })
     }
+    if (gone.current) return
 
     const tier = tierOf(res.dice, config)
     const big = tier < 3
@@ -242,7 +309,9 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
   const says = error
     ? error
     : rolling
-      ? 'Zarlar havada…'
+      ? flying
+        ? 'Zarlar havada…'
+        : 'Zarlar kupada, sallıyorum…'
       : settled
         ? CHEERS[settled.tier]
         : locked
@@ -315,15 +384,22 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
             aria-hidden="true"
             className="room-breathe pointer-events-none absolute top-[60%] left-1/2 h-[26%] w-[120%] -translate-1/2 rounded-[50%] bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--gold)_15%,transparent),transparent)] mix-blend-plus-lighter @min-[600px]:top-[53%] @min-[600px]:left-[55%] @min-[600px]:h-[44%] @min-[600px]:w-[48%]"
           />
-          <span ref={feltRef} aria-hidden="true" className="absolute top-[61.5%] left-1/2 @min-[600px]:top-[60%] @min-[600px]:left-[52%]" />
+          <span ref={feltRef} aria-hidden="true" className="absolute top-[61.5%] left-1/2 @min-[600px]:top-[60%] @min-[600px]:left-[57%]" />
           {settled && settled.tier < 3 && (
             <span
               key={`glow-${throws}`}
               aria-hidden="true"
-              className="felt-glow absolute top-[63%] left-1/2 h-[22%] w-[92%] -translate-1/2 rounded-[50%] bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--gold)_38%,transparent),transparent)] @min-[600px]:top-[61.5%] @min-[600px]:left-[52%] @min-[600px]:h-[34%] @min-[600px]:w-[42%]"
+              className="felt-glow absolute top-[63%] left-1/2 h-[22%] w-[92%] -translate-1/2 rounded-[50%] bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--gold)_38%,transparent),transparent)] @min-[600px]:top-[61.5%] @min-[600px]:left-[57%] @min-[600px]:h-[34%] @min-[600px]:w-[42%]"
             />
           )}
 
+          <div className={CROUPIER_BOX}>
+            <JakoActor cast={CROUPIER} state={mood} armed={!locked} clock={clock} className="absolute inset-0" />
+            <span ref={rimRef} aria-hidden="true" className="absolute" style={RIM} />
+            <span ref={mouthRef} aria-hidden="true" className="absolute" style={MOUTH} />
+          </div>
+
+          {/* after Jako, so the dice are drawn over his cup as they go in and come out */}
           {([0, 1] as const).map((i) => {
             const [dx, dy, lean] = scatterOf(i, throws)
             return (
@@ -359,18 +435,12 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
 
           <RoomFx ref={fx} zone={DUST} />
 
-          <JakoActor
-            cast={CROUPIER}
-            state={mood}
-            armed={!locked}
-            className="absolute bottom-0 left-[-23%] aspect-[916/570] w-[92%] @min-[600px]:left-[-4%] @min-[600px]:w-[51%]"
-          />
-
           <div className="absolute right-[4%] bottom-[2.5%] left-[35%] flex flex-col items-stretch gap-1.5 @min-[600px]:contents">
             <CallerBubble
               tail="left"
               tone={error ? 'error' : 'plain'}
-              className="self-start @min-[600px]:absolute @min-[600px]:bottom-[7%] @min-[600px]:left-[39%] @min-[600px]:max-w-[31%]"
+              /* on phones it stands clear of the cup, which the dice go into and come out of */
+              className="w-[62%] self-end @min-[600px]:absolute @min-[600px]:bottom-[7%] @min-[600px]:left-[39%] @min-[600px]:w-auto @min-[600px]:max-w-[31%]"
             >
               {says}
             </CallerBubble>

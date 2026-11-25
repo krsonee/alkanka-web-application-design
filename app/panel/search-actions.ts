@@ -104,6 +104,7 @@ const SETTINGS: ({ title: string; words?: string; query?: string; anyOf?: PanelM
   { title: 'Market indirim kampanyaları', words: 'indirim kampanya yüzde başlangıç bitiş tarihi fiyat düşür üstü çizili', row: 'market', query: 's=sales' },
   { title: 'Görevle indirimli ürün', words: 'görevi tamamla ucuza al şartlı koşullu fiyat görevli fırsatlar editörün seçimi', row: 'market', query: 's=products' },
   { title: 'Hazır cevaplar', words: 'hazır cevap red sebebi kalıp yorum şikayet', row: 'community', query: 's=reviews' },
+  { title: 'Sandık seçilme şansı', words: 'gizemli sandık hangi sandık açılır seçilme şansı ağırlık oran ihtimal altın gümüş bronz jako seçer', row: 'rewards' },
   { title: 'Mini oyun beklenen günlük çıkış', words: 'beklenen coin çıkış tahmin günlük maliyet çark zar sandık', row: 'rewards' },
   { title: 'Personelin 2FA kaydını yenilet', words: '2fa yenile yeni barkod yeni yedek kod personel', row: 'staff' },
   { title: 'Yorum onayı', row: 'community', query: 's=reviews' },

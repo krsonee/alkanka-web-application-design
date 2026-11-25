@@ -41,6 +41,7 @@ const REWARD_LABELS = {
   'chest.chests.#.rewards': 'Sandık ödülleri',
   'chest.chests.#.name': 'Sandık adı',
   'chest.chests.#.odds': 'Sandık şans yazısı',
+  'chest.chests.#.weight': 'Sandık seçilme şansı',
   'dice.dailyPlays': 'Zar günlük hak',
   jackpot: 'Düşeş ödülü',
   doubleX: 'Çift zar çarpanı',
