@@ -292,10 +292,12 @@ export function Topbar({
   return (
     <>
       {/* On phones the bar stays on screen while the page scrolls (not on a game page, where the table needs the room).
-          Its blur also makes it the anchor for the radio and Çember panels, so they open under the bar wherever it sits. */}
+          Its blur also makes it the anchor for the radio and Çember panels, so they open under the bar wherever it sits.
+          The bar must not clip on any axis: some iOS Safari versions turn a one-axis clip on a blurred bar into a full clip,
+          which cut the account menu and the panels down to a sliver at the bar's bottom edge. */}
       <header
         data-member={member ? '' : undefined}
-        className="relative z-[45] flex h-14 items-center gap-2 px-3 max-lg:sticky max-lg:top-[var(--safe-top)] max-lg:overflow-x-clip max-lg:bg-background/80 max-lg:backdrop-blur-xl max-lg:[body:has([data-game-page])_&]:relative max-lg:[body:has([data-game-page])_&]:top-0 sm:gap-3 sm:px-4 lg:h-16 lg:border-b lg:border-border lg:bg-background lg:px-6"
+        className="relative z-[45] flex h-14 items-center gap-2 px-3 max-lg:sticky max-lg:top-[var(--safe-top)] max-lg:bg-background/80 max-lg:backdrop-blur-xl max-lg:[body:has([data-game-page])_&]:relative max-lg:[body:has([data-game-page])_&]:top-0 sm:gap-3 sm:px-4 lg:h-16 lg:border-b lg:border-border lg:bg-background lg:px-6"
       >
         <a
           href="/"
