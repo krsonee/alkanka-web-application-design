@@ -7,13 +7,19 @@ import { usePoints } from '../points-context'
 
 type Peer = { id: string; name: string; canSpeak: boolean; muted: boolean }
 type Signal = { from: string; kind: 'offer' | 'answer' | 'bye'; payload: RTCSessionDescriptionInit }
-type Beat = { me: string; canSpeak: boolean; peers: Peer[]; signals: Signal[] }
+type Beat = { me: string; canSpeak: boolean; peers: Peer[]; signals: Signal[]; ice?: RTCIceServer[] }
 
-const ICE: RTCConfiguration = {
-  iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }],
+const DIRECT_ONLY: RTCConfiguration = {
+  iceServers: [{ urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'] }],
 }
 const BEAT_MS = 2000
 const RETRY_MS = 8000
+/** An offer, its answer and the route search take a few beats; a link still not up after this is rebuilt. */
+const STUCK_MS = 20000
+/** Relay credentials last four hours; new ones are fetched before they run out. */
+const ICE_LIFE_MS = 3 * 3600 * 1000
+
+const audioLine = (pc: RTCPeerConnection) => pc.getTransceivers().find((t) => t.receiver.track.kind === 'audio')
 
 /** Waits for ICE gathering so each side sends one complete SDP instead of trickling candidates through the server. */
 function gathered(pc: RTCPeerConnection) {
@@ -43,7 +49,12 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
   const [linked, setLinked] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const [listOpen, setListOpen] = useState(false)
+  const [blocked, setBlocked] = useState(false)
 
+  const ice = useRef<RTCConfiguration>(DIRECT_ONLY)
+  const iceAt = useRef(0)
+  const since = useRef(new Map<string, number>())
+  const known = useRef(new Map<string, boolean>())
   const me = useRef<string | null>(null)
   const stream = useRef<MediaStream | null>(null)
   const pcs = useRef(new Map<string, RTCPeerConnection>())
@@ -70,6 +81,7 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
   const closePeer = useCallback((id: string) => {
     pcs.current.get(id)?.close()
     pcs.current.delete(id)
+    since.current.delete(id)
     const a = audios.current.get(id)
     if (a) {
       a.srcObject = null
@@ -79,11 +91,34 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
     markLinked()
   }, [])
 
+  /** Closes a link and tells the other side, so both ends start over instead of one waiting on a dead link. */
+  const drop = useCallback(
+    (id: string) => {
+      if (!pcs.current.has(id)) return
+      closePeer(id)
+      attempts.current.delete(id)
+      void post({ action: 'signal', to: id, kind: 'bye', payload: {} }).catch(() => {})
+    },
+    [closePeer, post],
+  )
+
+  /** Browsers hold back sound that starts without a tap; the next tap anywhere starts it. */
+  const unblock = useCallback(() => {
+    let held = false
+    const starts = [...audios.current.values()].map((a) =>
+      a.play().catch(() => {
+        held = true
+      }),
+    )
+    void Promise.all(starts).then(() => setBlocked(held))
+  }, [])
+
   const makePc = useCallback(
     (id: string) => {
       closePeer(id)
-      const pc = new RTCPeerConnection(ICE)
+      const pc = new RTCPeerConnection(ice.current)
       pcs.current.set(id, pc)
+      since.current.set(id, Date.now())
       pc.ontrack = (e) => {
         let a = audios.current.get(id)
         if (!a) {
@@ -95,12 +130,17 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
         }
         a.srcObject = e.streams[0] ?? new MediaStream([e.track])
         a.muted = deafRef.current
-        void a.play().catch(() => {})
+        void a.play().catch(() => setBlocked(true))
       }
       pc.onconnectionstatechange = () => {
+        if (pcs.current.get(id) !== pc) return
         if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-          if (pcs.current.get(id) === pc) closePeer(id)
-        } else markLinked()
+          closePeer(id)
+          return
+        }
+        if (pc.connectionState === 'connected') since.current.delete(id)
+        else if (!since.current.has(id)) since.current.set(id, Date.now())
+        markLinked()
       }
       return pc
     },
@@ -108,6 +148,25 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
   )
 
   const localTrack = () => stream.current?.getAudioTracks()[0] ?? null
+
+  /** Puts a mic that arrived late onto the links already up, so nobody has to reconnect to hear it. */
+  const shareMic = async () => {
+    const track = localTrack()
+    if (!track) return
+    for (const [id, pc] of [...pcs.current]) {
+      const line = audioLine(pc)
+      if (!line || !line.direction.includes('send')) {
+        drop(id)
+        continue
+      }
+      try {
+        await line.sender.replaceTrack(track)
+        if (stream.current) line.sender.setStreams?.(stream.current)
+      } catch {
+        drop(id)
+      }
+    }
+  }
 
   /** Asks the browser for the mic and explains exactly why it failed, so the user knows what to fix. */
   const requestMic = async (): Promise<MediaStream | null> => {
@@ -139,7 +198,8 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
       attempts.current.set(id, Date.now())
       const pc = makePc(id)
       const track = localTrack()
-      if (track) pc.addTransceiver(track, { direction: 'sendrecv', streams: [stream.current!] })
+      // A player's line is two-way from the start, even before the mic is granted: the mic joins it later without a new offer.
+      if (speakRef.current) pc.addTransceiver(track ?? 'audio', { direction: 'sendrecv', streams: stream.current ? [stream.current] : [] })
       else pc.addTransceiver('audio', { direction: 'recvonly' })
       await pc.setLocalDescription(await pc.createOffer())
       await gathered(pc)
@@ -154,11 +214,13 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
       const pc = makePc(id)
       await pc.setRemoteDescription(offer)
       const track = localTrack()
-      const tr = pc.getTransceivers().find((t) => t.receiver.track.kind === 'audio')
-      if (track && tr) {
-        tr.direction = 'sendrecv'
-        await tr.sender.replaceTrack(track)
-        tr.sender.setStreams?.(stream.current!)
+      const line = audioLine(pc)
+      if (speakRef.current && line) {
+        line.direction = 'sendrecv'
+        if (track) {
+          await line.sender.replaceTrack(track)
+          line.sender.setStreams?.(stream.current!)
+        }
       }
       await pc.setLocalDescription(await pc.createAnswer())
       await gathered(pc)
@@ -175,6 +237,8 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
     stream.current?.getTracks().forEach((t) => t.stop())
     stream.current = null
     attempts.current.clear()
+    known.current.clear()
+    setBlocked(false)
     setPeers([])
   }, [closePeer])
 
@@ -190,7 +254,7 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
   const tick = useCallback(async () => {
     if (!active.current) return
     try {
-      const r = await post({ action: 'beat', muted: mutedRef.current })
+      const r = await post({ action: 'beat', muted: mutedRef.current, ice: Date.now() - iceAt.current > ICE_LIFE_MS })
       if (!active.current) return
       if (!r.ok) {
         const err = (await r.json().catch(() => ({}))).error
@@ -202,6 +266,10 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
       } else {
         const data = (await r.json()) as Beat
         me.current = data.me
+        if (data.ice?.length) {
+          ice.current = { iceServers: data.ice }
+          iceAt.current = Date.now()
+        }
         if (data.canSpeak !== speakRef.current) {
           // Seat changed (sat down or stood up): rebuild every link with the new mic rights.
           speakRef.current = data.canSpeak
@@ -219,12 +287,25 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
           if (t) t.enabled = !mutedRef.current
         }
 
+        // A peer who sat down or stood up has rebuilt their side; the old link here would only sit dead.
+        for (const p of data.peers) {
+          const was = known.current.get(p.id)
+          if (was !== undefined && was !== p.canSpeak && pcs.current.has(p.id)) {
+            closePeer(p.id)
+            attempts.current.delete(p.id)
+          }
+          known.current.set(p.id, p.canSpeak)
+        }
+
         for (const s of data.signals) {
           if (s.kind === 'offer') await answer(s.from, s.payload).catch(() => closePeer(s.from))
           else if (s.kind === 'answer') {
             const pc = pcs.current.get(s.from)
             if (pc?.signalingState === 'have-local-offer') await pc.setRemoteDescription(s.payload).catch(() => closePeer(s.from))
-          } else closePeer(s.from)
+          } else {
+            closePeer(s.from)
+            attempts.current.delete(s.from)
+          }
         }
 
         const ids = new Set(data.peers.map((p) => p.id))
@@ -239,13 +320,15 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
           if (Date.now() - (attempts.current.get(p.id) ?? 0) < RETRY_MS) continue
           void call(p.id).catch(() => closePeer(p.id))
         }
+        const now = Date.now()
+        for (const [id, at] of [...since.current]) if (now - at > STUCK_MS) drop(id)
         setPeers(data.peers)
       }
     } catch {
       // Network blips are retried on the next beat.
     }
     if (active.current) timer.current = setTimeout(tick, BEAT_MS)
-  }, [answer, call, closePeer, leave, post])
+  }, [answer, call, closePeer, drop, leave, post])
 
   const join = async () => {
     if (!requireLogin()) return
@@ -263,6 +346,8 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
     }
     const data = (await r.json()) as Beat
     me.current = data.me
+    ice.current = data.ice?.length ? { iceServers: data.ice } : DIRECT_ONLY
+    iceAt.current = Date.now()
     speakRef.current = data.canSpeak
     setCanSpeak(data.canSpeak)
     if (data.canSpeak) {
@@ -280,14 +365,13 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
   const [, forceRender] = useState(0)
   const toggleMic = async () => {
     if (!localTrack()) {
-      // No mic yet (permission denied or dismissed): ask again on this tap, then relink peers so they get the track.
+      // No mic yet (permission denied or dismissed): ask again on this tap, then put it on the links already up.
       const s = await requestMic()
       if (!s) return
       stream.current = s
-      pcs.current.forEach((_, id) => closePeer(id))
-      attempts.current.clear()
       mutedRef.current = false
       setMuted(false)
+      await shareMic()
       forceRender((n) => n + 1)
       return
     }
@@ -304,7 +388,14 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
     deafRef.current = next
     audios.current.forEach((a) => (a.muted = next))
     setDeaf(next)
+    if (!next) unblock()
   }
+
+  useEffect(() => {
+    if (!blocked) return
+    window.addEventListener('pointerdown', unblock)
+    return () => window.removeEventListener('pointerdown', unblock)
+  }, [blocked, unblock])
 
   useEffect(() => {
     const onHide = () => {
@@ -388,9 +479,18 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
         <PhoneOff className="size-4" aria-hidden="true" />
       </button>
 
-      {(listOpen || error) && (
+      {(listOpen || error || blocked) && (
         <div className="absolute right-0 top-10 z-30 flex w-60 flex-col gap-2 rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-lg">
           {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
+          {blocked && (
+            <button
+              type="button"
+              onClick={unblock}
+              className="rounded-lg bg-primary px-3 py-2 text-left text-xs font-bold leading-relaxed text-primary-foreground"
+            >
+              Tarayıcı sesi durdurdu. Duymak için buraya dokun.
+            </button>
+          )}
           {listOpen && (
             <>
               <p className="text-xs leading-relaxed text-muted-foreground">

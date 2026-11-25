@@ -2,8 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { canPanel, isPanelOwner } from '@/lib/admin-auth'
 import { logPanel } from '@/lib/panel-log'
 import { rejectCrossSite } from '@/lib/same-origin'
-import { addJob, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
-import { makeGif, makeMotionSticker, makeVideo, videoToGif } from '@/lib/studio-animate'
+import { addJob, getAsset, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
+import { libraryStill, makeGif, makeMotionSticker, makeVideo, videoToGif } from '@/lib/studio-animate'
 import { cleanMotion, motionLabel } from '@/lib/studio-brief'
 import { closeHold, holdBudget } from '@/lib/studio-budget'
 import { faultMessage, studioFault } from '@/lib/studio-fault'
@@ -33,16 +33,32 @@ export async function POST(request: NextRequest) {
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
   const jobId = Number.parseInt(String(body?.jobId ?? ''), 10)
-  const source = Number.isFinite(jobId) ? await getJob(jobId) : null
+  const assetId = Number.parseInt(String(body?.assetId ?? ''), 10)
   const mode: Mode = MODES.find((m) => m === body?.mode) ?? 'gif'
   const telegram = STICKER_MODES.includes(mode)
 
-  if (!source || source.kind !== (telegram ? 'sticker' : 'banner')) {
+  // A picture staff added to the provider library is animated as it is: it was never a banner made here.
+  const asset = Number.isFinite(assetId) ? await getAsset(assetId) : null
+  if (Number.isFinite(assetId)) {
+    if (!asset) return NextResponse.json({ error: 'Bu görsel kütüphanede yok. Sayfayı yenileyip tekrar dene.' }, { status: 404 })
+    if (telegram) {
+      return NextResponse.json({ error: 'Kütüphane görselinden GIF ya da video üretilir. Sticker için önce "Üret" sekmesinde sticker oluştur.' }, { status: 400 })
+    }
+  }
+  const source = asset || !Number.isFinite(jobId) ? null : await getJob(jobId)
+  if (!asset && (!source || source.kind !== (telegram ? 'sticker' : 'banner'))) {
     return NextResponse.json(
       { error: telegram ? 'Telegram çıktısı için bir sticker seç.' : 'Hareketlendirmek için bir banner seç.' },
       { status: 400 },
     )
   }
+  // A library picture belongs to no brand; the clip is filed in the area that was open when it was asked for.
+  const areaId = Number(body?.brandId)
+  const area = asset && Number.isInteger(areaId) && areaId > 0 ? await getBrand(areaId) : null
+  const brandId = source ? source.brandId : (area?.id ?? null)
+  const brandName = source ? source.brandName : (area?.name ?? '')
+  const sourceName = asset ? `kütüphane görseli #${asset.id}` : `kaynak #${source?.id ?? ''}`
+  const tag = asset ? `Kütüphane · ${asset.game || asset.provider} · ` : ''
 
   // Older screens sent the motion as one line of text.
   const motion = cleanMotion(typeof body?.motion === 'string' ? { action: body.motion } : body?.motion)
@@ -70,13 +86,16 @@ export async function POST(request: NextRequest) {
 
   try {
     // A sticker is animated from its full-size copy, not from the 512 px Telegram file made from it.
-    const image = await readFile(telegram && source.cleanPathname ? source.cleanPathname : source.pathname)
+    const still = asset ? await libraryStill(await readFile(asset.pathname)) : null
+    const image = still ? still.image : source ? await readFile(telegram && source.cleanPathname ? source.cleanPathname : source.pathname) : null
+    if (!image) throw new Error('Kaynak görsel okunamadı.')
+    const format = still?.format ?? source?.format ?? '1:1'
     // With the text-free original at hand, the model animates that and the logo and copy are printed
     // on the finished clip. Older jobs without it are animated as they are.
     const clip = async (seconds: number, sound: boolean) => {
-      if (!source.cleanPathname) return makeVideo({ image, format: source.format, motion, duration: seconds, audio: sound, hd, brush: null, onBilled })
+      if (!source?.cleanPathname) return makeVideo({ image, format, motion, duration: seconds, audio: sound, hd, brush: null, onBilled })
       const [clean, brand] = await Promise.all([readFile(source.cleanPathname), source.brandId ? getBrand(source.brandId) : null])
-      return makeVideo({ image: clean, format: source.format, motion, duration: seconds, audio: sound, hd, brush: brushOf(brand, source.texts), onBilled })
+      return makeVideo({ image: clean, format, motion, duration: seconds, audio: sound, hd, brush: brushOf(brand, source.texts), onBilled })
     }
     const asked = motionLabel(motion)
     const made = async (): Promise<{ data: Buffer; contentType: string; ext: string; folder: string; label: string }> => {
@@ -108,21 +127,21 @@ export async function POST(request: NextRequest) {
     const result = await made()
     const pathname = await storeFile(result.folder, result.data, result.contentType, result.ext)
     const job = await addJob({
-      brandId: source.brandId,
+      brandId,
       kind: mode === 'aigif' ? 'gif' : mode === 'tgmotion' ? 'tgsticker' : mode,
-      format: telegram ? '1:1' : source.format,
-      prompt: result.label,
+      format: telegram ? '1:1' : format,
+      prompt: tag + result.label,
       pathname,
       clean: '',
-      parentId: source.id,
+      parentId: source?.id ?? null,
       cost: paid,
     })
     await closeHold(hold, 'recorded')
-    await logPanel('studio', 'Hareketli içerik üretildi', source.brandName || null, `Üretim #${job.id} · ${result.label.slice(0, 200)}`)
-    return NextResponse.json({ job: { ...job, brandName: source.brandName } })
+    await logPanel('studio', 'Hareketli içerik üretildi', brandName || null, `Üretim #${job.id} · ${(tag + result.label).slice(0, 200)}`)
+    return NextResponse.json({ job: { ...job, brandName } })
   } catch (error) {
     console.error('Studio animation failed:', error)
-    await closeHold(hold, 'failed', `Hareketli içerik kaydedilemedi (kaynak #${source.id}, ${mode})`)
+    await closeHold(hold, 'failed', `Hareketli içerik kaydedilemedi (${sourceName}, ${mode})`)
     const message = error instanceof Error ? error.message : ''
     const fault = studioFault(error)
     const known = faultMessage(fault, { owner, video: paid > 0 })

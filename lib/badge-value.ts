@@ -80,7 +80,53 @@ export async function pinnedFor(userIds: string[]): Promise<Record<string, Pinne
     ORDER BY p.user_id, x.pos`)
   const out: Record<string, PinnedBadge[]> = {}
   for (const x of r) (out[x.user_id] ??= []).push({ id: x.id, name: x.name, icon: x.icon, tier: x.tier })
+  // A member who never opened the showcase still wears their best badge: an earned badge shows without any setup.
+  const bare = userIds.filter((id) => !out[id])
+  if (bare.length) {
+    const best = await rows<{ user_id: string; id: string; name: string; icon: string; tier: BadgeTier }>(sql`
+      SELECT DISTINCT ON (a.user_id) a.user_id, b.id, b.name, b.icon, b.tier
+      FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id
+      WHERE a.user_id IN ${bare} AND b.active AND b.role_style IS NULL AND b.id <> ${FRAME_BADGE}
+      ORDER BY a.user_id, CASE b.tier WHEN 'efsane' THEN 3 WHEN 'elmas' THEN 2 WHEN 'altin' THEN 1 ELSE 0 END DESC, a.awarded_at DESC`)
+    for (const x of best) out[x.user_id] = [{ id: x.id, name: x.name, icon: x.icon, tier: x.tier }]
+  }
   return out
+}
+
+/** The badge the market's "Özel Profil Çerçevesi" hands over: holding it puts the moving gold frame on the avatar. */
+export const FRAME_BADGE = 'ozel-cerceve'
+/** The badge the market's "Altın Kanka Rozeti" hands over. */
+export const GOLD_BADGE = 'altin-kanka'
+
+export type AvatarFrame = 'altin' | 'elmas' | 'efsane' | 'ozel'
+
+const FRAME_CACHE_MS = 30_000
+let frameCache: { at: number; data: Record<string, AvatarFrame> } | null = null
+
+export function dropFrameCache() {
+  frameCache = null
+}
+
+/**
+ * userId → the frame around their avatar everywhere on the site: the bought frame first, otherwise the highest
+ * badge tier from gold up. Bronze badges give no frame, so a frame stays a mark worth having.
+ */
+export async function frameMap(): Promise<Record<string, AvatarFrame>> {
+  if (frameCache && Date.now() - frameCache.at < FRAME_CACHE_MS) return frameCache.data
+  await ensure()
+  const r = await rows<{ user_id: string; top: number; bought: boolean }>(sql`
+    SELECT a.user_id, max(CASE b.tier WHEN 'efsane' THEN 3 WHEN 'elmas' THEN 2 WHEN 'altin' THEN 1 ELSE 0 END)::int AS top,
+      bool_or(b.id = ${FRAME_BADGE}) AS bought
+    FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id
+    WHERE b.active AND b.role_style IS NULL
+    GROUP BY a.user_id`)
+  const data: Record<string, AvatarFrame> = {}
+  for (const x of r) {
+    const frame: AvatarFrame | null = x.bought ? 'ozel' : x.top >= 3 ? 'efsane' : x.top === 2 ? 'elmas' : x.top === 1 ? 'altin' : null
+    if (frame) data[x.user_id] = frame
+  }
+  frameCache = { at: Date.now(), data }
+  return data
 }
 
 // --- Avatar frame (RZ1) ----------------------------------------------------

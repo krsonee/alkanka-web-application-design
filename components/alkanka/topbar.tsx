@@ -124,7 +124,7 @@ function AccountMenu() {
         )}
       >
         <span className="relative flex shrink-0">
-          <AvatarFace src={look?.avatar} name={member.name} size="sm" />
+          <AvatarFace userId={member.id} src={look?.avatar} name={member.name} size="sm" />
           {unread > 0 && (
             <span className="absolute -right-1.5 -top-1.5 flex" aria-hidden="true">
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-destructive opacity-60" />
@@ -147,7 +147,7 @@ function AccountMenu() {
           <div className="flex flex-col gap-2.5 border-b border-border bg-primary/[0.06] px-4 py-3">
             <div className="flex items-center gap-3">
               <Link href="/profil?sekme=gorunum" onClick={() => setOpen(false)} aria-label="Avatarını değiştir" className="rounded-full ring-2 ring-gold/60 ring-offset-2 ring-offset-popover">
-                <AvatarFace src={look?.avatar} name={member.name} size="md" />
+                <AvatarFace userId={member.id} src={look?.avatar} name={member.name} size="md" />
               </Link>
               <span className="flex min-w-0 flex-col">
                 <span className="truncate text-sm font-bold text-foreground">{member.name}</span>

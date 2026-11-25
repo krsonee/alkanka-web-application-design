@@ -109,6 +109,13 @@ const fetcher = async (url: string) => {
 }
 
 const DUEL = ['blackjack', 'rulet', 'kafa-topu', 'kafa-basketbolu']
+
+/*
+  A spectator cannot touch the table, but a window the table opens over itself (a hand's score, a round's result)
+  is theirs to read and close: without this its "Devam" button is as dead as the cards under it. `data-watcher`
+  marks the few controls that only move the watcher's own screen (turn the phone, leave the table).
+*/
+const WATCH_ONLY = 'pointer-events-none [&_[role=dialog]]:pointer-events-auto [&_[data-watcher]]:pointer-events-auto'
 const SEAT_GAME_RULES: Record<string, { seats: number[]; rounds: number[] }> = {
   okey101: { seats: [4], rounds: [1, 3, 5] },
   batak: { seats: [4], rounds: [31, 1, 51, 101] },
@@ -1539,14 +1546,14 @@ export function TableRoom({ id, onLeave, onReplay }: { id: string; onLeave: (don
           <div>
             {spectator && (data.game === 'kafa-topu' || data.game === 'kafa-basketbolu' || data.game === 'bilardo') ? (
               <FitToScreen>
-                <div className="pointer-events-none">
+                <div className={WATCH_ONLY}>
                   <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
                 </div>
               </FitToScreen>
             ) : spectator ? (
               // Same stable landscape layer players get; FitToScreen re-measured the reflowing table in a loop on phones.
               <LandscapeFit force={data.game === 'tavla' || data.game === 'okey' || data.game === 'okey101' || data.game === 'batak' || data.game === 'pisti' || data.game === 'monopoly'} menu={<SoundToggle />} chat={layerChat}>
-                <div className={cn(data.game !== 'okey' && 'pointer-events-none')}>
+                <div className={cn(data.game !== 'okey' && WATCH_ONLY)}>
                   <GameSurface game={data.game} remote={remote} done={ended} pvp={data.players.filter((p) => !p.bot).length === 2} />
                 </div>
               </LandscapeFit>

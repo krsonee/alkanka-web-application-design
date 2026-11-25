@@ -39,7 +39,8 @@ import { InboxList } from '@/components/alkanka/profile/inbox-list'
 import { coverById, getLookState, teamById, type LookState } from '@/lib/avatars'
 import { LookStudio } from '@/components/alkanka/profile/look-studio'
 import { Download, Gift, Pencil } from 'lucide-react'
-import { badgeRarity, frameTiers, getPins, MAX_PINS, rarityLabel } from '@/lib/badge-value'
+import { badgeRarity, frameMap, getPins, MAX_PINS, rarityLabel } from '@/lib/badge-value'
+import { FrameRing } from '@/components/alkanka/member-avatar'
 import { PinPicker } from '@/components/alkanka/kp/pin-picker'
 import { PushPrefsCard } from '@/components/alkanka/profile/push-prefs'
 import { getPushPrefs, PUSH_TOPICS } from '@/lib/mobile'
@@ -53,6 +54,7 @@ const FRAME_RING: Record<string, string> = {
   altin: 'border-gold ring-4 ring-gold/30',
   elmas: 'border-accent ring-4 ring-accent/40',
   efsane: 'border-ruby ring-4 ring-ruby/40 shadow-lg shadow-ruby/30',
+  ozel: 'border-background ring-4 ring-gold/30',
 }
 const TIER_BAR: Record<string, string> = { bronz: 'bg-bronze', altin: 'bg-gold', elmas: 'bg-accent', efsane: 'bg-ruby' }
 const fmt = (n: number) => n.toLocaleString('tr-TR')
@@ -101,7 +103,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
     historySummary(member.id),
     listInbox(member.id).catch((error) => (console.error('[inbox] okunamadı', error), [] as InboxMessage[])),
     getLookState(member.id).catch((error) => (console.error('[avatar] görünüm okunamadı', error), null as LookState | null)),
-    frameTiers([member.id]).catch(() => ({}) as Record<string, string>),
+    frameMap().catch(() => ({}) as Record<string, string>),
   ])
   const frame = frames[member.id] as string | undefined
   const avatar = look?.avatars.find((a) => a.id === look.avatarId) ?? null
@@ -145,9 +147,10 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
                 'group relative block size-28 overflow-hidden rounded-full border-4 bg-background max-sm:size-24 md:size-32',
                 frame ? FRAME_RING[frame] : 'border-gold',
               )}
-              title={frame ? `${TIER_NAMES[frame]} rozet çerçevesi` : undefined}
+              title={frame === 'ozel' ? 'Özel profil çerçevesi' : frame ? `${TIER_NAMES[frame]} rozet çerçevesi` : undefined}
               aria-label={avatar ? `Avatarın: ${avatar.name}. Değiştir` : 'Avatar seç'}
             >
+              {frame === 'ozel' && <FrameRing frame="ozel" weight="lg" />}
               {avatar ? (
                 <Image src={avatar.src} alt="" fill sizes="128px" className="object-cover" />
               ) : (

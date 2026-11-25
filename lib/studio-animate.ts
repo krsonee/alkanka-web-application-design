@@ -210,6 +210,28 @@ async function finishClip(video: Buffer, frame: { width: number; height: number 
   }
 }
 
+const LIBRARY_GROUND = '#0c1322'
+
+/**
+ * A provider library picture as the first frame of a clip. The whole picture is fitted into the
+ * nearest shape the model renders, never cropped: what it does not cover is its own blurred copy,
+ * or a plain dark ground behind a cut-out character.
+ */
+export async function libraryStill(source: Buffer) {
+  const upright = await sharp(source).rotate().png().toBuffer()
+  const meta = await sharp(upright).metadata()
+  const ratio = (meta.width ?? 1) / (meta.height ?? 1)
+  const format = ratio >= 1.35 ? '16:9' : ratio <= 0.74 ? '9:16' : '1:1'
+  const [width, height] = format === '16:9' ? [1920, 1080] : format === '9:16' ? [1080, 1920] : [1080, 1080]
+  const cutOut = meta.hasAlpha ? !(await sharp(upright).stats()).isOpaque : false
+  const ground = cutOut
+    ? await sharp({ create: { width, height, channels: 3, background: LIBRARY_GROUND } }).png().toBuffer()
+    : await sharp(upright).resize(width, height, { fit: 'cover' }).blur(40).modulate({ brightness: 0.6 }).png().toBuffer()
+  const front = await sharp(upright).resize(width, height, { fit: 'inside' }).png().toBuffer()
+  const image = await sharp(ground).composite([{ input: front, gravity: 'centre' }]).png().toBuffer()
+  return { image, format }
+}
+
 export async function makeVideo({
   image,
   format,

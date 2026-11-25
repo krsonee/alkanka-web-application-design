@@ -1,5 +1,5 @@
 /** Rewards a campaign can multiply. Admin, badge and prize payouts are never boosted. */
-export type BoostSource = 'sure' | 'gorev' | 'giris' | 'online' | 'kankatv' | 'seri' | 'arena' | 'tahmin'
+export type BoostSource = 'sure' | 'gorev' | 'giris' | 'online' | 'kankatv' | 'seri' | 'arena' | 'tahmin' | 'mini'
 
 export const BOOST_SOURCES: { id: BoostSource; label: string; short: string }[] = [
   { id: 'sure', label: 'Sitede geçen dakika puanı', short: 'Dakika puanı' },
@@ -9,7 +9,8 @@ export const BOOST_SOURCES: { id: BoostSource; label: string; short: string }[] 
   { id: 'seri', label: 'Seri bonusu (7, 14, 30 gün)', short: 'Seri bonusu' },
   { id: 'kankatv', label: 'KankaTV izleme, devre arası ve gol sandığı', short: 'KankaTV' },
   { id: 'tahmin', label: 'Tahmin ödülü', short: 'Tahmin ödülü' },
-  { id: 'arena', label: 'Oyunculu masada kazanılan kâr', short: 'Masa kazancı' },
+  { id: 'arena', label: 'Oyunda kazanılan kâr: bota karşı maç ve coinli masa (Blackjack ve Rulet hariç)', short: 'Oyun kazancı' },
+  { id: 'mini', label: 'Çark, zar ve sandık ödülü', short: 'Çark, zar, sandık' },
 ]
 
 /** What the old fixed "Mutlu Saatler" box multiplied. */
@@ -228,13 +229,14 @@ export function legacyCampaigns(input: LegacyBoosts): Campaign[] {
   const dayStart = day ? new Date(`${day}T00:00:00+03:00`) : null
   return [
     {
-      ...blank, id: 'happy', name: 'Mutlu Saatler', on: input.happyHour?.on ?? true, kind: 'carpan', sources: [...HAPPY_SOURCES],
-      mult: num(input.happyHour?.mult, 2, 1, 5), text: 'Tüm KP ve Coin kazançları',
+      // The strip promised "every earning", so the campaign covers every source a multiplier can reach.
+      ...blank, id: 'happy', name: 'Mutlu Saatler', on: input.happyHour?.on ?? true, kind: 'carpan', sources: BOOST_SOURCES.map((s) => s.id),
+      mult: num(input.happyHour?.mult, 2, 1, 5), text: 'Görev, giriş, oyun ve çark kazançları',
       when: { type: 'saat', days: [], start: whole(input.happyHour?.start, 20, 0, 23), end: whole(input.happyHour?.end, 22, 0, 23) },
     },
     {
       ...blank, id: 'weekend', name: 'Hafta Sonu Festivali', on: input.weekend?.on ?? true, kind: 'carpan', sources: ['arena'],
-      mult: num(input.weekend?.mult, 1.5, 1, 3), text: 'Arena kazançları',
+      mult: num(input.weekend?.mult, 1.5, 1, 3), text: 'Oyun kazançları',
       when: { type: 'hafta', fromDay: 5, fromHour: 18, toDay: 1, toHour: 0 },
     },
     {
