@@ -24,6 +24,11 @@ export type DieRig = {
   shade: HTMLElement
   /** How far the resting cube is turned away from the viewer, so two of its sides show. */
   lean: number
+  /**
+   * The way the cup's mouth points, in die widths: the first arc bulges that way, so a die leaves the mouth along
+   * it before it turns toward its place on the felt.
+   */
+  kick?: [number, number]
 }
 
 type Frames = ReturnType<typeof pacedFrames>
@@ -137,7 +142,7 @@ function flight(): Flight {
 }
 
 /** A die is out of the cup, and full size, this far into the throw. */
-const OUT_BY = 0.13
+const OUT_BY = 0.18
 const arc = (s: number) => 4 * s * (1 - s)
 
 function pose(rig: DieRig, value: number, plan: Flight, tau: number) {
@@ -157,10 +162,12 @@ function pose(rig: DieRig, value: number, plan: Flight, tau: number) {
   let rollZ = 0
   let free = 0
   let since = 1
+  let bulge = 0
   if (tau < t1) {
     const s = tau / t1
     /* the first arc starts in the cup's mouth, not above it */
     height = plan.peaks[0] * arc(s)
+    bulge = arc(s)
     rollX = -270
     rollZ = 90
     free = plan.spin * (1 - s)
@@ -188,13 +195,17 @@ function pose(rig: DieRig, value: number, plan: Flight, tau: number) {
   /* the felt is not under the cup: the shadow appears as the die comes over the table */
   const over = clamp01((along - 0.12) / 0.3)
 
+  const [kx, ky] = rig.kick ?? [0, 0]
+  const sideways = `var(--from-x) * ${left} + var(--s) * ${kx * bulge}`
+  const down = `var(--from-y) * ${left} + var(--s) * ${ky * bulge}`
+
   rig.mover.style.opacity = `${clamp01(tau / 0.02)}`
-  rig.mover.style.translate = `calc(var(--from-x) * ${left}) calc(var(--from-y) * ${left} - var(--s) * ${0.85 * height})`
+  rig.mover.style.translate = `calc(${sideways}) calc(${down} - var(--s) * ${0.85 * height})`
   rig.mover.style.scale = `${size * (1 + 0.06 * press)} ${size * (1 - 0.11 * press)}`
   rig.cube.style.transform =
     `rotateX(${TILT}deg) rotateY(${rig.lean + twist}deg) rotateZ(${rollZ}deg) rotateX(${rollX}deg) ` +
     `rotate3d(${plan.axis[0]}, ${plan.axis[1]}, ${plan.axis[2]}, ${free}deg) ${face(value)}`
-  rig.shade.style.translate = `calc(var(--from-x) * ${left}) calc(var(--from-y) * ${left})`
+  rig.shade.style.translate = `calc(${sideways}) calc(${down})`
   rig.shade.style.scale = `${1 + 0.7 * height}`
   rig.shade.style.opacity = `${(0.95 * over) / (1 + 2.4 * height)}`
 }

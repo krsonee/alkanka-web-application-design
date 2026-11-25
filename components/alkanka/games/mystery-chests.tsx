@@ -8,10 +8,12 @@
 
   While they wait the chests stir now and then, light slides over their metal and their keyholes glow. The member
   does not choose a chest: there is one button, and Jako chooses. The ceiling lamp runs over the three chests,
-  slows down and stops on one; the key's light flies from Jako's wing to its lock, the chest shakes and light leaks
-  from under its lid. Then it is thrown open under turning rays, its coins spill onto the floor
-  (mini-stage/room-fx.tsx), the win counts up across the top of the vault, and the other two chests open one after
-  the other to show what they held.
+  slows down and stops on one. As it slows Jako lifts the key and takes aim, then throws it: there is one key, the
+  one in his wing, and from the frame of his clip where he lets go of it the key is a picture on the stage
+  (chest-stage/key-flight.ts) that flies into the chest's keyhole, sinks into the lock and turns. The chest shakes
+  and light leaks from under its lid. Then it is thrown open under turning rays, its coins spill onto the floor
+  (mini-stage/room-fx.tsx), the win counts up across the top of the vault, the key tumbles back into Jako's wing
+  as he reaches out for it, and the other two chests open one after the other to show what they held.
 
   Which chest is opened (by the chances set in the panel) and what each one held are decided on the server
   (playMini); the lamp only stops where the server said.
@@ -22,6 +24,7 @@ import Image from 'next/image'
 import { Clock } from 'lucide-react'
 import { playMini } from '@/app/actions/wallet'
 import { CHEST_IDS } from '@/lib/rewards-shared'
+import { pacedFrames } from '@/lib/paced-frames'
 import { buzz, playSound } from '@/lib/sound'
 import { usePrefersReducedMotion } from '@/lib/use-motion'
 import { cn } from '@/lib/utils'
@@ -29,12 +32,13 @@ import { TableBrand } from '../arena/table-brand'
 import { useCatalog } from '../catalog-context'
 import { DetailButton, DetailModal } from '../detail-modal'
 import { usePoints } from '../points-context'
+import { catchKey, hideKey, holdKey, sinkKey, throwKey, twistKey, type KeyPose, type KeyRig } from './chest-stage/key-flight'
 import type { MiniGameProps } from './lucky-wheel'
 import { formatRemaining } from './mini-status'
 import { CallerBubble, StageResult, StageShade, StageTitle } from './mini-stage/caller'
 import { RoomFx, type RoomFxHandle, type Zone } from './mini-stage/room-fx'
 import { burst } from './wheel-stage/burst'
-import { JakoActor, type ActorCast, type ActorState } from './wheel-stage/jako-actor'
+import { JakoActor, type ActorCast, type ActorClock, type ActorState } from './wheel-stage/jako-actor'
 import { ActionButton } from './wheel-stage/parts'
 
 const rulesFor = (dailyPlays: number) => [
@@ -66,9 +70,30 @@ const RUN_MS = 85
 const RUN_MIN_MS = 700
 /** Its last steps onto the chest that was drawn: the lamp slows down, then rests on it. */
 const SLOWING_MS = [130, 190, 270, 400]
+/** How long the key's light takes to reach the lock when there is no clip to throw the key itself. */
 const FLIGHT_MS = 340
 /** The least a lock takes to give once the key is in it, however fast the server answers. */
 const LOCK_MS = 620
+/*
+  The keeper's throw clip, in seconds: the key leaves his wing at RELEASE_S, he reaches out for it again at
+  REACH_S and has it back at CAUGHT_S. Between RELEASE_S and CAUGHT_S the clip shows no key.
+*/
+const RELEASE_S = 1.625
+const STANDING_S = 2.333
+const REACH_S = 4.875
+const CAUGHT_S = 5.583
+/** How fast the clip's way back (the reach, the catch) is played once the chest is open. */
+const CATCH_RATE = 2
+/** The clip is given this long to reach RELEASE_S; with no clip on screen (the still picture) the key's light goes instead. */
+const RELEASE_LIMIT_MS = 3600
+const STILL_MS = 500
+/** The key in Jako's wing, as fractions of his picture: how long it is, and where its tip is when he lets go. */
+const KEY_LENGTH = 0.24
+const KEY_TIP = { left: '1.04%', top: '45.2%' }
+/** Where the key hangs in the still picture: the key's light starts there when no clip is on screen. */
+const KEY_REST = { left: '34.6%', top: '81.2%' }
+/** How long the key is once it has reached a chest, against the chest's width. */
+const KEY_AT_LOCK = 0.36
 /** The other two chests open this long after the chosen one, and this long after each other. */
 const OTHERS_MS = 620
 const OTHERS_GAP_MS = 340
@@ -84,16 +109,25 @@ const DUST: { wide: Zone; tall: Zone } = { wide: { x: [0.22, 0.78], y: [0.04, 0.
 const wait = (ms: number) => new Promise<void>((done) => setTimeout(done, ms))
 
 /*
-  The keeper: key in hand while waiting, the key offered while the lock turns, the key held up over a win. No chest
-  is empty. Each clip is played out and back over the same frames, so it ends on the frame it began on.
+  The keeper: key in hand while waiting; for a chest he lifts it, takes aim and throws it, stands empty-handed
+  while it is in the lock, then reaches out and catches it; the key held up over a win. No chest is empty. Each
+  clip ends on the frame it began on. The picture is wide enough for his arm and the key at full stretch, which is
+  why he stands so far right in it.
 */
 const KEEPER: ActorCast = {
   still: '/images/chests/jako.webp',
   clips: { idle: '/video/chests/jako-idle.mp4', spin: '/video/chests/jako-spin.mp4', win: '/video/chests/jako-win.mp4' },
-  frame: { width: 896, height: 640 },
+  frame: { width: 1156, height: 640 },
   mirrored: true,
-  beats: { spin: { hold: 1.417, back: 2.75 }, win: { hold: 1.667, back: 1.667 } },
+  beats: { spin: { hold: STANDING_S, back: REACH_S }, win: { hold: 1.667, back: 1.667 } },
+  backRate: CATCH_RATE,
 }
+/*
+  Jako's picture on the stage; the key's tip is placed on the same box. On phones he is small enough for his arm
+  at full stretch to stay clear of the button.
+*/
+const KEEPER_BOX =
+  'pointer-events-none absolute bottom-0 left-[52%] z-[3] aspect-[1156/640] w-[63.6%] @min-[600px]:left-[62.41%] @min-[600px]:w-[54.19%]'
 
 const rewardRange = (rewards: number[]) => `${Math.min(...rewards)}–${Math.max(...rewards)} KC`
 
@@ -133,7 +167,18 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
   /** The chests that were not chosen and have been opened to show what they held. */
   const [lifted, setLifted] = useState<number[]>([])
   const chestRefs = useRef<(HTMLDivElement | null)[]>([])
-  const handRef = useRef<HTMLSpanElement>(null)
+  const stageRef = useRef<HTMLDivElement>(null)
+  const keeperRef = useRef<HTMLDivElement>(null)
+  const tipRef = useRef<HTMLSpanElement>(null)
+  const restRef = useRef<HTMLSpanElement>(null)
+  const keyRef = useRef<HTMLImageElement>(null)
+  /** Which of Jako's clips is on screen and how far into it, written by his player on every frame. */
+  const clock = useRef<ActorClock>({ clip: null, time: 0 })
+  const keyLoop = useRef<ReturnType<typeof pacedFrames> | null>(null)
+  /** The key is in a lock: where, and how it went in. */
+  const keyIn = useRef<KeyPose | null>(null)
+  /** Counts the chests asked for: what is left of an earlier one's key stops when it sees a newer number. */
+  const round = useRef(0)
   const fx = useRef<RoomFxHandle>(null)
   const timers = useRef<ReturnType<typeof setTimeout>[]>([])
   const gone = useRef(false)
@@ -145,8 +190,29 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
     return () => {
       gone.current = true
       timers.current.forEach(clearTimeout)
+      keyLoop.current?.cancel()
     }
   }, [])
+
+  /** The key's picture at the size it has in Jako's wing right now. */
+  function keyRig(): KeyRig | null {
+    const el = keyRef.current
+    const width = keeperRef.current?.offsetWidth ?? 0
+    return el && width ? { el, length: width * KEY_LENGTH } : null
+  }
+
+  /** Waits until `ready` says so, looking every frame, for at most `limit` ms. */
+  function until(ready: () => boolean, limit: number) {
+    return new Promise<boolean>((done) => {
+      const started = performance.now()
+      const check = () => {
+        if (gone.current || ready()) done(true)
+        else if (performance.now() - started >= limit) done(false)
+        else setTimeout(check, 16)
+      }
+      check()
+    })
+  }
 
   const chestCount = chests.length
   useEffect(() => {
@@ -191,6 +257,8 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
     }
     const drawn = answer.res ?? (await asked)
     if (!drawn.ok || gone.current) return drawn
+    /* the lamp is about to settle: Jako lifts the key and takes aim */
+    setMood('spin')
     /* at least two more steps, so the lamp is seen to slow down before it stops */
     let steps = (((drawn.chest - at) % chestCount) + chestCount) % chestCount
     if (steps < 2) steps += chestCount
@@ -204,34 +272,86 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
     return drawn
   }
 
-  /** The key's light leaves Jako's wing, flies to the chest's lock and turns in it. */
-  async function turnKey(index: number) {
+  /**
+   * Jako throws the key: it leaves his wing at the frame of his clip where he lets go, flies into the chest's
+   * keyhole, sinks into the lock and turns. With no clip on screen (the still picture) the key's light goes instead.
+   */
+  async function turnKey(index: number, mine: number) {
     const el = chestRefs.current[index]
     const [kx, ky] = keyholeOf(chests[index]?.id ?? '')
-    await fx.current?.streak(fx.current.spot(handRef.current), fx.current.spot(el, kx, ky), FLIGHT_MS)
-    if (gone.current) return
+    const stale = () => gone.current || round.current !== mine
+    let thrown = false
+    const asked = performance.now()
+    await until(() => {
+      const { clip, time } = clock.current
+      thrown = clip === 'spin' && time >= RELEASE_S && time < REACH_S
+      /* the still picture never throws: it is not waited for */
+      return thrown || (clip === null && performance.now() - asked >= STILL_MS)
+    }, RELEASE_LIMIT_MS)
+    if (stale()) return
     const lock = fx.current?.spot(el, kx, ky) ?? null
+    const from = fx.current?.spot(tipRef.current, 0, 0) ?? null
+    const key = keyRig()
+    const loop = (keyLoop.current ??= pacedFrames(60))
+    if (thrown && key && el && lock && from) {
+      holdKey(key, from)
+      playSound('chip', 0.5)
+      let trail = 0
+      const pose = await throwKey(loop, key, from, lock, stageRef.current?.offsetWidth ?? 0, (el.offsetWidth * KEY_AT_LOCK) / key.length, (tip) => {
+        /* a spark off the key every few frames of its flight */
+        if (++trail % 3 === 0) fx.current?.sparks(tip, 1, 0.25)
+      })
+      if (stale()) return
+      await sinkKey(loop, key, pose)
+      if (stale()) return
+      keyIn.current = pose
+    } else {
+      await fx.current?.streak(fx.current.spot(restRef.current, 0, 0), lock, FLIGHT_MS)
+      if (stale()) return
+    }
     fx.current?.flash(lock, (el?.offsetWidth ?? 0) * 0.42)
     fx.current?.sparks(lock, 12, 0.6)
     playSound('tick')
     buzz(10)
     setTurned(true)
-    await wait(LOCK_MS)
+    await Promise.all([wait(LOCK_MS), keyIn.current && key ? twistKey(loop, key, keyIn.current) : null])
+  }
+
+  /** The chest is open: the key is pulled out of its lock and tumbles back into Jako's wing as he reaches out for it. */
+  async function bringKeyBack(pose: KeyPose, mine: number) {
+    const key = keyRig()
+    if (!key) return
+    const stale = () => gone.current || round.current !== mine
+    const reaching = () => clock.current.clip !== 'spin' || clock.current.time >= REACH_S
+    await until(reaching, 700)
+    if (stale()) return
+    const hand = fx.current?.spot(tipRef.current, 0, 0) ?? pose.tip
+    playSound('chip', 0.4)
+    await catchKey(keyLoop.current ?? pacedFrames(60), key, pose, hand, stageRef.current?.offsetWidth ?? 0, ((CAUGHT_S - REACH_S) * 1000) / CATCH_RATE)
+    if (stale()) return
+    /* his clip shows the key again from CAUGHT_S */
+    await until(() => clock.current.clip !== 'spin' || clock.current.time >= CAUGHT_S, 260)
+    if (!stale()) hideKey(key.el)
   }
 
   /** The one button: closes whatever stands open, lets Jako choose a chest and opens it. */
   async function open() {
     if (busy.current || locked || !canPlay()) return
     busy.current = true
+    const mine = ++round.current
     timers.current.forEach(clearTimeout)
     timers.current = []
+    /* a key still on its way back from the last chest is in his wing again */
+    keyLoop.current?.cancel()
+    keyIn.current = null
+    hideKey(keyRef.current)
     setPicked(null)
     setEye(null)
     setPhase('choosing')
     setTurned(false)
     setLifted([])
     setError('')
-    setMood('spin')
+    setMood('idle')
     playSound('chip')
     const res = await (reduced ? draw() : choose(draw()))
     if (gone.current) return
@@ -248,7 +368,7 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
     setPicked(index)
     setEye(null)
     setPhase('opening')
-    if (!reduced) await turnKey(index)
+    if (!reduced) await turnKey(index, mine)
     if (gone.current) return
     busy.current = false
     setContents(res.prizes)
@@ -257,6 +377,9 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
     setBalance(res.balance)
     setMood('win')
     playSound('win')
+    const lodged = keyIn.current
+    keyIn.current = null
+    if (lodged) void bringKeyBack(lodged, mine)
     const top = res.points >= jackpot
     const el = chestRefs.current[index]
     if (el && fx.current) {
@@ -320,7 +443,10 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
         <h3 id="gizemli-sandik-baslik" className="sr-only">
           Gizemli Sandık
         </h3>
-        <div className="relative isolate aspect-[9/16] w-full overflow-hidden rounded-2xl border border-gold/25 bg-background @min-[600px]:aspect-[2/1] @min-[600px]:max-h-[600px]">
+        <div
+          ref={stageRef}
+          className="relative isolate aspect-[9/16] w-full overflow-hidden rounded-2xl border border-gold/25 bg-background @min-[600px]:aspect-[2/1] @min-[600px]:max-h-[600px]"
+        >
           <Image src="/images/chests/vault-mobile.webp" alt="" fill sizes="100vw" priority className="object-cover @min-[600px]:hidden" />
           <Image
             src="/images/chests/vault-desktop.webp"
@@ -474,20 +600,23 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
           })}
 
           <RoomFx ref={fx} zone={DUST} className="z-[2]" />
-          <span
-            ref={handRef}
+          <div ref={keeperRef} className={KEEPER_BOX}>
+            <JakoActor cast={KEEPER} state={mood} armed={!locked} clock={clock} className="absolute inset-0" />
+            <span ref={tipRef} aria-hidden="true" className="absolute" style={KEY_TIP} />
+            <span ref={restRef} aria-hidden="true" className="absolute" style={KEY_REST} />
+          </div>
+
+          {/* the key once it has left Jako's wing: over him and the chests, placed by chest-stage/key-flight.ts */}
+          <img
+            ref={keyRef}
+            src="/images/chests/key.webp"
+            alt=""
             aria-hidden="true"
-            className="absolute bottom-[10.5%] left-[69%] @min-[600px]:bottom-[25%] @min-[600px]:left-[83%]"
+            draggable={false}
+            className="pointer-events-none absolute top-0 left-0 z-[5] h-auto max-w-none origin-left opacity-0 drop-shadow-[0_0.3cqw_0.5cqw_rgb(0_0_0/0.55)] will-change-transform"
           />
 
-          <JakoActor
-            cast={KEEPER}
-            state={mood}
-            armed={!locked}
-            className="absolute bottom-0 left-[56.5%] z-[3] aspect-[896/640] w-[62%] @min-[600px]:left-[74.5%] @min-[600px]:w-[42%]"
-          />
-
-          <div className="absolute right-[40%] bottom-[2.5%] left-[4%] z-[4] flex flex-col items-stretch gap-1.5 @min-[600px]:contents">
+          <div className="absolute right-[48%] bottom-[2.5%] left-[4%] z-[4] flex flex-col items-stretch gap-1.5 @min-[600px]:contents">
             <div className="flex justify-end @min-[600px]:absolute @min-[600px]:top-[37%] @min-[600px]:right-[2.5%] @min-[600px]:z-[4] @min-[600px]:w-[21%]">
               <CallerBubble tail="right" tone={error ? 'error' : 'plain'} className="@min-[600px]:hidden">
                 {says}

@@ -3,8 +3,8 @@
 /*
   Zar At at its own table: a navy felt dice table fills the stage and Jako, the croupier, stands at its lower left
   with a dice cup. There is one pair of dice, the two on the felt: his clips show the cup and never dice of their
-  own. A throw makes them jump into the cup; he tips it toward the table and the same two come out of its mouth,
-  at the frame of his clip where the cup is tipped (the stage follows the clip's clock, and measures where the
+  own. A throw makes them jump into the cup; he swings it out over the table and the same two fly out of its mouth,
+  at the frame of his clip where the swing ends (the stage follows the clip's clock, and measures where the
   mouth is on screen). They land, bounce twice and slide to a stop (dice-stage/throw.ts), raising dust and a ring
   on the felt at each landing (mini-stage/room-fx.tsx). While they are in the air the pay tiles light up in turn, and the one the throw made
   stays lit; coins spill onto the felt for what was won, and a double or better makes the dice jump. Across the
@@ -62,17 +62,21 @@ function highPair(min: number): Pair {
 }
 
 /*
-  The throw clip, in seconds: the cup is tipped with its mouth to the table from TIPPED_S and starts back up at
-  UPRIGHT_S. The dice leave it at TIPPED_S, however fast the server answers.
+  The throw clip, in seconds: Jako swings the cup out over the table and its mouth points at the felt from
+  TIPPED_S until it starts back at UPRIGHT_S. The dice leave it at FLUNG_S, on the last frame of the swing, so it
+  is the swing that throws them, however fast the server answers.
 */
-const TIPPED_S = 1.25
-const UPRIGHT_S = 2.25
-/** The clip is given this long to reach TIPPED_S; with no clip on screen (the still picture) the dice wait STILL_MS. */
-const TIP_LIMIT_MS = 3200
+const FLUNG_S = 1.375
+const TIPPED_S = 1.417
+const UPRIGHT_S = 2.542
+/** The clip is given this long to reach FLUNG_S; with no clip on screen (the still picture) the dice wait STILL_MS. */
+const TIP_LIMIT_MS = 3400
 const STILL_MS = 700
-/** Where the cup's mouth is on Jako's picture, as fractions of it: standing, and tipped. */
-const RIM = { left: '87.7%', top: '27.4%' }
-const MOUTH = { left: '71.1%', top: '46.7%' }
+/** Where the cup's mouth is on Jako's picture, as fractions of it: standing, and swung out over the table. */
+const RIM = { left: '75.7%', top: '35.7%' }
+const MOUTH = { left: '92.8%', top: '46.6%' }
+/** Which way the swung cup's mouth points, in die widths: on the wide stage, and on the tall one. */
+const KICK: { wide: [number, number]; tall: [number, number] } = { wide: [0.35, -0.1], tall: [0.6, -0.15] }
 const START: Pair = [5, 3]
 /** How far each die is turned away from the viewer at rest. */
 const LEANS = [24, -18]
@@ -82,27 +86,32 @@ const COINS = [30, 16, 9, 4]
 const DUST: { wide: Zone; tall: Zone } = { wide: { x: [0.28, 0.92], y: [0.06, 0.8] }, tall: { x: [0.02, 0.98], y: [0.2, 0.84] } }
 
 /*
-  The croupier: cup in hand while waiting, the cup tipped to the table for the throw, and the cup raised for a
-  double or better. Every throw pays. Each clip is played out and back over the same frames, so it ends on the
-  frame it began on.
+  The croupier: cup in hand while waiting, the cup swung out over the table for the throw, and the cup raised for
+  a double or better. Every throw pays. Each clip is played out and back over the same frames, so it ends on the
+  frame it began on. The picture is wide enough for the arm at full stretch, which is why he stands so far left in it.
 */
 const CROUPIER: ActorCast = {
   still: '/images/dice/jako.webp',
   clips: { idle: '/video/dice/jako-idle.mp4', spin: '/video/dice/jako-spin.mp4', win: '/video/dice/jako-win.mp4' },
-  frame: { width: 932, height: 602 },
+  frame: { width: 1100, height: 680 },
   mirrored: true,
   beats: { spin: { hold: TIPPED_S, back: UPRIGHT_S }, win: { hold: 2, back: 2 } },
+  backRate: 1.8,
 }
-/** Jako's picture on the stage; the cup's two mouths are placed on the same box. */
-const CROUPIER_BOX = 'pointer-events-none absolute bottom-0 left-[-34.65%] aspect-[932/602] w-[93.6%] @min-[600px]:left-[-10.46%] @min-[600px]:w-[51.89%]'
+/*
+  Jako's picture on the stage; the cup's two mouths are placed on the same box. On phones he is small enough for
+  the swung cup to stop short of what he says.
+*/
+const CROUPIER_BOX = 'pointer-events-none absolute bottom-0 left-[-36.2%] aspect-[1100/680] w-[94.6%] @min-[600px]:left-[-11.35%] @min-[600px]:w-[61.24%]'
 
 /*
   Where the dice come to rest on the felt (percentages of the stage) and how big they are; the nearer one is larger.
+  On the wide stage they lie well to the right of the cup, so the throw crosses the table.
   --from-x / --from-y, where the cup's mouth is from there, is measured before each move (aim).
 */
 const RESTS = [
-  'top-[57.5%] left-[37%] [--s:22cqw] @min-[600px]:top-[56%] @min-[600px]:left-[51%] @min-[600px]:[--s:9cqw]',
-  'top-[65%] left-[64%] [--s:25cqw] @min-[600px]:top-[63.5%] @min-[600px]:left-[62.5%] @min-[600px]:[--s:10.5cqw]',
+  'top-[57.5%] left-[37%] [--s:22cqw] @min-[600px]:top-[56.5%] @min-[600px]:left-[60%] @min-[600px]:[--s:9cqw]',
+  'top-[65%] left-[64%] [--s:25cqw] @min-[600px]:top-[64.5%] @min-[600px]:left-[72%] @min-[600px]:[--s:10.5cqw]',
 ]
 
 /** A little scatter per throw (in die widths, and degrees of lean), so two throws never land on the same spot. */
@@ -135,6 +144,7 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
   const [chase, setChase] = useState<number | null>(null)
   /** The dice have left the cup. */
   const [flying, setFlying] = useState(false)
+  const stageRef = useRef<HTMLDivElement>(null)
   const feltRef = useRef<HTMLSpanElement>(null)
   const rimRef = useRef<HTMLSpanElement>(null)
   const mouthRef = useRef<HTMLSpanElement>(null)
@@ -171,9 +181,9 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
     }
   }
 
-  const cupTipped = () => clock.current.clip === 'spin' && clock.current.time >= TIPPED_S && clock.current.time < UPRIGHT_S
+  const cupTipped = () => clock.current.clip === 'spin' && clock.current.time >= FLUNG_S && clock.current.time < UPRIGHT_S
 
-  /** Waits for the frame of the throw clip where the cup is tipped to the table. */
+  /** Waits for the frame of the throw clip where the cup has been swung out over the table. */
   function tip() {
     return new Promise<void>((done) => {
       const started = performance.now()
@@ -209,12 +219,13 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
   /** The two dice as the throw code moves them, leaning the way they do on throw number `count`. */
   function rigsFor(count: number): DieRig[] | null {
     const list: DieRig[] = []
+    const kick = (stageRef.current?.offsetWidth ?? 0) >= 600 ? KICK.wide : KICK.tall
     for (const i of [0, 1]) {
       const mover = movers.current[i]
       const cube = cubes.current[i]
       const shade = shades.current[i]
       if (!mover || !cube || !shade) return null
-      list.push({ mover, cube, shade, lean: LEANS[i] + scatterOf(i, count)[2] })
+      list.push({ mover, cube, shade, lean: LEANS[i] + scatterOf(i, count)[2], kick })
     }
     return list
   }
@@ -257,8 +268,10 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
     })
     const dice = reduced ? null : rigsFor(count)
     if (dice) {
-      /* out of the tipped mouth; out of the top if the cup is standing (no clip, or a very late answer) */
-      aim(cupTipped() ? mouthRef.current : rimRef.current)
+      /* out of the swung cup's mouth; out of the top if the cup is standing (no clip, or a very late answer) */
+      const flung = cupTipped()
+      if (!flung) dice.forEach((rig) => (rig.kick = undefined))
+      aim(flung ? mouthRef.current : rimRef.current)
       playSound('dice', 0.6)
       await throwDice(loop, dice, res.dice, (die, landing, power) => {
         const at = fx.current?.spot(dice[die].shade) ?? null
@@ -324,7 +337,10 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
         <h3 id="zar-at-baslik" className="sr-only">
           Zar At
         </h3>
-        <div className="relative isolate aspect-[9/16] w-full overflow-hidden rounded-2xl border border-gold/25 bg-background @min-[600px]:aspect-[2/1] @min-[600px]:max-h-[600px]">
+        <div
+          ref={stageRef}
+          className="relative isolate aspect-[9/16] w-full overflow-hidden rounded-2xl border border-gold/25 bg-background @min-[600px]:aspect-[2/1] @min-[600px]:max-h-[600px]"
+        >
           <Image src="/images/dice/table-mobile.webp" alt="" fill sizes="100vw" priority className="object-cover @min-[600px]:hidden" />
           <Image
             src="/images/dice/table-desktop.webp"
@@ -382,14 +398,14 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
 
           <span
             aria-hidden="true"
-            className="room-breathe pointer-events-none absolute top-[60%] left-1/2 h-[26%] w-[120%] -translate-1/2 rounded-[50%] bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--gold)_15%,transparent),transparent)] mix-blend-plus-lighter @min-[600px]:top-[53%] @min-[600px]:left-[55%] @min-[600px]:h-[44%] @min-[600px]:w-[48%]"
+            className="room-breathe pointer-events-none absolute top-[60%] left-1/2 h-[26%] w-[120%] -translate-1/2 rounded-[50%] bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--gold)_15%,transparent),transparent)] mix-blend-plus-lighter @min-[600px]:top-[54%] @min-[600px]:left-[64%] @min-[600px]:h-[44%] @min-[600px]:w-[48%]"
           />
-          <span ref={feltRef} aria-hidden="true" className="absolute top-[61.5%] left-1/2 @min-[600px]:top-[60%] @min-[600px]:left-[57%]" />
+          <span ref={feltRef} aria-hidden="true" className="absolute top-[61.5%] left-1/2 @min-[600px]:top-[60.5%] @min-[600px]:left-[66%]" />
           {settled && settled.tier < 3 && (
             <span
               key={`glow-${throws}`}
               aria-hidden="true"
-              className="felt-glow absolute top-[63%] left-1/2 h-[22%] w-[92%] -translate-1/2 rounded-[50%] bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--gold)_38%,transparent),transparent)] @min-[600px]:top-[61.5%] @min-[600px]:left-[57%] @min-[600px]:h-[34%] @min-[600px]:w-[42%]"
+              className="felt-glow absolute top-[63%] left-1/2 h-[22%] w-[92%] -translate-1/2 rounded-[50%] bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--gold)_38%,transparent),transparent)] @min-[600px]:top-[62%] @min-[600px]:left-[66%] @min-[600px]:h-[34%] @min-[600px]:w-[42%]"
             />
           )}
 
