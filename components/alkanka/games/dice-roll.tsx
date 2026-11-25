@@ -1,139 +1,217 @@
 'use client'
 
+/*
+  Zar At on the Şans Çarkı terrace: Jako on the left, two dice thrown onto the dais on the right, and between them
+  the title plaque, what each throw pays and the throw button. On phones (stage under 600 wide) Jako is behind the
+  balustrade, the dice land on the dais at the foot and the pay table sits under the stage as chips.
+
+  The throw itself, the daily plays and the payout happen on the server (playMini); the dice only turn to the two
+  values it returns.
+*/
+
 import { useRef, useState } from 'react'
+import { Clock } from 'lucide-react'
+import { playMini } from '@/app/actions/wallet'
+import type { RewardConfig } from '@/lib/rewards-shared'
+import { playSound } from '@/lib/sound'
+import { usePrefersReducedMotion } from '@/lib/use-motion'
 import { cn } from '@/lib/utils'
-import { JakoAvatar, type JakoPose } from '../jako'
-import { WinFlash } from './win-flash'
+import { TableBrand } from '../arena/table-brand'
+import { useCatalog } from '../catalog-context'
 import { DetailButton, DetailModal } from '../detail-modal'
+import { usePoints } from '../points-context'
+import { Die, restingTurn, rollTo, type DieTurn } from './dice-stage/die'
 import type { MiniGameProps } from './lucky-wheel'
 import { formatRemaining } from './mini-status'
-import { playMini } from '@/app/actions/wallet'
-import { usePoints } from '../points-context'
-import { useCatalog } from '../catalog-context'
-import { diceReward } from '@/lib/rewards-shared'
-import { TableBrand } from '../arena/table-brand'
+import { burst } from './wheel-stage/burst'
+import type { ActorState } from './wheel-stage/jako-actor'
+import { ActionButton, ActionNote, PayChips, PayRows, StagePlaque, type PayRow } from './wheel-stage/parts'
+import { StageBackdrop } from './wheel-stage/stage'
 
-const PIPS: Record<number, number[]> = {
-  1: [4],
-  2: [0, 8],
-  3: [0, 4, 8],
-  4: [0, 2, 6, 8],
-  5: [0, 2, 4, 6, 8],
-  6: [0, 2, 3, 5, 6, 8],
+type Pair = [number, number]
+
+export type DiceDraw = () => Promise<{ ok: true; dice: Pair; points: number; balance: number } | { ok: false; error: string; balance?: number }>
+
+const serverDraw: DiceDraw = async () => {
+  const res = await playMini('zar')
+  if (res.ok && res.game === 'zar') return { ok: true, dice: res.dice, points: res.points, balance: res.balance }
+  return { ok: false, error: res.ok ? 'Zar atılamadı, tekrar dene.' : res.error, balance: res.balance }
 }
 
-function Die({ value, rolling, tone }: { value: number; rolling: boolean; tone: 'cyan' | 'purple' }) {
-  return (
-    <div
-      role="img"
-      aria-label={`Zar: ${value}`}
-      className={cn(
-        'grid size-20 grid-cols-3 grid-rows-3 gap-1 rounded-2xl border bg-card p-3 sm:size-24',
-        tone === 'cyan' ? 'border-primary/50 glow-cyan' : 'border-accent/50 glow-purple',
-        rolling && 'animate-tumble',
-      )}
-    >
-      {Array.from({ length: 9 }).map((_, i) => (
-        <span key={i} className="flex items-center justify-center">
-          {PIPS[value].includes(i) && (
-            <span
-              className={cn(
-                'size-3 rounded-full sm:size-3.5',
-                tone === 'cyan' ? 'bg-primary shadow-[0_0_8px_var(--primary)]' : 'bg-accent shadow-[0_0_8px_var(--accent)]',
-              )}
-            />
-          )}
-        </span>
-      ))}
-    </div>
-  )
-}
+const TIERS = ['Düşeş', 'Çift', 'Yüksek atış', 'Atış']
 
+/** Which row of the pay table a throw falls in; the same order the server pays by. */
+const tierOf = ([a, b]: Pair, dice: RewardConfig['dice']) => (a === 6 && b === 6 ? 0 : a === b ? 1 : a + b >= dice.highMin ? 2 : 3)
 
-const rand = () => 1 + Math.floor(Math.random() * 6)
+const ROLL_MS = 1250
+const START: Pair = [5, 3]
 
-export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed }: MiniGameProps) {
+type Result = { dice: Pair; points: number; tier: number }
+
+/** `draw` is where a throw's outcome comes from: the server, unless a preview passes its own. */
+export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serverDraw }: MiniGameProps & { draw?: DiceDraw }) {
   const { setBalance } = usePoints()
-  const { dice: diceConfig } = useCatalog().rewards
+  const config = useCatalog().rewards.dice
+  const reduced = usePrefersReducedMotion()
   const locked = lockedFor > 0
-  const [dice, setDice] = useState<[number, number]>([5, 3])
+  const [shown, setShown] = useState<Pair>(START)
+  const [turns, setTurns] = useState<[DieTurn, DieTurn]>(() => [restingTurn(START[0]), restingTurn(START[1])])
+  const [throws, setThrows] = useState(0)
   const [rolling, setRolling] = useState(false)
-  const [result, setResult] = useState<{ label: string; points: number } | null>(null)
-  const [rollKey, setRollKey] = useState(0)
+  const [result, setResult] = useState<Result | null>(null)
+  const [error, setError] = useState('')
+  const [actor, setActor] = useState<ActorState>('idle')
   const [rules, setRules] = useState(false)
-  const interval = useRef<ReturnType<typeof setInterval> | null>(null)
+  const diceRef = useRef<HTMLDivElement>(null)
 
   async function roll() {
     if (rolling || !canPlay()) return
     setRolling(true)
-    setResult(null)
-    setRollKey((k) => k + 1)
-    interval.current = setInterval(() => setDice([rand(), rand()]), 90)
-    const started = Date.now()
-    const res = await playMini('zar')
-    setTimeout(() => {
-      if (interval.current) clearInterval(interval.current)
+    setError('')
+    const res = await draw()
+    if (!res.ok) {
       setRolling(false)
-      if (!res.ok || res.game !== 'zar') {
-        if (typeof res.balance === 'number') setBalance(res.balance)
-        if (!res.ok) setResult({ label: res.error, points: 0 })
-        return
-      }
-      setDice(res.dice)
-      setResult({ label: diceReward(res.dice[0], res.dice[1], diceConfig).label, points: res.points })
-      setBalance(res.balance)
-      onPlayed()
-    }, Math.max(0, 900 - (Date.now() - started)))
+      setError(res.error)
+      if (typeof res.balance === 'number') setBalance(res.balance)
+      return
+    }
+    setResult(null)
+    setActor('spin')
+    setShown(res.dice)
+    setTurns(([a, b]) => [rollTo(a, res.dice[0], 2), rollTo(b, res.dice[1], 3)])
+    setThrows((n) => n + 1)
+    playSound('dice')
+    await new Promise((done) => setTimeout(done, reduced ? 0 : ROLL_MS))
+
+    const tier = tierOf(res.dice, config)
+    const big = tier < 3
+    setRolling(false)
+    setResult({ dice: res.dice, points: res.points, tier })
+    setBalance(res.balance)
+    setActor(res.points <= 0 ? 'lose' : big ? 'win' : 'idle')
+    playSound(res.points <= 0 ? 'lose' : big ? 'win' : 'coin')
+    if (big && res.points > 0) {
+      const box = diceRef.current?.getBoundingClientRect()
+      if (box) burst(box.left + box.width / 2, box.top + box.height / 2, tier === 0 ? 48 : 26)
+    }
+    onPlayed()
   }
 
-  const isDouble = result && dice[0] === dice[1]
-  const jakoPose: JakoPose = rolling ? 'zar' : result ? (result.points >= 100 ? 'kazandi' : 'jako') : 'zar'
+  const plays = Math.max(1, playsLeft ?? 1)
+  const prizes = [`${config.jackpot} KC`, `zar × ${config.doubleX}`, `toplam × ${config.highX}`, `toplam × ${config.lowX}`]
+  // The middle column is narrow, so its rows use the short names; the chips under a phone stage have room for more.
+  const rows: PayRow[] = ['Düşeş', 'Çift', `${config.highMin}+`, 'Diğer'].map((name, i) => ({ name, prize: prizes[i] }))
+  const chips: PayRow[] = ['Düşeş (6-6)', 'Çift', `Toplam ${config.highMin}+`, 'Diğer atışlar'].map((name, i) => ({ name, prize: prizes[i] }))
+  const lit = result && !rolling ? result.tier : null
 
   return (
-    <article className="panel-gold relative flex flex-col gap-5 overflow-hidden rounded-2xl p-6">
-      <TableBrand center={false} />
-      <header className="flex items-start justify-between gap-4">
-        <div className="flex flex-col items-start gap-1">
-          <span className="text-xs font-semibold uppercase tracking-widest text-primary">Mini oyun</span>
-          <h3 className="font-display text-xl font-bold text-foreground">Zar At</h3>
-          <p className="text-sm leading-relaxed text-muted-foreground">Çift gelirse puanın katlanır. Düşeş jackpot kutusunu açar.</p>
-          <DetailButton onClick={() => setRules(true)} label="Oyun kuralları" />
-        </div>
-        <JakoAvatar pose={jakoPose} size="lg" className={cn('transition-transform', result && 'animate-pop')} />
-      </header>
+    <article className="flex min-w-0 flex-col gap-3">
+      <section aria-labelledby="zar-at-baslik" className="@container min-w-0">
+        <h3 id="zar-at-baslik" className="sr-only">
+          Zar At
+        </h3>
+        <div className="relative isolate aspect-[9/16] w-full overflow-hidden rounded-2xl border border-gold/25 bg-background @min-[600px]:aspect-[2/1] @min-[600px]:max-h-[600px]">
+          <StageBackdrop state={actor} armed={!locked && !rolling} />
+          <TableBrand center={false} corners={false} jako={false} plaque="top" />
+          <StagePlaque>Zar At</StagePlaque>
 
-      <div className="relative flex items-center justify-center gap-5 py-4" key={rollKey}>
-        <Die value={dice[0]} rolling={rolling} tone="cyan" />
-        <Die value={dice[1]} rolling={rolling} tone="purple" />
-        {result && result.points > 0 && <WinFlash label={`+${result.points} KC`} big={!!isDouble} />}
-      </div>
+          <div className="absolute top-[23.5%] left-[31.5%] hidden w-[19.5%] @min-[600px]:block">
+            <PayRows label="Zar ödülleri" rows={rows} lit={lit} />
+          </div>
 
-      <div className="relative z-10 mb-6 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <p aria-live="polite" className="min-w-0 text-sm">
-            {result ? (
-              <span className="animate-pop font-semibold text-gold">{result.label}</span>
+          <div className="absolute top-[42%] left-1/2 flex w-[84%] -translate-x-1/2 flex-col items-center text-center @min-[600px]:top-[8%] @min-[600px]:left-[69.7%] @min-[600px]:w-[34%]">
+            {error ? (
+              <p className="rounded-lg bg-background/80 px-3 py-2 text-sm leading-5 font-semibold text-destructive">{error}</p>
+            ) : result && !rolling ? (
+              <div key={throws} className="wheel-rise flex flex-col items-center">
+                <p className="text-[clamp(13px,3.6cqw,16px)] font-bold text-foreground tabular-nums [text-shadow:0_1px_0_rgb(0_0_0/0.7)] @min-[600px]:text-[clamp(11px,1.5cqw,15px)]">
+                  {TIERS[result.tier]} · {result.dice[0]} + {result.dice[1]} = {result.dice[0] + result.dice[1]}
+                </p>
+                <p className="flex items-baseline gap-1.5 font-display text-[clamp(34px,11cqw,48px)] leading-[1.1] font-extrabold tracking-tight text-gold tabular-nums [text-shadow:0_2px_0_rgb(0_0_0/0.6)] @min-[600px]:text-[clamp(26px,4.6cqw,48px)]">
+                  +{result.points.toLocaleString('tr-TR')}
+                  <span className="text-[0.42em] font-bold tracking-normal">KC</span>
+                </p>
+              </div>
             ) : (
-              <span className="text-muted-foreground">
-                {rolling ? 'Zarlar dönüyor…' : locked ? `Haklar ${formatRemaining(lockedFor)} sonra yenilenir` : `Günde ${diceConfig.dailyPlays} atış hakkın var`}
-              </span>
+              <p className="text-[clamp(13px,3.6cqw,16px)] leading-relaxed font-semibold text-foreground/85 [text-shadow:0_1px_0_rgb(0_0_0/0.7)] @min-[600px]:text-[clamp(11px,1.5cqw,15px)]">
+                {rolling ? 'Zarlar havada…' : (
+                  <>
+                    Düşeş gelirse <span className="font-extrabold text-gold tabular-nums">{config.jackpot} KC</span>
+                  </>
+                )}
+              </p>
             )}
-          </p>
-          {playsLeft != null && !locked && (
-            <p className="text-xs text-muted-foreground">
-              Kalan hak: <span className="font-bold tabular-nums text-foreground">{playsLeft}</span>
-            </p>
-          )}
+          </div>
+
+          <div
+            ref={diceRef}
+            className="absolute top-[63.4%] left-1/2 flex -translate-x-1/2 gap-[10cqw] [--s:26cqw] @min-[600px]:top-[46.5%] @min-[600px]:left-[69.7%] @min-[600px]:gap-[4.6cqw] @min-[600px]:[--s:11.5cqw]"
+          >
+            {([0, 1] as const).map((i) => (
+              <div key={i} className="relative size-(--s)">
+                <span
+                  key={`shade-${throws}`}
+                  aria-hidden="true"
+                  className={cn(
+                    'absolute top-[88%] left-1/2 h-[26%] w-[120%] -translate-x-1/2 rounded-[50%] bg-[radial-gradient(closest-side,rgb(0_0_0/0.75),transparent)]',
+                    throws > 0 && 'dice-shade',
+                  )}
+                />
+                <div key={`hop-${throws}`} className={cn(throws > 0 && 'dice-hop')} style={{ animationDelay: `${i * 70}ms` }}>
+                  <Die value={shown[i]} turn={turns[i]} tone={i === 0 ? 'gold' : 'dark'} lean={i === 0 ? 16 : -16} still={reduced} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="absolute inset-x-[6%] bottom-[4%] flex flex-col items-stretch gap-1.5 @min-[600px]:inset-x-auto @min-[600px]:bottom-[6%] @min-[600px]:left-[31.5%] @min-[600px]:w-[19.5%]">
+            <ActionButton onClick={roll} disabled={rolling || locked}>
+              {locked ? (
+                <>
+                  <Clock className="size-4" aria-hidden="true" />
+                  <span className="sr-only">Sonraki atış: </span>
+                  {formatRemaining(lockedFor)}
+                </>
+              ) : rolling ? (
+                'Zarlar atılıyor…'
+              ) : result ? (
+                'Tekrar at'
+              ) : (
+                'Zar at'
+              )}
+            </ActionButton>
+            <ActionNote>
+              {locked
+                ? 'Hakların 00:00’da yenilenir.'
+                : playsLeft == null
+                  ? `Günde ${config.dailyPlays} atış hakkın var.`
+                  : `${plays} atış hakkın var.`}
+            </ActionNote>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={roll}
-          disabled={rolling || locked}
-          className="shrink-0 rounded-lg bg-primary px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-primary-foreground transition-transform hover:scale-105 disabled:opacity-60 disabled:hover:scale-100"
-        >
-          {rolling ? 'Atılıyor' : locked ? 'Hak doldu' : 'Zar at'}
-        </button>
+      </section>
+
+      <div className="@container">
+        <div className="@min-[600px]:hidden">
+          <PayChips label="Zar ödülleri" rows={chips} lit={lit} columns={2} />
+        </div>
       </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-border bg-card px-4 py-3">
+        <p className="min-w-0 flex-1 basis-56 text-sm leading-relaxed text-muted-foreground">
+          Günde {config.dailyPlays} atış. Her atış kazandırır; çift gelirse puanın katlanır, düşeş jackpot verir.
+        </p>
+        <div className="flex shrink-0 items-center gap-2">
+          <DetailButton onClick={() => setRules(true)} label="Oyun kuralları" />
+          <span className="rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold tabular-nums text-primary">
+            {locked ? formatRemaining(lockedFor) : `${plays} hak`}
+          </span>
+        </div>
+      </div>
+
+      <p aria-live="polite" className="sr-only">
+        {error || (result && !rolling ? `${TIERS[result.tier]}: ${result.dice[0]} ve ${result.dice[1]}, ${result.points} Kanka Coin kazandın` : '')}
+      </p>
 
       <DetailModal
         onClose={() => setRules(false)}
@@ -144,13 +222,13 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed }: MiniGamePr
                 title: 'Zar At kuralları',
                 description: 'İki zar atılır, sonuca göre Kanka Coin kazanırsın. Her atış kazandırır, çift ve düşeş daha çok kazandırır.',
                 prizes: [
-                  { place: 'Düşeş (6-6)', prize: `Jackpot · ${diceConfig.jackpot} KC` },
-                  { place: 'Çift (1-1 … 5-5)', prize: `Zar × ${diceConfig.doubleX} KC` },
-                  { place: `Toplam ${diceConfig.highMin}+`, prize: `Toplam × ${diceConfig.highX} KC` },
-                  { place: 'Diğer atışlar', prize: `Toplam × ${diceConfig.lowX} KC` },
+                  { place: 'Düşeş (6-6)', prize: `Jackpot · ${config.jackpot} KC` },
+                  { place: 'Çift (1-1 … 5-5)', prize: `Zar × ${config.doubleX} KC` },
+                  { place: `Toplam ${config.highMin}+`, prize: `Toplam × ${config.highX} KC` },
+                  { place: 'Diğer atışlar', prize: `Toplam × ${config.lowX} KC` },
                 ],
                 rules: [
-                  `Günde ${diceConfig.dailyPlays} atış hakkın var, haklar 00:00’da yenilenir.`,
+                  `Günde ${config.dailyPlays} atış hakkın var, haklar 00:00’da yenilenir.`,
                   'Marketten alınan 2x Boost aktifken kazanç ikiye katlanır.',
                   'Sonuçlar tamamen rastgeledir, önceki atışlar sonraki atışı etkilemez.',
                   'Kazanılan Kanka Coin anında bakiyene eklenir.',
