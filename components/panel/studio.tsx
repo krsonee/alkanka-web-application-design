@@ -3,7 +3,7 @@
 
 import { askConfirm, notify } from '@/components/panel/confirm-dialog'
 import { useRouter } from 'next/navigation'
-import { useState, useTransition, type FormEvent } from 'react'
+import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react'
 import {
   BookOpen,
   Clapperboard,
@@ -204,6 +204,12 @@ export function Studio({ brands, assets, jobs, totals, initialArea, spend, budge
     setPicked(next)
     writeArea(next)
   }
+  // A library picture sent to "Üret" to be animated; the panel there opens on it.
+  const [libraryPick, setLibraryPick] = useState<StudioAsset | null>(null)
+  function animateFromLibrary(asset: StudioAsset) {
+    setLibraryPick(asset)
+    setView('create')
+  }
   const figures = spend && budget ? { spend, budget } : null
   // Without the figures the screen only knows whether the cap is used up; the server refuses anything over it.
   const left = figures ? budgetState(figures.spend.month, figures.budget.cap).left : capFull ? 0 : null
@@ -248,11 +254,23 @@ export function Studio({ brands, assets, jobs, totals, initialArea, spend, budge
         <StudioHint section={view} onOpenGuide={() => setView('guide')} />
       )}
       {view === 'create' ? (
-        <Creator brands={brands} assets={assets} jobs={jobs} totals={totals} area={area} onArea={pickArea} left={left} figures={Boolean(figures)} canSlide={canSlide} />
+        <Creator
+          brands={brands}
+          assets={assets}
+          jobs={jobs}
+          totals={totals}
+          area={area}
+          onArea={pickArea}
+          left={left}
+          figures={Boolean(figures)}
+          canSlide={canSlide}
+          fromLibrary={libraryPick}
+          onLibraryDone={() => setLibraryPick(null)}
+        />
       ) : view === 'brands' ? (
         <BrandKits brands={brands} />
       ) : view === 'library' ? (
-        <StudioLibrary assets={assets} />
+        <StudioLibrary assets={assets} onAnimate={animateFromLibrary} />
       ) : null}
     </div>
   )
@@ -268,7 +286,12 @@ function Creator({
   left,
   figures,
   canSlide,
+  fromLibrary,
+  onLibraryDone,
 }: Pick<Props, 'brands' | 'assets' | 'jobs' | 'totals' | 'canSlide'> & {
+  /** A provider library picture waiting to be animated, when staff came here from its card. */
+  fromLibrary: StudioAsset | null
+  onLibraryDone: () => void
   /** The account sees the cap and what is left of it. */
   figures: boolean
   /** The brand whose area is open; the form makes new work for it and the list shows only its jobs. */
@@ -294,6 +317,12 @@ function Creator({
   const [revising, setRevising] = useState<StudioJob | null>(null)
   const [revision, setRevision] = useState('')
   const [animating, setAnimating] = useState<StudioJob | null>(null)
+  // A banner picked from the list here comes before a picture brought over from the library.
+  const animTarget = animating ?? fromLibrary
+  const animPanel = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (fromLibrary) animPanel.current?.scrollIntoView({ block: 'center' })
+  }, [fromLibrary])
   const [duration, setDuration] = useState<number>(6)
   const [gifSeconds, setGifSeconds] = useState<number>(GIF_DURATIONS[0])
   const [audio, setAudio] = useState(false)
@@ -374,12 +403,12 @@ function Creator({
     }
   }
 
-  async function animate(job: StudioJob, options: AnimateOptions) {
+  async function animate(source: { jobId: number } | { assetId: number; brandId: number | null }, options: AnimateOptions) {
     const isVideo = PAID_MOTION.includes(options.mode)
     if (isVideo) setVideoRuns((n) => n + 1)
     else setRunning((n) => n + 1)
     try {
-      return await post('/api/studio/animate', { jobId: job.id, ...options })
+      return await post('/api/studio/animate', { ...source, ...options })
     } finally {
       if (isVideo) setVideoRuns((n) => n - 1)
       else setRunning((n) => n - 1)
@@ -395,19 +424,24 @@ function Creator({
     await Promise.all(
       runs.map(async (format) => {
         const made = await generate({ kind: baseKind, format, category, brief, brandId, assetIds: references, useMascot, size, texts, outline })
-        if (made && followUp) await animate(made, motionOptions(followUp))
+        if (made && followUp) await animate({ jobId: made.id }, motionOptions(followUp))
       }),
     )
     router.refresh()
   }
 
   async function runAnimation(mode: 'gif' | 'aigif' | 'video') {
-    if (!animating) return
+    if (!animTarget) return
     setError('')
-    const job = animating
-    setAnimating(null)
-    await animate(job, motionOptions(mode))
+    const source = animating ? { jobId: animating.id } : { assetId: animTarget.id, brandId: brandId === '' ? null : brandId }
+    closeAnimation()
+    await animate(source, motionOptions(mode))
     router.refresh()
+  }
+
+  function closeAnimation() {
+    setAnimating(null)
+    onLibraryDone()
   }
 
   function openRevision(job: StudioJob) {
@@ -717,14 +751,19 @@ function Creator({
           </div>
         ) : null}
 
-        {animating ? (
-          <div className={card}>
+        {animTarget ? (
+          <div ref={animPanel} className={card}>
             <div className="flex items-center gap-2">
               <Film className="size-5 text-primary" aria-hidden />
               <h3 className="font-display text-lg font-bold uppercase text-foreground">Hareketlendir</h3>
             </div>
+            {animating ? null : (
+              <p className="text-pretty text-sm leading-relaxed text-muted-foreground">
+                {`Kütüphane görseli olduğu gibi hareketlenir: kırpılmaz, üstüne yazı ya da logo eklenmez. Sonuç "${areaName}" alanına kaydedilir.`}
+              </p>
+            )}
             <div className="flex flex-col gap-4 md:flex-row">
-              <img src={animating.url || '/placeholder.svg'} alt="Hareketlendirilecek banner" className="h-32 self-start rounded-lg object-contain" />
+              <img src={animTarget.url || '/placeholder.svg'} alt="Hareketlendirilecek görsel" className="h-32 self-start rounded-lg object-contain" />
               <div className="flex flex-1 flex-col gap-3">
                 <div className="flex gap-1.5" role="group" aria-label="Çıktı türü">
                   {(
@@ -770,7 +809,7 @@ function Creator({
               <button type="button" onClick={() => runAnimation('gif')} className={ghostBtn} title="Görsel durur, üstünden ışık geçer">
                 <Film className="size-3.5" aria-hidden /> Işık efektli GIF · ücretsiz
               </button>
-              <button type="button" onClick={() => setAnimating(null)} className={ghostBtn}>
+              <button type="button" onClick={closeAnimation} className={ghostBtn}>
                 Vazgeç
               </button>
             </div>
@@ -814,7 +853,7 @@ function Creator({
               motionOff={overCap(STICKER_MOTION_COST)}
               onTelegram={async (mode) => {
                 setError('')
-                await animate(job, motionOptions(mode))
+                await animate({ jobId: job.id }, motionOptions(mode))
                 router.refresh()
               }}
             />

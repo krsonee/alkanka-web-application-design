@@ -181,6 +181,7 @@ export function StudioGuide({ onNavigate }: { onNavigate: (section: Section) => 
               <>Her görsel eklenirken bir kez incelenir ve türü yazılır: {b('Karakter')}, {b('Oyun logosu')}, {b('Arka plan')}, {b('Sembol')}, {b('Nesne')}, {b('Diğer')}. Yanına 1-10 arası bir puan düşer; harf sembolleri, logonun beyaz kopyası ve boş çerçeveler düşük puan alır. Bu inceleme görsel başına 1 sentin altındadır ve aylık harcamaya eklenir.</>,
               <>Üstünde {b('Otomatik')} yazan görseller, o oyunun adı üretim formunda geçtiğinde kendiliğinden kullanılacak olanlardır: en iyi karakter, renkli logo ve arka plan. Tür yanlışsa listeden değiştir; başka bir görselin kullanılmasını istiyorsan yıldıza bas, yıldızlı görsel öne geçer.</>,
               <>Türü belirlenemeyen görsel olursa oyunun satırında {b('Etiketle')} düğmesi çıkar. Etiketsiz görsel otomatik seçilmez, elle seçilebilir.</>,
+              <>Kütüphanedeki bir görseli doğrudan hareketlendirmek için kartındaki {b('GIF / video yap')} düğmesine bas. {b('Üret')} sekmesi o görselle açılır; hareketi yazıp {b('Hareketli GIF üret')} ya da {b('Video üret')} dersin. Görsel kırpılmaz, üstüne yazı ya da logo eklenmez; sonuç o an açık olan marka alanına kaydedilir.</>,
               <>Üretim formunda oyunun adını yazınca seçilen görseller formun içinde görünür. {b('Kendim seçeyim')} ile değiştirir, {b('Kullanma')} ile o üretimde hiç kullanmazsın. {b('Referans görseli elle seç')} bölümünden en fazla 3 görseli kendin de işaretleyebilirsin.</>,
             ]}
           />

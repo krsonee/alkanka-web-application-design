@@ -111,6 +111,12 @@ export async function listAssets() {
   )
 }
 
+export async function getAsset(id: number) {
+  await ensureTables()
+  const r = await rows(sql`SELECT id, provider, game, pathname FROM studio_assets WHERE id = ${id}`)
+  return r.length ? { id: Number(r[0].id), provider: String(r[0].provider), game: String(r[0].game), pathname: String(r[0].pathname) } : null
+}
+
 export async function addAsset(provider: string, game: string, pathname: string, label: AssetLabel | null = null) {
   await ensureTables()
   await rows(sql`INSERT INTO studio_assets (provider, game, pathname, role, score, note)

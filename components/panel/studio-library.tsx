@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useMemo, useState, useTransition, type DragEvent } from 'react'
-import { FolderUp, ImagePlus, Link2, Loader2, Star, Tags, Trash2, Upload } from 'lucide-react'
+import { Film, FolderUp, ImagePlus, Link2, Loader2, Star, Tags, Trash2, Upload } from 'lucide-react'
 import { deleteAssetAction, pinAssetAction, setAssetRoleAction } from '@/app/panel/studio-actions'
 import { askConfirm } from '@/components/panel/confirm-dialog'
 import { ASSET_ROLES, bestAssets, foldName, MAX_REFERENCES, ROLE_LABELS, type AssetRole } from '@/lib/studio-refs'
@@ -74,7 +74,7 @@ type Group = { provider: string; game: string; items: StudioAsset[] }
 
 const lower = foldName
 
-export function StudioLibrary({ assets }: { assets: StudioAsset[] }) {
+export function StudioLibrary({ assets, onAnimate }: { assets: StudioAsset[]; onAnimate: (asset: StudioAsset) => void }) {
   const router = useRouter()
   const [provider, setProvider] = useState('')
   const [game, setGame] = useState('')
@@ -340,7 +340,7 @@ export function StudioLibrary({ assets }: { assets: StudioAsset[] }) {
           <section key={p} className="flex flex-col gap-3">
             <h3 className="font-display text-lg font-bold uppercase text-foreground">{p}</h3>
             {games.map((group) => (
-              <GameShelf key={`${group.provider}/${group.game}`} group={group} filter={filter} open={groups.length === 1} busy={busy} onLabel={labelRest} />
+              <GameShelf key={`${group.provider}/${group.game}`} group={group} filter={filter} open={groups.length === 1} busy={busy} onLabel={labelRest} onAnimate={onAnimate} />
             ))}
           </section>
         )
@@ -349,7 +349,21 @@ export function StudioLibrary({ assets }: { assets: StudioAsset[] }) {
   )
 }
 
-function GameShelf({ group, filter, open, busy, onLabel }: { group: Group; filter: Filter; open: boolean; busy: boolean; onLabel: (ids: number[]) => void }) {
+function GameShelf({
+  group,
+  filter,
+  open,
+  busy,
+  onLabel,
+  onAnimate,
+}: {
+  group: Group
+  filter: Filter
+  open: boolean
+  busy: boolean
+  onLabel: (ids: number[]) => void
+  onAnimate: (asset: StudioAsset) => void
+}) {
   const auto = group.game ? bestAssets(group.game, group.items, 'banner') : []
   const waiting = group.items.filter((a) => !a.role)
   const items = filter === 'all' ? group.items : group.items.filter((a) => (filter === 'none' ? !a.role : a.role === filter))
@@ -374,7 +388,7 @@ function GameShelf({ group, filter, open, busy, onLabel }: { group: Group; filte
         {items.length ? (
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-3">
             {items.map((asset) => (
-              <AssetCard key={asset.id} asset={asset} auto={auto.includes(asset.id)} />
+              <AssetCard key={asset.id} asset={asset} auto={auto.includes(asset.id)} onAnimate={() => onAnimate(asset)} />
             ))}
           </ul>
         ) : (
@@ -385,7 +399,7 @@ function GameShelf({ group, filter, open, busy, onLabel }: { group: Group; filte
   )
 }
 
-function AssetCard({ asset, auto }: { asset: StudioAsset; auto: boolean }) {
+function AssetCard({ asset, auto, onAnimate }: { asset: StudioAsset; auto: boolean; onAnimate: () => void }) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const run = (work: () => Promise<unknown>) =>
@@ -456,6 +470,18 @@ function AssetCard({ asset, auto }: { asset: StudioAsset; auto: boolean }) {
           className="rounded-md p-1 text-destructive disabled:opacity-40"
         >
           <Trash2 className="size-4" aria-hidden />
+        </button>
+      </div>
+      <div className="bg-card px-1.5 pb-1.5">
+        <button
+          type="button"
+          disabled={pending}
+          onClick={onAnimate}
+          title="Bu görselden hareketli GIF ya da video üret"
+          className="flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary disabled:opacity-50"
+        >
+          <Film className="size-3.5" aria-hidden />
+          GIF / video yap
         </button>
       </div>
     </li>
