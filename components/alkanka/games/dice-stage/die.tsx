@@ -1,12 +1,14 @@
 /*
-  One die as a real cube: six faces around a centre, turned by two angles so the rolled value ends up facing the
-  viewer. The cube keeps turning forward from wherever it stopped, so every roll tumbles the same way and the
-  transition never unwinds.
+  One die as a real cube: six faces around a centre, with three planes through the middle so nothing shows through
+  its rounded edges while it tumbles. It rests showing `value`; a throw moves and turns it frame by frame through
+  the two elements it hands out (throw.ts), and ends on the same pose this component draws.
 
   Its edge length is --s, set by the stage (container units), so the cube scales with the stage.
 */
 
+import type { Ref } from 'react'
 import { cn } from '@/lib/utils'
+import { restPose } from './throw'
 
 const PIPS: Record<number, number[]> = {
   1: [4],
@@ -27,39 +29,18 @@ const FACES: { value: number; place: string }[] = [
   { value: 2, place: 'rotateX(-90deg)' },
 ]
 
-/** The cube's own turn (around X, then Y) that brings a value to the front. */
-const FRONT: Record<number, [number, number]> = {
-  1: [0, 0],
-  6: [0, 180],
-  3: [0, -90],
-  4: [0, 90],
-  5: [-90, 0],
-  2: [90, 0],
-}
-
-export type DieTurn = { x: number; y: number }
-
-export const restingTurn = (value: number): DieTurn => ({ x: FRONT[value][0], y: FRONT[value][1] })
-
-const forward = (from: number, to: number, turns: number) => {
-  const base = from + turns * 360
-  return base + ((((to - base) % 360) + 360) % 360)
-}
-
-/** The next turn that shows `value`, at least `turns` full rotations further on than the current one. */
-export const rollTo = (current: DieTurn, value: number, turns: number): DieTurn => ({
-  x: forward(current.x, FRONT[value][0], turns),
-  y: forward(current.y, FRONT[value][1], turns + 1),
-})
+const CORE = ['rotateY(0deg)', 'rotateY(90deg)', 'rotateX(90deg)']
 
 const TONES = {
   gold: {
     face: 'bg-[radial-gradient(circle_at_28%_22%,color-mix(in_oklch,var(--gold)_78%,white),var(--gold)_52%,color-mix(in_oklch,var(--gold)_62%,black))] inset-ring inset-ring-gold-foreground/30',
     pip: 'bg-gold-foreground shadow-[inset_0_1px_1px_rgb(0_0_0/0.6)]',
+    core: 'bg-[color-mix(in_oklch,var(--gold)_62%,black)]',
   },
   dark: {
     face: 'bg-[radial-gradient(circle_at_28%_22%,color-mix(in_oklch,var(--secondary)_70%,white),var(--secondary)_45%,var(--background))] inset-ring-2 inset-ring-gold/70',
     pip: 'bg-gold shadow-[0_0_0.6cqw_color-mix(in_oklch,var(--gold)_70%,transparent)]',
+    core: 'bg-background',
   },
 }
 
@@ -78,35 +59,31 @@ export function MiniDie({ value }: { value: number }) {
 
 export function Die({
   value,
-  turn,
   tone,
   lean,
-  still,
+  moverRef,
+  cubeRef,
 }: {
   value: number
-  turn: DieTurn
   tone: keyof typeof TONES
   /** How far the cube is turned away from the viewer, so two of its sides show. */
   lean: number
-  /** No tumbling: the cube snaps to its value (reduced motion). */
-  still: boolean
+  moverRef: Ref<HTMLDivElement>
+  cubeRef: Ref<HTMLDivElement>
 }) {
   const look = TONES[tone]
   return (
-    <div role="img" aria-label={`Zar: ${value}`} className="size-(--s) [perspective:calc(var(--s)*9)]">
-      <div className="size-full [transform-style:preserve-3d]" style={{ transform: `rotateX(-16deg) rotateY(${lean}deg)` }}>
-        <div
-          className={cn(
-            'relative size-full [transform-style:preserve-3d]',
-            !still && 'transition-transform duration-[1250ms] ease-[cubic-bezier(0.2,0.7,0.2,1)]',
-          )}
-          style={{ transform: `rotateX(${turn.x}deg) rotateY(${turn.y}deg)` }}
-        >
+    <div ref={moverRef} className="size-(--s) origin-bottom will-change-transform">
+      <div role="img" aria-label={`Zar: ${value}`} className="size-full [perspective:calc(var(--s)*9)]">
+        <div ref={cubeRef} className="relative size-full [transform-style:preserve-3d]" style={{ transform: restPose(value, lean) }}>
+          {CORE.map((place) => (
+            <span key={place} aria-hidden="true" className={cn('absolute inset-[5%]', look.core)} style={{ transform: place }} />
+          ))}
           {FACES.map((face) => (
             <span
               key={face.value}
               aria-hidden="true"
-              className={cn('absolute inset-0 grid grid-cols-3 grid-rows-3 rounded-[13%] p-[13%]', look.face)}
+              className={cn('absolute inset-0 grid grid-cols-3 grid-rows-3 rounded-[13%] p-[13%] [backface-visibility:hidden]', look.face)}
               style={{ transform: `${face.place} translateZ(calc(var(--s) / 2))` }}
             >
               {Array.from({ length: 9 }, (_, i) => (

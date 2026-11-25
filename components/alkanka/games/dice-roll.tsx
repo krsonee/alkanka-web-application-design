@@ -1,32 +1,40 @@
 'use client'
 
 /*
-  Zar At at its own table: a navy felt dice table fills the stage and the two dice are thrown onto it from the
-  player's corner. Across the top are the game's name and the four things a throw can be, each drawn with the dice
-  that make it; Jako leans in at the lower left and says what is going on, the throw button is at the lower right
-  (beside him on phones, where the stage is 9 : 16 instead of 2 : 1).
+  Zar At at its own table: a navy felt dice table fills the stage and Jako, the croupier, stands at its lower left
+  with a dice cup. A throw sweeps the dice on the felt back to his cup; when his hand lets go they fly in, land,
+  bounce twice and slide to a stop (dice-stage/throw.ts), raising dust and a ring on the felt at each landing
+  (mini-stage/room-fx.tsx). While they are in the air the pay tiles light up in turn, and the one the throw made
+  stays lit; coins spill onto the felt for what was won, and a double or better makes the dice jump. Across the
+  top are the game's name and the four things a throw can be, each drawn with the dice that make it; what Jako
+  says is beside him and the throw button is at the lower right (the stage is 9 : 16 on phones instead of 2 : 1).
 
-  The throw itself, the daily plays and the payout happen on the server (playMini); the dice only turn to the two
-  values it returns.
+  The throw itself, the daily plays and the payout happen on the server (playMini); the dice are thrown to land
+  on the two values it returns.
 */
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import Image from 'next/image'
 import { Clock } from 'lucide-react'
 import { playMini } from '@/app/actions/wallet'
 import type { RewardConfig } from '@/lib/rewards-shared'
-import { playSound } from '@/lib/sound'
+import { pacedFrames } from '@/lib/paced-frames'
+import { buzz, playSound } from '@/lib/sound'
 import { usePrefersReducedMotion } from '@/lib/use-motion'
 import { cn } from '@/lib/utils'
 import { TableBrand } from '../arena/table-brand'
 import { useCatalog } from '../catalog-context'
 import { DetailButton, DetailModal } from '../detail-modal'
 import { usePoints } from '../points-context'
-import { Die, MiniDie, restingTurn, rollTo, type DieTurn } from './dice-stage/die'
+import { Die, MiniDie } from './dice-stage/die'
+import { hop, scoop, settle, throwDice, type DieRig } from './dice-stage/throw'
 import type { MiniGameProps } from './lucky-wheel'
 import { formatRemaining } from './mini-status'
-import { CallerBubble, JakoCaller, StageResult, StageShade, StageTitle, type CallerMood } from './mini-stage/caller'
+import { CallerBubble, StageResult, StageShade, StageTitle } from './mini-stage/caller'
+import { RoomFx, type RoomFxHandle, type Zone } from './mini-stage/room-fx'
 import { burst } from './wheel-stage/burst'
+import { JakoActor, type ActorCast, type ActorState } from './wheel-stage/jako-actor'
 import { ActionButton, ActionNote } from './wheel-stage/parts'
 
 type Pair = [number, number]
@@ -51,16 +59,32 @@ function highPair(min: number): Pair {
   return [a, Math.min(6, Math.max(1, min - a))]
 }
 
-const ROLL_MS = 1250
+/** How long after the button Jako's hand lets go: the dice wait for it, however fast the server answers. */
+const RELEASE_MS = 950
 const START: Pair = [5, 3]
+/** How far each die is turned away from the viewer at rest. */
+const LEANS = [24, -18]
+/** Coins that spill onto the felt, by what the throw was. */
+const COINS = [30, 16, 9, 4]
+/** Where dust hangs in the lamp light over the felt. */
+const DUST: { wide: Zone; tall: Zone } = { wide: { x: [0.28, 0.92], y: [0.06, 0.8] }, tall: { x: [0.02, 0.98], y: [0.2, 0.84] } }
+
+const wait = (ms: number) => new Promise<void>((done) => setTimeout(done, ms))
+
+/** The croupier: cup in hand while waiting, the throw, and the cup raised for a double or better. Every throw pays. */
+const CROUPIER: ActorCast = {
+  still: '/images/dice/jako.webp',
+  clips: { idle: '/video/dice/jako-idle.mp4', spin: '/video/dice/jako-spin.mp4', win: '/video/dice/jako-win.mp4' },
+  frame: { width: 916, height: 570 },
+}
 
 /*
   Where the dice come to rest on the felt (percentages of the stage) and how big they are; the nearer one is larger.
-  --from-x / --from-y is the corner they are thrown in from: the throw button's side, off the stage.
+  --from-x / --from-y is where they are thrown in from: under Jako's throwing hand, off the stage's lower edge.
 */
 const RESTS = [
-  'top-[57.5%] left-[37%] [--s:22cqw] [--from-x:34cqw] [--from-y:96cqw] @min-[600px]:top-[56%] @min-[600px]:left-[43%] @min-[600px]:[--s:9cqw] @min-[600px]:[--from-x:44cqw] @min-[600px]:[--from-y:26cqw]',
-  'top-[65%] left-[64%] [--s:25cqw] [--from-x:24cqw] [--from-y:84cqw] @min-[600px]:top-[63.5%] @min-[600px]:left-[54.5%] @min-[600px]:[--s:10.5cqw] @min-[600px]:[--from-x:36cqw] @min-[600px]:[--from-y:22cqw]',
+  'top-[57.5%] left-[37%] [--s:22cqw] [--from-x:4cqw] [--from-y:78cqw] @min-[600px]:top-[56%] @min-[600px]:left-[46%] @min-[600px]:[--s:9cqw] @min-[600px]:[--from-x:-12cqw] @min-[600px]:[--from-y:26cqw]',
+  'top-[65%] left-[64%] [--s:25cqw] [--from-x:-20cqw] [--from-y:66cqw] @min-[600px]:top-[63.5%] @min-[600px]:left-[57.5%] @min-[600px]:[--s:10.5cqw] @min-[600px]:[--from-x:-22cqw] @min-[600px]:[--from-y:22cqw]',
 ]
 
 /** A little scatter per throw (in die widths, and degrees of lean), so two throws never land on the same spot. */
@@ -72,7 +96,10 @@ const SCATTER = [
   [0.22, 0.08, -11],
 ]
 
+const scatterOf = (i: number, throws: number) => SCATTER[(throws + i * 2) % SCATTER.length]
+
 type Result = { dice: Pair; points: number; tier: number }
+type Frames = ReturnType<typeof pacedFrames>
 
 /** `draw` is where a throw's outcome comes from: the server, unless a preview passes its own. */
 export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serverDraw }: MiniGameProps & { draw?: DiceDraw }) {
@@ -81,45 +108,125 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
   const reduced = usePrefersReducedMotion()
   const locked = lockedFor > 0
   const [shown, setShown] = useState<Pair>(START)
-  const [turns, setTurns] = useState<[DieTurn, DieTurn]>(() => [restingTurn(START[0]), restingTurn(START[1])])
   const [throws, setThrows] = useState(0)
   const [rolling, setRolling] = useState(false)
   const [result, setResult] = useState<Result | null>(null)
   const [error, setError] = useState('')
-  const [mood, setMood] = useState<CallerMood>('idle')
+  const [mood, setMood] = useState<ActorState>('idle')
   const [rules, setRules] = useState(false)
+  const [chase, setChase] = useState<number | null>(null)
   const feltRef = useRef<HTMLSpanElement>(null)
+  const fx = useRef<RoomFxHandle>(null)
+  const rests = useRef<(HTMLDivElement | null)[]>([])
+  const movers = useRef<(HTMLDivElement | null)[]>([])
+  const cubes = useRef<(HTMLDivElement | null)[]>([])
+  const shades = useRef<(HTMLSpanElement | null)[]>([])
+  /* the throw and the jump after a good one run on their own loops, so a new throw can cut the jump short */
+  const throwLoop = useRef<Frames | null>(null)
+  const hopLoop = useRef<Frames | null>(null)
+
+  useEffect(
+    () => () => {
+      throwLoop.current?.cancel()
+      hopLoop.current?.cancel()
+    },
+    [],
+  )
+
+  /* while the dice are in the air the pay tiles light up one after another */
+  useEffect(() => {
+    if (!rolling || reduced) {
+      setChase(null)
+      return
+    }
+    let at = 0
+    setChase(0)
+    const timer = setInterval(() => setChase((at = (at + 1) % 4)), 120)
+    return () => clearInterval(timer)
+  }, [rolling, reduced])
+
+  const bigWin = Boolean(result && !rolling && result.tier < 3)
+  useEffect(() => {
+    fx.current?.glints(
+      rolling || locked ? [] : rests.current.map((el) => ({ el, rate: bigWin ? 2.4 : 0.35, box: [0.1, 0, 0.9, 0.7] as [number, number, number, number] })),
+    )
+  }, [rolling, locked, bigWin])
+
+  /** The two dice as the throw code moves them, leaning the way they do on throw number `count`. */
+  function rigsFor(count: number): DieRig[] | null {
+    const list: DieRig[] = []
+    for (const i of [0, 1]) {
+      const mover = movers.current[i]
+      const cube = cubes.current[i]
+      const shade = shades.current[i]
+      if (!mover || !cube || !shade) return null
+      list.push({ mover, cube, shade, lean: LEANS[i] + scatterOf(i, count)[2] })
+    }
+    return list
+  }
 
   async function roll() {
     if (rolling || !canPlay()) return
+    hopLoop.current?.cancel()
+    const loop = (throwLoop.current ??= pacedFrames(60))
     setRolling(true)
     setError('')
-    setMood('busy')
+    setMood('spin')
+    const lying = reduced ? null : rigsFor(throws)
+    const cleared = lying ? scoop(loop, lying, shown) : Promise.resolve()
+    const release = wait(reduced ? 0 : RELEASE_MS)
     const res = await draw()
+    await Promise.all([release, cleared])
     if (!res.ok) {
+      lying?.forEach((rig, i) => settle(rig, shown[i]))
       setRolling(false)
       setMood('idle')
       setError(res.error)
       if (typeof res.balance === 'number') setBalance(res.balance)
       return
     }
-    setResult(null)
-    setShown(res.dice)
-    setTurns(([a, b]) => [rollTo(a, res.dice[0], 2), rollTo(b, res.dice[1], 3)])
-    setThrows((n) => n + 1)
-    playSound('dice')
-    await new Promise((done) => setTimeout(done, reduced ? 0 : ROLL_MS))
+    /* the dice are out of sight: move them to this throw's resting places before they come back in */
+    const count = throws + 1
+    flushSync(() => {
+      setResult(null)
+      setShown(res.dice)
+      setThrows(count)
+    })
+    const dice = reduced ? null : rigsFor(count)
+    if (dice) {
+      await throwDice(loop, dice, res.dice, (die, landing, power) => {
+        const at = fx.current?.spot(dice[die].shade) ?? null
+        fx.current?.puff(at, power)
+        if (landing === 0) fx.current?.ring(at, dice[die].mover.offsetWidth * 1.3, 0.34)
+        playSound(landing === 0 ? 'dice' : 'tile', power)
+        if (landing === 0 && die === 0) buzz(12)
+      })
+    }
 
     const tier = tierOf(res.dice, config)
     const big = tier < 3
     setRolling(false)
     setResult({ dice: res.dice, points: res.points, tier })
     setBalance(res.balance)
-    setMood(big && res.points > 0 ? 'win' : 'idle')
-    playSound(res.points <= 0 ? 'lose' : big ? 'win' : 'coin')
-    if (big && res.points > 0) {
+    setMood(big ? 'win' : 'idle')
+    playSound(big ? 'win' : 'coin')
+    if (dice) {
+      const size = dice[0].mover.offsetWidth
+      const felt = fx.current?.spot(feltRef.current) ?? null
+      fx.current?.coins(felt, COINS[tier], { floor: (felt?.y ?? 0) + size * 0.55, depth: size * 0.5, spread: big ? 1 : 0.55, lift: big ? 0.82 : 0.6 })
+      if (big) {
+        fx.current?.flash(felt, size * 3.2)
+        fx.current?.sparks(felt, tier === 0 ? 46 : 22)
+        buzz(tier === 0 ? [20, 40, 30] : 18)
+        void hop((hopLoop.current ??= pacedFrames(60)), dice, res.dice, (die) => {
+          fx.current?.puff(fx.current.spot(dice[die].shade), 0.45)
+          playSound('tile', 0.45)
+        })
+      }
+    }
+    if (tier === 0) {
       const box = feltRef.current?.getBoundingClientRect()
-      if (box) burst(box.left, box.top, tier === 0 ? 48 : 26)
+      if (box) burst(box.left, box.top, 40)
     }
     onPlayed()
   }
@@ -132,7 +239,6 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
     { name: 'Diğer', prize: `toplam × ${config.lowX}`, faces: [2, 1] },
   ]
   const settled = result && !rolling ? result : null
-  const lit = settled ? settled.tier : null
   const says = error
     ? error
     : rolling
@@ -178,8 +284,12 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
               <li
                 key={i}
                 className={cn(
-                  'flex min-w-0 flex-col items-center gap-[0.3em] rounded-xl px-1 py-[0.65em] text-center text-[clamp(10px,2.9cqw,12px)] leading-tight transition-colors duration-200 @min-[600px]:text-[clamp(10px,1.25cqw,13px)]',
-                  lit === i ? 'bg-gold/25 inset-ring-2 inset-ring-gold' : 'bg-background/75 inset-ring inset-ring-foreground/15',
+                  'flex min-w-0 flex-col items-center gap-[0.3em] rounded-xl px-1 py-[0.65em] text-center text-[clamp(10px,2.9cqw,12px)] leading-tight transition-colors duration-150 @min-[600px]:text-[clamp(10px,1.25cqw,13px)]',
+                  settled?.tier === i
+                    ? 'tier-lit bg-gold/25 inset-ring-2 inset-ring-gold'
+                    : chase === i
+                      ? 'bg-gold/15 inset-ring inset-ring-gold/70'
+                      : 'bg-background/75 inset-ring inset-ring-foreground/15',
                 )}
               >
                 <span className="flex gap-[0.22em] text-[1.3em]">
@@ -201,45 +311,66 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
             />
           )}
 
-          <span ref={feltRef} aria-hidden="true" className="absolute top-[61.5%] left-1/2 @min-[600px]:top-[60%]" />
+          <span
+            aria-hidden="true"
+            className="room-breathe pointer-events-none absolute top-[60%] left-1/2 h-[26%] w-[120%] -translate-1/2 rounded-[50%] bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--gold)_15%,transparent),transparent)] mix-blend-plus-lighter @min-[600px]:top-[53%] @min-[600px]:left-[55%] @min-[600px]:h-[44%] @min-[600px]:w-[48%]"
+          />
+          <span ref={feltRef} aria-hidden="true" className="absolute top-[61.5%] left-1/2 @min-[600px]:top-[60%] @min-[600px]:left-[52%]" />
           {settled && settled.tier < 3 && (
             <span
               key={`glow-${throws}`}
               aria-hidden="true"
-              className="wheel-fade absolute top-[63%] left-1/2 h-[22%] w-[92%] -translate-1/2 rounded-[50%] bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--gold)_38%,transparent),transparent)] @min-[600px]:top-[61.5%] @min-[600px]:h-[34%] @min-[600px]:w-[42%]"
+              className="felt-glow absolute top-[63%] left-1/2 h-[22%] w-[92%] -translate-1/2 rounded-[50%] bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--gold)_38%,transparent),transparent)] @min-[600px]:top-[61.5%] @min-[600px]:left-[52%] @min-[600px]:h-[34%] @min-[600px]:w-[42%]"
             />
           )}
 
           {([0, 1] as const).map((i) => {
-            const [dx, dy, lean] = SCATTER[(throws + i * 2) % SCATTER.length]
+            const [dx, dy, lean] = scatterOf(i, throws)
             return (
               <div
                 key={i}
+                ref={(el) => {
+                  rests.current[i] = el
+                }}
                 className={cn('absolute size-(--s) -translate-1/2', RESTS[i])}
                 style={{ marginLeft: `calc(var(--s) * ${dx})`, marginTop: `calc(var(--s) * ${dy})` }}
               >
                 <span
-                  key={`shade-${throws}`}
+                  ref={(el) => {
+                    shades.current[i] = el
+                  }}
                   aria-hidden="true"
-                  className={cn(
-                    'absolute top-[84%] left-1/2 h-[30%] w-[130%] -translate-x-1/2 rounded-[50%] bg-[radial-gradient(closest-side,rgb(0_0_0/0.8),transparent)]',
-                    throws > 0 && 'dice-shade',
-                  )}
+                  className="absolute top-[84%] left-[-15%] h-[30%] w-[130%] rounded-[50%] bg-[radial-gradient(closest-side,rgb(0_0_0/0.8),transparent)]"
                 />
-                <div key={`throw-${throws}`} className={cn(throws > 0 && 'dice-throw')} style={{ animationDelay: `${i * 90}ms` }}>
-                  <Die value={shown[i]} turn={turns[i]} tone={i === 0 ? 'gold' : 'dark'} lean={(i === 0 ? 24 : -18) + lean} still={reduced} />
-                </div>
+                <Die
+                  value={shown[i]}
+                  tone={i === 0 ? 'gold' : 'dark'}
+                  lean={LEANS[i] + lean}
+                  moverRef={(el) => {
+                    movers.current[i] = el
+                  }}
+                  cubeRef={(el) => {
+                    cubes.current[i] = el
+                  }}
+                />
               </div>
             )
           })}
 
-          <JakoCaller mood={mood} className="left-[-10%] w-[52%] @min-[600px]:left-[-5%] @min-[600px]:w-[30%]" />
+          <RoomFx ref={fx} zone={DUST} />
+
+          <JakoActor
+            cast={CROUPIER}
+            state={mood}
+            armed={!locked}
+            className="absolute bottom-0 left-[-23%] aspect-[916/570] w-[92%] @min-[600px]:left-[-4%] @min-[600px]:w-[51%]"
+          />
 
           <div className="absolute right-[4%] bottom-[2.5%] left-[35%] flex flex-col items-stretch gap-1.5 @min-[600px]:contents">
             <CallerBubble
               tail="left"
               tone={error ? 'error' : 'plain'}
-              className="self-start @min-[600px]:absolute @min-[600px]:bottom-[8%] @min-[600px]:left-[20.5%] @min-[600px]:max-w-[25%]"
+              className="self-start @min-[600px]:absolute @min-[600px]:bottom-[7%] @min-[600px]:left-[39%] @min-[600px]:max-w-[31%]"
             >
               {says}
             </CallerBubble>
