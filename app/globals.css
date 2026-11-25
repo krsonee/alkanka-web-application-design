@@ -1169,45 +1169,49 @@
   .wheel-sheen { animation: none; opacity: 0; }
 }
 
-/* Zar At has its own table and Gizemli Sandık its own vault. A die is thrown in from the player's corner (--from-x,
-   --from-y, set per layout), lands and settles with two small bounces while its shadow arrives under it; a chosen
-   chest rattles until the server answers, then opens under a beam of light. Jako bobs while he waits and pops up
-   when it pays. */
-.dice-throw { animation: dice-throw 1250ms both; }
-.dice-shade { animation: dice-shade 1250ms both; }
-.chest-rattle { animation: chest-rattle 0.42s ease-in-out infinite; }
-.chest-open { animation: chest-open 460ms cubic-bezier(0.2, 0.8, 0.3, 1.25) both; }
-.chest-wait { animation: chest-wait 3.2s ease-in-out infinite; }
-.vault-beam { animation: vault-beam 520ms ease-out both; }
-.caller-busy { animation: caller-bob 0.46s ease-in-out infinite alternate; }
-.caller-cheer { animation: caller-cheer 420ms cubic-bezier(0.2, 0.8, 0.3, 1.3) both; }
+/* Zar At has its own table and Gizemli Sandık its own vault. The dice are thrown frame by frame (dice-stage/throw.ts)
+   and the dust, sparks and coins are drawn on a canvas (mini-stage/room-fx.tsx); what is here is the rest of the
+   two rooms: the light breathing on the felt, the pay tile that lights up, the amount landing, and a chest that
+   stirs while it waits, rattles while the key turns, and opens under turning rays. */
+.room-breathe { animation: room-breathe 5.5s ease-in-out infinite; }
+.felt-glow { animation: wheel-fade 300ms ease both, felt-glow 1.6s ease-in-out 300ms infinite; }
+.tier-lit { animation: tier-lit 520ms cubic-bezier(0.2, 0.8, 0.3, 1.3) both; }
+.stage-prize { animation: stage-prize 560ms cubic-bezier(0.2, 0.8, 0.3, 1.25) both; }
+.chest-wait { transform-origin: 50% 86%; animation: chest-wait 5.2s ease-in-out infinite; }
+.chest-rattle { transform-origin: 50% 86%; animation: chest-rattle 0.42s ease-in-out infinite; }
+.chest-rattle-hard { transform-origin: 50% 86%; animation: chest-rattle-hard 0.22s linear infinite; }
+.chest-open { animation: chest-open 620ms cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+.chest-sheen { animation: chest-sheen 4.6s ease-in-out infinite; }
+.chest-seam { animation: chest-seam 0.34s ease-in-out infinite alternate; }
+.keyhole-pulse { animation: keyhole-pulse 2.2s ease-in-out infinite; }
+.vault-beam { animation: vault-beam 520ms ease-out both, vault-shimmer 2.6s ease-in-out 520ms infinite; }
+.vault-rays { animation: wheel-fade 500ms ease both, wheel-turn 22s linear infinite; }
 
-@keyframes dice-throw {
-  0% { translate: var(--from-x) var(--from-y); scale: 1.4; animation-timing-function: cubic-bezier(0.15, 0.6, 0.35, 1); }
-  52% { translate: 0 0; scale: 1; animation-timing-function: cubic-bezier(0.2, 0.6, 0.3, 1); }
-  68% { translate: 0 calc(var(--s) * -0.32); animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.5); }
-  82% { translate: 0 0; animation-timing-function: cubic-bezier(0.2, 0.6, 0.3, 1); }
-  91% { translate: 0 calc(var(--s) * -0.09); animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.5); }
-  100% { translate: 0 0; scale: 1; }
+@keyframes room-breathe {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
 }
-@keyframes dice-shade {
-  0%, 30% { scale: 0.4; opacity: 0; }
-  52%, 82%, 100% { scale: 1; opacity: 1; }
-  68% { scale: 0.8; opacity: 0.6; }
-  91% { scale: 0.94; opacity: 0.9; }
+@keyframes felt-glow {
+  0%, 100% { opacity: 1; scale: 1; }
+  50% { opacity: 0.55; scale: 1.06; }
 }
+@keyframes tier-lit {
+  0% { scale: 0.9; }
+  55% { scale: 1.09; }
+  100% { scale: 1; }
+}
+@keyframes stage-prize {
+  0% { opacity: 0; scale: 0.4; }
+  60% { opacity: 1; scale: 1.16; }
+  100% { scale: 1; }
+}
+/* still for most of the loop, then something inside stirs */
 @keyframes chest-wait {
-  0%, 100% { translate: 0 0; }
-  50% { translate: 0 -1.6%; }
-}
-@keyframes vault-beam {
-  from { opacity: 0; scale: 0.6 1; }
-}
-@keyframes caller-bob {
-  to { translate: 0 -2.5%; }
-}
-@keyframes caller-cheer {
-  from { translate: 0 14%; scale: 0.92; }
+  0%, 76%, 100% { rotate: 0deg; translate: 0 0; }
+  80% { rotate: -2.4deg; translate: -1% -1.6%; }
+  84% { rotate: 2.2deg; translate: 1% -2.6%; }
+  88% { rotate: -1.5deg; translate: -0.6% -1%; }
+  92% { rotate: 0.8deg; translate: 0 -0.4%; }
 }
 @keyframes chest-rattle {
   0%, 100% { rotate: 0deg; translate: 0 0; }
@@ -1216,12 +1220,43 @@
   60% { rotate: -2deg; translate: -1% 0; }
   80% { rotate: 2deg; translate: 1% -1%; }
 }
+@keyframes chest-rattle-hard {
+  0%, 100% { rotate: 0deg; translate: 0 -1%; }
+  25% { rotate: -4.5deg; translate: -2.4% -3%; }
+  50% { rotate: 0.6deg; translate: 0.4% 0; }
+  75% { rotate: 4.5deg; translate: 2.4% -3.4%; }
+}
+/* the lid is thrown open: the chest stretches up past its size and drops back onto the plinth */
 @keyframes chest-open {
-  from { opacity: 0; scale: 0.9; }
+  0% { opacity: 0; scale: 0.9 0.72; }
+  42% { opacity: 1; scale: 1.24 1.34; }
+  68% { scale: 1.2 1.12; }
+  100% { scale: 1.18; }
+}
+@keyframes chest-sheen {
+  0%, 60% { translate: -180% 0; }
+  92%, 100% { translate: 460% 0; }
+}
+@keyframes chest-seam {
+  from { opacity: 0.45; }
+  to { opacity: 1; }
+}
+@keyframes keyhole-pulse {
+  0%, 100% { opacity: 0.3; scale: 0.8; }
+  50% { opacity: 1; scale: 1.2; }
+}
+@keyframes vault-beam {
+  from { opacity: 0; scale: 0.6 1; }
+}
+@keyframes vault-shimmer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dice-throw, .dice-shade, .chest-rattle, .chest-open, .chest-wait, .vault-beam, .caller-busy, .caller-cheer { animation: none; }
+  .room-breathe, .felt-glow, .tier-lit, .stage-prize, .chest-wait, .chest-rattle, .chest-rattle-hard, .chest-open,
+  .chest-seam, .keyhole-pulse, .vault-beam, .vault-rays { animation: none; }
+  .chest-sheen { animation: none; opacity: 0; }
 }
 
 @keyframes glow {

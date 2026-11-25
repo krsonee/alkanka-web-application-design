@@ -1,45 +1,44 @@
 /*
-  What Zar At and Gizemli Sandık share, and nothing of the wheel's terrace: Jako from the chest up at the stage's
-  lower edge, the speech bubble he talks through, the game's name set straight on the scene, and the result line.
-  Each game brings its own room (the dice table, the vault) and places these itself.
+  What Zar At and Gizemli Sandık share, and nothing of the wheel's terrace: the speech bubble Jako talks through,
+  the game's name set straight on the scene, and the result line. Each game brings its own room (the dice table,
+  the vault) and its own Jako (the croupier with his cup, the keeper with his key) and places these itself.
 */
 
-import type { ReactNode } from 'react'
-import Image from 'next/image'
+import { useEffect, useState, type ReactNode } from 'react'
+import { pacedFrames } from '@/lib/paced-frames'
+import { usePrefersReducedMotion } from '@/lib/use-motion'
 import { cn } from '@/lib/utils'
 
-export type CallerMood = 'idle' | 'busy' | 'win'
-
-/**
- * Jako leaning in from the bottom edge. The box hangs a quarter below the stage, so the stage's own clipping cuts
- * him at the chest. `mirrored` turns him to face the middle when he stands on the right.
- */
-export function JakoCaller({ mood, mirrored = false, className }: { mood: CallerMood; mirrored?: boolean; className?: string }) {
-  return (
-    <div aria-hidden="true" className={cn('pointer-events-none absolute bottom-0 aspect-[936/816] translate-y-[24%]', className)}>
-      <div className={cn('absolute inset-0', mirrored && '-scale-x-100', mood === 'busy' && 'caller-busy')}>
-        <Image
-          src="/images/wheel/jako.webp"
-          alt=""
-          fill
-          sizes="(min-width: 640px) 320px, 55vw"
-          className={cn('object-contain drop-shadow-[0_0_1.4cqw_rgb(0_0_0/0.7)] transition-opacity duration-150', mood === 'win' && 'opacity-0')}
-        />
-        {mood === 'win' && (
-          <Image
-            src="/images/mascots/jako-kazandi-cut.png"
-            alt=""
-            fill
-            sizes="(min-width: 640px) 320px, 55vw"
-            className="caller-cheer object-contain drop-shadow-[0_0_1.4cqw_rgb(0_0_0/0.7)]"
-          />
-        )}
-      </div>
-    </div>
-  )
+/** A number that runs up from zero to `to` and stops on it; under reduced motion it is `to` from the start. */
+function useCountUp(to: number, ms = 800) {
+  const reduced = usePrefersReducedMotion()
+  const [shown, setShown] = useState(reduced ? to : 0)
+  useEffect(() => {
+    if (reduced) {
+      setShown(to)
+      return
+    }
+    const frames = pacedFrames(30)
+    let start = 0
+    const tick = (now: number) => {
+      if (!start) start = now
+      const u = Math.min(1, (now - start) / ms)
+      setShown(Math.round(to * (1 - (1 - u) ** 3)))
+      if (u < 1) frames.request(tick)
+    }
+    frames.request(tick)
+    return frames.cancel
+  }, [to, ms, reduced])
+  return shown
 }
 
-/** What Jako says: the hint, what is happening, or what went wrong. The tail points at the side he stands on. */
+const TAILS = {
+  left: '-left-[5.5px] bottom-3 border-b border-l',
+  right: '-right-[5.5px] bottom-3 border-t border-r',
+  down: '-bottom-[5.5px] right-7 border-r border-b',
+}
+
+/** What Jako says: the hint, what is happening, or what went wrong. The tail points at where he stands. */
 export function CallerBubble({
   children,
   tail,
@@ -47,7 +46,7 @@ export function CallerBubble({
   className,
 }: {
   children: ReactNode
-  tail: 'left' | 'right'
+  tail: keyof typeof TAILS
   tone?: 'plain' | 'error'
   className?: string
 }) {
@@ -62,9 +61,9 @@ export function CallerBubble({
       <span
         aria-hidden="true"
         className={cn(
-          'absolute bottom-3 size-2.5 rotate-45 bg-card',
+          'absolute size-2.5 rotate-45 bg-card',
           tone === 'error' ? 'border-destructive/60' : 'border-gold/35',
-          tail === 'left' ? '-left-[5.5px] border-b border-l' : '-right-[5.5px] border-t border-r',
+          TAILS[tail],
         )}
       />
       {children}
@@ -89,15 +88,19 @@ export function StageTitle({ title, sub }: { title: string; sub: ReactNode }) {
   )
 }
 
-/** The outcome over the scene: what happened in small type, the Kanka Coin won in gold under it. */
+/**
+ * The outcome over the scene: what happened in small type, the Kanka Coin won in gold under it. The amount lands
+ * with a bounce and counts up to what was won. Decorative: the game announces the result in its own live region.
+ */
 export function StageResult({ label, points, className }: { label: ReactNode; points: number; className?: string }) {
+  const shown = useCountUp(points)
   return (
-    <div className={cn('wheel-rise absolute left-1/2 flex w-[90%] -translate-x-1/2 flex-col items-center text-center', className)}>
-      <p className="text-[clamp(13px,3.6cqw,16px)] font-bold text-foreground tabular-nums [text-shadow:0_1px_0_rgb(0_0_0/0.8)] @min-[600px]:text-[clamp(11px,1.5cqw,16px)]">
+    <div aria-hidden="true" className={cn('absolute left-1/2 flex w-[90%] -translate-x-1/2 flex-col items-center text-center', className)}>
+      <p className="wheel-rise text-[clamp(13px,3.6cqw,16px)] font-bold text-foreground tabular-nums [text-shadow:0_1px_0_rgb(0_0_0/0.8)] @min-[600px]:text-[clamp(11px,1.5cqw,16px)]">
         {label}
       </p>
-      <p className="flex items-baseline gap-[0.18em] font-display text-[clamp(36px,12cqw,52px)] leading-[1.05] font-extrabold tracking-tight text-gold tabular-nums [text-shadow:0_2px_0_rgb(0_0_0/0.7)] @min-[600px]:text-[clamp(28px,5cqw,54px)]">
-        +{points.toLocaleString('tr-TR')}
+      <p className="stage-prize flex items-baseline gap-[0.18em] font-display text-[clamp(36px,12cqw,52px)] leading-[1.05] font-extrabold tracking-tight text-gold tabular-nums [text-shadow:0_2px_0_rgb(0_0_0/0.7)] @min-[600px]:text-[clamp(28px,5cqw,54px)]">
+        +{shown.toLocaleString('tr-TR')}
         <span className="text-[0.4em] font-bold tracking-normal">KC</span>
       </p>
     </div>

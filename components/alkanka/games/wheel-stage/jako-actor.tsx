@@ -1,7 +1,9 @@
 'use client'
 
 /*
-  Jako on the wheel stage: one clip per state (waiting, cheering the spin, winning, losing), drawn with transparency.
+  Jako on a mini game's stage: one clip per state (waiting, the move, winning, losing), drawn with transparency.
+  Each game brings its own cast: the wheel's Jako cheers the spin, the dice table's shakes a cup, the vault's holds
+  a key. A game that cannot be lost has no losing clip; asking for it leaves him waiting.
 
   The clips are ordinary H.264 files that every browser plays, with the picture in the top half of the frame and its
   transparency in the bottom half; a small WebGL quad puts the two back together. Video with a real alpha channel
@@ -22,17 +24,25 @@ import { cn } from '@/lib/utils'
 
 export type ActorState = 'idle' | 'spin' | 'win' | 'lose'
 
-const STILL = '/images/wheel/jako.webp'
-const CLIPS: Record<ActorState, string> = {
-  idle: '/video/wheel/jako-idle.mp4',
-  spin: '/video/wheel/jako-spin.mp4',
-  win: '/video/wheel/jako-win.mp4',
-  lose: '/video/wheel/jako-lose.mp4',
+export type ActorCast = {
+  /** The first frame of the waiting clip, as a picture. */
+  still: string
+  clips: { idle: string } & Partial<Record<ActorState, string>>
+  /** The clips' picture size: half the height of the stacked video frame. */
+  frame: { width: number; height: number }
 }
-const STATES = Object.keys(CLIPS) as ActorState[]
 
-/** The clips' picture size: half the height of the stacked video frame. */
-const FRAME = { width: 936, height: 816 }
+const WHEEL_CAST: ActorCast = {
+  still: '/images/wheel/jako.webp',
+  clips: {
+    idle: '/video/wheel/jako-idle.mp4',
+    spin: '/video/wheel/jako-spin.mp4',
+    win: '/video/wheel/jako-win.mp4',
+    lose: '/video/wheel/jako-lose.mp4',
+  },
+  frame: { width: 936, height: 816 },
+}
+
 const FADE_MS = 160
 
 const VERTEX = `
@@ -161,7 +171,18 @@ function createPainter(canvas: HTMLCanvasElement): Painter | null {
 const savesData = () =>
   typeof navigator !== 'undefined' && Boolean((navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData)
 
-export function JakoActor({ state, armed, className }: { state: ActorState; armed: boolean; className?: string }) {
+/** `cast` must be a constant: a new object would rebuild the player. */
+export function JakoActor({
+  state,
+  armed,
+  className,
+  cast = WHEEL_CAST,
+}: {
+  state: ActorState
+  armed: boolean
+  className?: string
+  cast?: ActorCast
+}) {
   const reduced = usePrefersReducedMotion()
   const hidden = usePageHidden()
   const layerRef = useRef<HTMLDivElement>(null)
@@ -216,14 +237,16 @@ export function JakoActor({ state, armed, className }: { state: ActorState; arme
       video.currentTime = 0
       void video.play().catch(() => {})
     }
-    const request = (s: ActorState) => {
+    const request = (asked: ActorState) => {
+      const s = cast.clips[asked] ? asked : 'idle'
       wanted = s
       warm(s)
       start(s)
     }
 
     function warm(s: ActorState) {
-      if (videos.has(s)) return
+      const src = cast.clips[s]
+      if (!src || videos.has(s)) return
       const video = document.createElement('video')
       video.muted = true
       video.playsInline = true
@@ -250,7 +273,7 @@ export function JakoActor({ state, armed, className }: { state: ActorState; arme
       video.addEventListener('ended', () => {
         if (top === s) request('idle')
       })
-      video.src = CLIPS[s]
+      video.src = src
       layer?.appendChild(video)
       videos.set(s, video)
     }
@@ -265,7 +288,9 @@ export function JakoActor({ state, armed, className }: { state: ActorState; arme
       request(s) {
         // A reaction on screen plays to its end; it hands back to waiting by itself.
         const playing = top ? videos.get(top) : null
-        if (s === 'idle' && top && top !== 'idle' && playing && !playing.ended) return
+        if (!cast.clips[s] || s === 'idle') {
+          if (top && top !== 'idle' && playing && !playing.ended) return
+        }
         request(s)
       },
       setActive(next) {
@@ -298,30 +323,30 @@ export function JakoActor({ state, armed, className }: { state: ActorState; arme
       painter.dispose()
       setLive(false)
     }
-  }, [reduced])
+  }, [reduced, cast])
 
   useEffect(() => {
     control.current?.setActive(active)
-  }, [active, reduced])
+  }, [active, reduced, cast])
 
-  // The spin clip loads once a spin is possible, the two endings once one has started.
+  // The move's clip loads once a move is possible, the endings once one has started.
   useEffect(() => {
     if (armed || state !== 'idle') control.current?.warm('spin')
-    if (state !== 'idle') for (const s of STATES) control.current?.warm(s)
+    if (state !== 'idle') for (const s of Object.keys(cast.clips) as ActorState[]) control.current?.warm(s)
     if (lastState.current === state) return
     lastState.current = state
     control.current?.request(state)
-  }, [state, armed, reduced])
+  }, [state, armed, reduced, cast])
 
   return (
     <div ref={layerRef} aria-hidden="true" className={cn('pointer-events-none isolate', className)}>
       <img
-        src={STILL}
+        src={cast.still}
         alt=""
         draggable={false}
         className={cn('absolute inset-0 size-full transition-opacity duration-150', live && 'opacity-0')}
       />
-      <canvas ref={canvasRef} width={FRAME.width} height={FRAME.height} className="absolute inset-0 size-full" />
+      <canvas ref={canvasRef} width={cast.frame.width} height={cast.frame.height} className="absolute inset-0 size-full" />
     </div>
   )
 }
