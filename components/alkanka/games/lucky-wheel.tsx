@@ -1,33 +1,33 @@
 'use client'
 
+/*
+  Şans Çarkı: a framed night terrace with Jako on the left, the wheel on the right over its dais, and between them
+  the title plaque, the wheel's rewards and the spin button.
+
+  The stage is a container. From 600 wide it is 2 : 1 with the rewards as a list in the middle column; below that
+  (phones) it is 9 : 16 with Jako behind the balustrade, the wheel over the dais, the button at the foot and the
+  rewards as chips under the stage.
+
+  The draw, the cooldown and the payout all happen on the server (playMini); this component only shows them. Jako
+  cheers while the wheel turns, celebrates a paying slice and winces at an empty one.
+*/
+
 import { useRef, useState } from 'react'
 import Image from 'next/image'
-import { Clock, RotateCw } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { formatRemaining } from './mini-status'
-import { WinFlash } from './win-flash'
+import { Clock } from 'lucide-react'
 import { playMini } from '@/app/actions/wallet'
-import { usePoints } from '../points-context'
-
-import { useCatalog } from '../catalog-context'
-import { WHEEL_SEGMENT_COUNT, type WheelSegment as Segment } from '@/lib/rewards-shared'
+import type { WheelSegment as Segment } from '@/lib/rewards-shared'
+import { playSound } from '@/lib/sound'
+import { usePrefersReducedMotion } from '@/lib/use-motion'
 import { TableBrand } from '../arena/table-brand'
-
-const SEG_ANGLE = 360 / WHEEL_SEGMENT_COUNT
-const SPIN_MS = 4800
-
-const GOLD_FILL = 'var(--gold)'
-const DARK_FILL = 'color-mix(in oklch, var(--gold-foreground) 88%, var(--gold))'
-const BULBS = 24
-
-const isGold = (i: number) => i % 2 === 0
-
-const wheelBackground = (segments: Segment[]) =>
-  `conic-gradient(${segments
-    .map((_, i) => `${isGold(i) ? GOLD_FILL : DARK_FILL} ${i * SEG_ANGLE}deg ${(i + 1) * SEG_ANGLE}deg`)
-    .join(', ')})`
-
-const WIND_MS = 380
+import { useCatalog } from '../catalog-context'
+import { usePoints } from '../points-context'
+import { formatRemaining } from './mini-status'
+import { burst } from './wheel-stage/burst'
+import type { ActorState } from './wheel-stage/jako-actor'
+import { ActionButton, ActionNote, ResultCard, RewardChips, RewardList } from './wheel-stage/parts'
+import { StageBackdrop } from './wheel-stage/stage'
+import { WheelDisc, type WheelController } from './wheel-stage/wheel-disc'
 
 export type MiniGameProps = {
   onWin: (points: number) => void | Promise<void>
@@ -38,243 +38,165 @@ export type MiniGameProps = {
   onPlayed: () => void
 }
 
-export function LuckyWheel({ lockedFor, playsLeft, canPlay, onPlayed }: MiniGameProps) {
+type Result = { index: number; segment: Segment }
+
+export type WheelDraw = () => Promise<
+  { ok: true; index: number; points: number; balance: number; segments: Segment[] } | { ok: false; balance?: number }
+>
+
+const serverDraw: WheelDraw = async () => {
+  const res = await playMini('cark')
+  if (res.ok && res.game === 'cark') return { ok: true, index: res.index, points: res.points, balance: res.balance, segments: res.segments }
+  return { ok: false, balance: res.balance }
+}
+
+/** `draw` is where a spin's outcome comes from: the server, unless a preview passes its own. */
+export function LuckyWheel({ lockedFor, playsLeft, canPlay, onPlayed, draw = serverDraw }: MiniGameProps & { draw?: WheelDraw }) {
   const { setBalance } = usePoints()
   const { wheel } = useCatalog().rewards
+  const reduced = usePrefersReducedMotion()
   const [serverSegments, setServerSegments] = useState<Segment[] | null>(null)
-  const SEGMENTS = serverSegments ?? wheel.segments
+  const segments = serverSegments ?? wheel.segments
   const locked = lockedFor > 0
-  const [rotation, setRotation] = useState(0)
   const [spinning, setSpinning] = useState(false)
-  const [result, setResult] = useState<Segment | null>(null)
-  const [burstKey, setBurstKey] = useState(0)
-  const [jakoPhase, setJakoPhase] = useState<'idle' | 'spin' | 'cheer'>('idle')
-  const timeout = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const jakoTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [result, setResult] = useState<Result | null>(null)
+  const [cardOpen, setCardOpen] = useState(false)
+  const [actor, setActor] = useState<ActorState>('idle')
+  const wheelRef = useRef<WheelController>(null)
+  const hubRef = useRef<HTMLDivElement>(null)
 
   async function spin() {
     if (spinning || !canPlay()) return
     setSpinning(true)
-    const res = await playMini('cark')
-    if (!res.ok || res.game !== 'cark') {
+    setCardOpen(false)
+    const res = await draw()
+    if (!res.ok) {
       setSpinning(false)
       if (typeof res.balance === 'number') setBalance(res.balance)
       return
     }
-    const index = res.index
     // Draw with the exact segments the server paid out from, so the pointer always lands on what was credited.
-    const paid = res.segments[index] ?? { ...SEGMENTS[index], points: res.points }
+    const paid = res.segments[res.index] ?? segments[res.index]
     setServerSegments(res.segments)
-    const center = index * SEG_ANGLE + SEG_ANGLE / 2
-    const jitter = (Math.random() - 0.5) * (SEG_ANGLE * 0.6)
-    const target = (360 - center + jitter + 360) % 360
-    const delta = (target - (rotation % 360) + 360) % 360
     setResult(null)
-    setSpinning(true)
-    setJakoPhase('spin')
-    setRotation(rotation + 360 * 6 + delta)
-    if (timeout.current) clearTimeout(timeout.current)
-    if (jakoTimeout.current) clearTimeout(jakoTimeout.current)
-    jakoTimeout.current = setTimeout(() => setJakoPhase('idle'), WIND_MS + 500)
-    timeout.current = setTimeout(() => {
-      const seg = { ...paid, points: res.points }
-      setSpinning(false)
-      setResult(seg)
-      setBalance(res.balance)
-      if (seg.points > 0) {
-        setBurstKey((k) => k + 1)
-        setJakoPhase('cheer')
-        jakoTimeout.current = setTimeout(() => setJakoPhase('idle'), 1800)
-      }
-      onPlayed()
-    }, SPIN_MS + WIND_MS)
+    setActor('spin')
+    await wheelRef.current?.spinTo(res.index, reduced)
+
+    const segment = { ...paid, points: res.points }
+    const won = segment.points > 0
+    setSpinning(false)
+    setResult({ index: res.index, segment })
+    setCardOpen(true)
+    setBalance(res.balance)
+    setActor(won ? 'win' : 'lose')
+    playSound(won ? 'win' : 'lose')
+    if (won) {
+      const hub = hubRef.current?.getBoundingClientRect()
+      if (hub) burst(hub.left + hub.width / 2, hub.top + hub.height / 2)
+    }
+    onPlayed()
   }
 
+  const landing = result && !spinning ? { index: result.index, won: result.segment.points > 0 } : null
+  const plays = Math.max(1, playsLeft ?? 1)
+
   return (
-    <article className="panel-gold relative flex flex-col gap-6 overflow-hidden rounded-2xl p-6 lg:row-span-2">
-      <header className="flex items-start justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-semibold uppercase tracking-widest text-primary">Çarkıfelek</span>
-          <h3 className="font-display text-2xl font-bold text-foreground">Şans Çarkı</h3>
-          <p className="text-sm leading-relaxed text-muted-foreground">Her {wheel.cooldownHours} saatte 1 ücretsiz çevirme. Boost, promo kod ve VIP geçiş kazan.</p>
-        </div>
-        <span className="shrink-0 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold tabular-nums text-primary">
-          {locked ? formatRemaining(lockedFor) : `${Math.max(1, playsLeft ?? 1)} hak`}
-        </span>
-      </header>
+    <article className="flex min-w-0 flex-col gap-3 lg:row-span-2">
+      <section aria-labelledby="sans-carki-baslik" className="@container min-w-0">
+        <h3 id="sans-carki-baslik" className="sr-only">
+          Şans Çarkı
+        </h3>
+        <div className="relative isolate aspect-[9/16] w-full overflow-hidden rounded-2xl border border-gold/25 bg-background @min-[600px]:aspect-[2/1] @min-[600px]:max-h-[600px]">
+          <StageBackdrop state={actor} armed={!locked && !spinning} />
+          <TableBrand center={false} corners={false} jako={false} plaque="top" />
 
-      <div
-        data-ls-main="bleed"
-        className="relative -mx-6 overflow-hidden border-y border-gold/15"
-        style={{
-          background:
-            'radial-gradient(ellipse 50% 62% at 66% 46%, color-mix(in oklch, var(--gold) 20%, var(--background)), var(--background) 72%)',
-        }}
-      >
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 opacity-40"
-          style={{
-            backgroundImage: 'radial-gradient(color-mix(in oklch, var(--gold) 35%, transparent) 1px, transparent 1.5px)',
-            backgroundSize: '18px 18px',
-            maskImage: 'radial-gradient(ellipse 70% 70% at 64% 50%, #000 20%, transparent 75%)',
-          }}
-        />
-        <div
-          aria-hidden="true"
-          className="absolute bottom-[6%] left-[38%] h-[10%] w-[52%] rounded-[100%] blur-xl"
-          style={{ background: 'color-mix(in oklch, var(--gold) 35%, transparent)' }}
-        />
-        <TableBrand center={false} corners={false} jako={false} plaque="bottom" />
-
-        <div className="relative flex justify-end py-10 pr-[5%]">
-        <div
-          aria-hidden="true"
-          className="wheel-jako pointer-events-none absolute bottom-0 left-[-7%] z-[3] w-[60%] origin-bottom mix-blend-lighten"
-          style={{
-            animation:
-              jakoPhase === 'spin'
-                ? `jako-spin ${WIND_MS + 500}ms cubic-bezier(0.3, 0.7, 0.3, 1) both`
-                : jakoPhase === 'cheer'
-                  ? 'jako-cheer 0.9s ease-in-out 2'
-                  : 'jako-idle 3.6s ease-in-out infinite',
-          }}
-        >
-          <Image
-            src="/images/mascots/jako-cark.png"
-            alt=""
-            width={1408}
-            height={768}
-            sizes="(min-width: 1024px) 340px, 60vw"
-            className="h-auto w-full"
-            style={{ maskImage: 'linear-gradient(to top, #000 85%, transparent), linear-gradient(to left, transparent, #000 12%)', maskComposite: 'intersect' }}
-          />
-        </div>
-
-        <div className="relative aspect-square w-[60%] max-w-sm">
-          <div
-            aria-hidden="true"
-            className="wheel-ring absolute -inset-[9%] rounded-full border border-dashed border-gold/35"
-            style={{ animation: `wheel-ring-spin ${spinning ? '6s' : '40s'} linear infinite` }}
-          />
-          <div aria-hidden="true" className="absolute -inset-[4%] rounded-full border border-gold/20" />
-          <div
-            aria-hidden="true"
-            className="absolute -inset-4 rounded-full transition-opacity duration-700"
-            style={{
-              background: 'radial-gradient(circle, color-mix(in oklch, var(--gold) 55%, transparent) 55%, transparent 72%)',
-              filter: 'blur(14px)',
-              opacity: spinning ? 1 : 0.55,
-            }}
-          />
-          <div
-            className="absolute inset-0 rounded-full p-[7%]"
-            style={{
-              background: 'linear-gradient(145deg, color-mix(in oklch, var(--gold-foreground) 70%, var(--gold)), var(--gold-foreground) 50%, color-mix(in oklch, var(--gold-foreground) 75%, var(--gold)))',
-              boxShadow: 'inset 0 0 0 3px color-mix(in oklch, var(--gold) 70%, transparent), 0 18px 40px -12px var(--gold-foreground)',
-            }}
-          >
-            {Array.from({ length: BULBS }).map((_, i) => (
+          <div className="absolute top-[3%] right-[3%] w-[40%] @min-[600px]:top-[6%] @min-[600px]:right-auto @min-[600px]:left-[31.5%] @min-[600px]:w-[19.5%]">
+            <div className="relative aspect-[900/387]">
+              <Image src="/images/wheel/plaque.webp" alt="" fill sizes="(min-width: 640px) 240px, 46vw" className="object-contain" />
               <span
-                key={`bulb-${i}`}
                 aria-hidden="true"
-                className="absolute inset-0 flex justify-center"
-                style={{ transform: `rotate(${(360 / BULBS) * i}deg)` }}
+                className="absolute inset-0 flex items-center justify-center pb-[2%] font-display text-[clamp(14px,4.4cqw,28px)] font-extrabold tracking-tight text-foreground @min-[600px]:text-[clamp(12px,2.2cqw,26px)]"
               >
-                <span
-                  className="wheel-bulb mt-[2.4%] size-2 rounded-full bg-gold sm:size-2.5"
-                  style={{
-                    boxShadow: '0 0 8px 2px var(--gold)',
-                    animation: spinning ? `wheel-bulb 0.5s ease-in-out ${i % 2 ? '0.25s' : '0s'} infinite` : `wheel-bulb 2.4s ease-in-out ${i % 2 ? '1.2s' : '0s'} infinite`,
-                  }}
-                />
+                Şans Çarkı
               </span>
-            ))}
-            <div
-              className="relative size-full rounded-full"
-              style={{
-                background: wheelBackground(SEGMENTS),
-                transform: `rotate(${rotation}deg)`,
-                transition: `transform ${SPIN_MS}ms cubic-bezier(0.12, 0.8, 0.12, 1) ${WIND_MS}ms`,
-                boxShadow: '0 0 0 3px var(--gold), inset 0 0 30px color-mix(in oklch, var(--gold-foreground) 60%, transparent)',
-              }}
-            >
-              {SEGMENTS.map((s, i) => (
-                <div
-                  key={`seg-${i}`}
-                  aria-hidden="true"
-                  className="absolute inset-0 flex justify-center pt-[7%]"
-                  style={{ transform: `rotate(${i * SEG_ANGLE + SEG_ANGLE / 2}deg)` }}
-                >
-                  <span
-                    className={cn(
-                      'font-display text-xs font-black tracking-tight [writing-mode:vertical-rl] sm:text-sm',
-                      isGold(i) ? 'text-gold-foreground' : 'text-gold',
-                    )}
-                  >
-                    {s.short}
-                  </span>
-                </div>
-              ))}
-              {SEGMENTS.map((_, i) => (
-                <div
-                  key={`divider-${i}`}
-                  aria-hidden="true"
-                  className="absolute top-0 left-1/2 h-1/2 w-0.5 origin-bottom -translate-x-1/2 bg-gold/70"
-                  style={{ transform: `rotate(${i * SEG_ANGLE}deg)` }}
-                />
-              ))}
             </div>
           </div>
 
-          <div
-            aria-hidden="true"
-            className="absolute -top-2 left-1/2 z-10 h-0 w-0 -translate-x-1/2 border-x-[14px] border-t-[26px] border-x-transparent border-t-gold drop-shadow-[0_3px_6px_var(--gold-foreground)]"
-          />
+          <div className="absolute top-[23.5%] left-[31.5%] hidden w-[19.5%] @min-[600px]:block">
+            <RewardList segments={segments} landing={landing} />
+          </div>
 
-        <button
-          type="button"
-          onClick={spin}
-          disabled={spinning || locked}
-          className="absolute top-1/2 left-1/2 z-10 flex size-20 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border-4 border-gold-foreground text-xs font-black uppercase tracking-wider text-gold-foreground transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-90"
-          style={{
-            background: 'radial-gradient(circle at 35% 30%, color-mix(in oklch, var(--gold) 55%, var(--foreground)), var(--gold) 50%, color-mix(in oklch, var(--gold) 65%, var(--gold-foreground)))',
-            boxShadow: '0 0 0 3px var(--gold), 0 0 24px color-mix(in oklch, var(--gold) 70%, transparent)',
-          }}
-        >
-          {locked ? (
-            <>
-              <Clock className="mb-0.5 size-4" aria-hidden="true" />
-              <span className="sr-only">Sonraki çevirme: </span>
-              <span className="text-[10px] tabular-nums">{formatRemaining(lockedFor)}</span>
-            </>
-          ) : (
-            <>
-              <RotateCw className={cn('mb-0.5 size-5', spinning && 'animate-spin')} aria-hidden="true" />
-              {spinning ? 'Dönüyor' : 'Çevir'}
-            </>
+          <div className="absolute inset-x-[6%] bottom-[4%] flex flex-col items-stretch gap-1.5 @min-[600px]:inset-x-auto @min-[600px]:bottom-[6%] @min-[600px]:left-[31.5%] @min-[600px]:w-[19.5%]">
+            <ActionButton onClick={spin} disabled={spinning || locked}>
+              {locked ? (
+                <>
+                  <Clock className="size-4" aria-hidden="true" />
+                  <span className="sr-only">Sonraki çevirme: </span>
+                  {formatRemaining(lockedFor)}
+                </>
+              ) : spinning ? (
+                'Çark dönüyor…'
+              ) : (
+                'Çarkı çevir'
+              )}
+            </ActionButton>
+            <ActionNote>
+              {locked
+                ? 'Yeni hakkın sayaç bitince açılır.'
+                : playsLeft == null
+                  ? `Her ${wheel.cooldownHours} saatte 1 ücretsiz çevirme.`
+                  : `${plays} çevirme hakkın var.`}
+            </ActionNote>
+          </div>
+
+          <div className="absolute top-[33%] left-1/2 w-[84%] -translate-x-1/2 @min-[600px]:top-[5%] @min-[600px]:left-[69.5%] @min-[600px]:aspect-square @min-[600px]:h-[74%] @min-[600px]:w-auto">
+            <WheelDisc
+              controller={wheelRef}
+              segments={segments}
+              landed={landing?.index ?? null}
+              won={landing?.won ?? false}
+              spinning={spinning}
+              className="size-full"
+            />
+            <div ref={hubRef} aria-hidden="true" className="absolute top-1/2 left-1/2 size-px" />
+          </div>
+
+          {cardOpen && result && (
+            <ResultCard
+              won={result.segment.points > 0}
+              title={result.segment.points > 0 ? 'Kazandın!' : 'Bu sefer olmadı'}
+              points={result.segment.points}
+              label={result.segment.label}
+              note={result.segment.points > 0 ? 'Ödül bakiyene eklendi.' : 'Bir sonraki çevirmede şansın açık olsun.'}
+              action={locked ? 'Tamam' : 'Tekrar çevir'}
+              onAction={() => {
+                setCardOpen(false)
+                if (!locked) void spin()
+              }}
+              onClose={() => setCardOpen(false)}
+            />
           )}
-        </button>
-
-        {burstKey > 0 && result && result.points > 0 && <WinFlash key={burstKey} label={result.short || result.label} big />}
         </div>
+      </section>
+
+      <div className="@container">
+        <div className="@min-[600px]:hidden">
+          <RewardChips segments={segments} landing={landing} />
         </div>
       </div>
 
-      <div aria-live="polite" className="min-h-14 rounded-xl border border-border bg-background/50 px-4 py-3 text-center">
-        {result ? (
-          <p key={burstKey + result.label} className="animate-pop">
-            <span className="block text-xs text-muted-foreground">{result.points > 0 ? 'Kazandın' : 'Az kaldı!'}</span>
-            <span className={cn('font-display text-lg font-bold', result.points > 0 ? 'text-gold' : 'text-foreground')}>
-              {result.label}
-            </span>
-          </p>
-        ) : (
-          <p className="py-2 text-sm text-muted-foreground">
-            {spinning ? 'Bol şans…' : locked ? `Sonraki ücretsiz çevirme ${formatRemaining(lockedFor)} sonra.` : 'Ödülünü görmek için çevir'}
-          </p>
-        )}
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-3">
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Her {wheel.cooldownHours} saatte 1 ücretsiz çevirme. Boost, promo kod ve VIP geçiş kazan.
+        </p>
+        <span className="shrink-0 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold tabular-nums text-primary">
+          {locked ? formatRemaining(lockedFor) : `${plays} hak`}
+        </span>
       </div>
+
+      <p aria-live="polite" className="sr-only">
+        {result && !spinning ? `${result.segment.points > 0 ? 'Kazandın' : 'Bu sefer olmadı'}: ${result.segment.label}` : ''}
+      </p>
     </article>
   )
 }
