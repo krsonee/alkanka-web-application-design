@@ -103,9 +103,17 @@ export function WheelDisc({
           if (finished) return
           finished = true
           frames.cancel()
+          disc.removeEventListener('transitionend', turned)
           resolve()
         }
-        disc.addEventListener('transitionend', done, { once: true })
+        /*
+          Only the disc's own turn ends the spin. The slices inside it fade when a new spin starts, and the end of
+          that fade reaches the disc too: it must not be taken for the wheel having stopped.
+        */
+        function turned(event: TransitionEvent) {
+          if (event.target === disc && event.propertyName === 'transform') done()
+        }
+        disc.addEventListener('transitionend', turned)
         window.setTimeout(done, duration + 400)
       }),
   }))

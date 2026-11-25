@@ -1,12 +1,16 @@
 'use client'
 
 /*
-  Zar At at its own table: a navy felt dice table fills the stage and Jako, the croupier, stands at its lower left
-  with a dice cup. There is one pair of dice, the two on the felt: his clips show the cup and never dice of their
-  own. A throw makes them jump into the cup; he swings it out over the table and the same two fly out of its mouth,
-  at the frame of his clip where the swing ends (the stage follows the clip's clock, and measures where the
-  mouth is on screen). They land, bounce twice and slide to a stop (dice-stage/throw.ts), raising dust and a ring
-  on the felt at each landing (mini-stage/room-fx.tsx). While they are in the air the pay tiles light up in turn, and the one the throw made
+  Zar At at its own table: a navy felt dice table seen from the shooter's end runs away down the stage to a padded
+  wall (the same table on phones: the tall picture is the middle of the wide one), and Jako, the croupier, stands
+  at its near end, lower left, with a dice cup. A die is read from its top face: what the result says is what
+  the two dice show on top. There is one pair of dice, the
+  two on the felt: his clips show the cup and never dice of their own. A throw makes them jump into the cup; he
+  swings it out over the table and the same two fly out of its mouth, at the frame of his clip where the swing ends
+  (the stage follows the clip's clock, and measures where the mouth is on screen). They fly down the table, hit the
+  wall, come back off it, land twice and roll over their edges to a stop (dice-stage/throw.ts), drawn smaller the
+  farther down the table they are, raising dust and a ring on the felt as they land (mini-stage/room-fx.tsx). While
+  they are in the air the pay tiles light up in turn, and the one the throw made
   stays lit; coins spill onto the felt for what was won, and a double or better makes the dice jump. Across the
   top are the game's name and the four things a throw can be, each drawn with the dice that make it; what Jako
   says is beside him and the throw button is at the lower right (the stage is 9 : 16 on phones instead of 2 : 1).
@@ -15,7 +19,7 @@
   on the two values it returns.
 */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { flushSync } from 'react-dom'
 import Image from 'next/image'
 import { Clock } from 'lucide-react'
@@ -30,7 +34,7 @@ import { useCatalog } from '../catalog-context'
 import { DetailButton, DetailModal } from '../detail-modal'
 import { usePoints } from '../points-context'
 import { Die, MiniDie } from './dice-stage/die'
-import { hop, scoop, settle, throwDice, type DieRig } from './dice-stage/throw'
+import { hop, REST_RISE, restSpot, scoop, settle, TABLES, throwDice, type DieRig, type Scene } from './dice-stage/throw'
 import type { MiniGameProps } from './lucky-wheel'
 import { formatRemaining } from './mini-status'
 import { CallerBubble, StageResult, StageShade, StageTitle } from './mini-stage/caller'
@@ -75,10 +79,10 @@ const STILL_MS = 700
 /** Where the cup's mouth is on Jako's picture, as fractions of it: standing, and swung out over the table. */
 const RIM = { left: '75.7%', top: '35.7%' }
 const MOUTH = { left: '92.8%', top: '46.6%' }
-/** Which way the swung cup's mouth points, in die widths: on the wide stage, and on the tall one. */
-const KICK: { wide: [number, number]; tall: [number, number] } = { wide: [0.35, -0.1], tall: [0.6, -0.15] }
+/** How wide a die is while it is inside the cup, against the width of Jako's picture. */
+const IN_CUP = 0.06
 const START: Pair = [5, 3]
-/** How far each die is turned away from the viewer at rest. */
+/** How far each die is turned about the upright at rest: its value is on top, and two sides show under it. */
 const LEANS = [24, -18]
 /** Coins that spill onto the felt, by what the throw was. */
 const COINS = [30, 16, 9, 4]
@@ -105,25 +109,61 @@ const CROUPIER: ActorCast = {
 const CROUPIER_BOX = 'pointer-events-none absolute bottom-0 left-[-36.2%] aspect-[1100/680] w-[94.6%] @min-[600px]:left-[-11.35%] @min-[600px]:w-[61.24%]'
 
 /*
-  Where the dice come to rest on the felt (percentages of the stage) and how big they are; the nearer one is larger.
-  On the wide stage they lie well to the right of the cup, so the throw crosses the table.
-  --from-x / --from-y, where the cup's mouth is from there, is measured before each move (aim).
+  Where the dice come to rest on the felt, in table units (die widths right of the middle, and down the table from
+  its near end): on the wide stage, and on the tall one. The table's perspective turns that into a place on the
+  stage and a size, so the nearer die is the larger. On the wide stage they lie right of the cup.
 */
-const RESTS = [
-  'top-[57.5%] left-[37%] [--s:22cqw] @min-[600px]:top-[56.5%] @min-[600px]:left-[60%] @min-[600px]:[--s:9cqw]',
-  'top-[65%] left-[64%] [--s:25cqw] @min-[600px]:top-[64.5%] @min-[600px]:left-[72%] @min-[600px]:[--s:10.5cqw]',
-]
+const RESTS: { wide: [number, number][]; tall: [number, number][] } = {
+  wide: [
+    [1.02, 4.1],
+    [2.4, 2.85],
+  ],
+  tall: [
+    [-0.8, 1.9],
+    [0.75, 1.2],
+  ],
+}
 
 /** A little scatter per throw (in die widths, and degrees of lean), so two throws never land on the same spot. */
 const SCATTER = [
   [0, 0, 0],
-  [-0.2, 0.1, -7],
-  [0.16, -0.12, 9],
-  [-0.1, -0.14, 5],
-  [0.22, 0.08, -11],
+  [-0.2, 0.16, -7],
+  [0.16, -0.2, 9],
+  [-0.1, -0.22, 5],
+  [0.22, 0.12, -11],
 ]
 
 const scatterOf = (i: number, throws: number) => SCATTER[(throws + i * 2) % SCATTER.length]
+
+/** Where die `i` rests on throw number `throws`, in table units. */
+function restOf(layout: 'wide' | 'tall', i: number, throws: number): [number, number] {
+  const [dx, dz] = scatterOf(i, throws)
+  return [RESTS[layout][i][0] + dx, RESTS[layout][i][1] + dz]
+}
+
+/*
+  The resting place as the stage's own percentages, for both shapes of stage: the box is put with its lower part on
+  the spot where the die touches the felt.
+*/
+const REST_BOX = cn(
+  'absolute top-(--py) left-(--px) size-(--s) [--s:var(--ps)]',
+  '@min-[600px]:top-(--ly) @min-[600px]:left-(--lx) @min-[600px]:[--s:var(--ls)]',
+)
+
+function restVars(i: number, throws: number) {
+  const wide = restSpot(TABLES.wide, ...restOf('wide', i, throws))
+  const tall = restSpot(TABLES.tall, ...restOf('tall', i, throws))
+  const n = (v: number) => v.toFixed(3)
+  return {
+    '--lx': `${n(wide.left)}%`,
+    '--ly': `${n(wide.top)}%`,
+    '--ls': `${n(wide.size)}cqw`,
+    '--px': `${n(tall.left)}%`,
+    '--py': `${n(tall.top)}%`,
+    '--ps': `${n(tall.size)}cqw`,
+    translate: `-50% ${n(-(0.5 + REST_RISE) * 100)}%`,
+  } as CSSProperties
+}
 
 type Result = { dice: Pair; points: number; tier: number }
 type Frames = ReturnType<typeof pacedFrames>
@@ -169,15 +209,19 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
     }
   }, [])
 
-  /** Points each die at one of the cup's mouths: how far it is from the die's resting place, on screen. */
-  function aim(target: HTMLElement | null) {
+  const layout = () => ((stageRef.current?.offsetWidth ?? 0) >= 600 ? 'wide' : 'tall')
+
+  /** The stage as it is on screen right now, with one of the cup's mouths as where the dice go to or come from. */
+  function sceneFor(target: HTMLElement | null): Scene | null {
+    const stage = stageRef.current?.getBoundingClientRect()
     const to = target?.getBoundingClientRect()
-    if (!to) return
-    for (const rest of rests.current) {
-      const box = rest?.getBoundingClientRect()
-      if (!rest || !box) continue
-      rest.style.setProperty('--from-x', `${to.left - (box.left + box.width / 2)}px`)
-      rest.style.setProperty('--from-y', `${to.top - (box.top + box.height / 2)}px`)
+    if (!stage || !to) return null
+    return {
+      table: TABLES[layout()],
+      width: stage.width,
+      height: stage.height,
+      from: { x: to.left - stage.left, y: to.top - stage.top },
+      inCup: (target?.parentElement?.offsetWidth ?? 0) * IN_CUP,
     }
   }
 
@@ -219,13 +263,14 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
   /** The two dice as the throw code moves them, leaning the way they do on throw number `count`. */
   function rigsFor(count: number): DieRig[] | null {
     const list: DieRig[] = []
-    const kick = (stageRef.current?.offsetWidth ?? 0) >= 600 ? KICK.wide : KICK.tall
+    const shape = layout()
     for (const i of [0, 1]) {
       const mover = movers.current[i]
       const cube = cubes.current[i]
       const shade = shades.current[i]
       if (!mover || !cube || !shade) return null
-      list.push({ mover, cube, shade, lean: LEANS[i] + scatterOf(i, count)[2], kick })
+      const faces = Array.from(cube.querySelectorAll<HTMLElement>('[data-shade]'))
+      list.push({ mover, cube, faces, shade, lean: LEANS[i] + scatterOf(i, count)[2], at: restOf(shape, i, count) })
     }
     return list
   }
@@ -240,13 +285,14 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
     setMood('spin')
     const lying = reduced ? null : rigsFor(throws)
     /* the dice on the felt go into the cup while it still stands */
-    if (lying) aim(rimRef.current)
-    const cleared = lying
-      ? scoop(loop, lying, shown, (die) => {
-          playSound('tile', 0.5)
-          if (die === 0) buzz(8)
-        })
-      : Promise.resolve()
+    const rim = lying && sceneFor(rimRef.current)
+    const cleared =
+      lying && rim
+        ? scoop(loop, lying, shown, rim, (die) => {
+            playSound('tile', 0.5)
+            if (die === 0) buzz(8)
+          })
+        : Promise.resolve()
     const res = await draw()
     await Promise.all([reduced ? null : tip(), cleared])
     if (gone.current) return
@@ -267,19 +313,33 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
       setFlying(true)
     })
     const dice = reduced ? null : rigsFor(count)
-    if (dice) {
-      /* out of the swung cup's mouth; out of the top if the cup is standing (no clip, or a very late answer) */
-      const flung = cupTipped()
-      if (!flung) dice.forEach((rig) => (rig.kick = undefined))
-      aim(flung ? mouthRef.current : rimRef.current)
+    /* out of the swung cup's mouth; out of the top if the cup is standing (no clip, or a very late answer) */
+    const mouth = dice && sceneFor(cupTipped() ? mouthRef.current : rimRef.current)
+    if (dice && mouth) {
       playSound('dice', 0.6)
-      await throwDice(loop, dice, res.dice, (die, landing, power) => {
+      await throwDice(loop, dice, res.dice, mouth, (die, kind, power) => {
+        if (kind === 'wall') {
+          /* the padding at the far end: a dull knock, and a little dust where the die met it */
+          fx.current?.puff(fx.current.spot(dice[die].mover), 0.4)
+          playSound('tile', 0.7)
+          if (die === 0) buzz(6)
+          return
+        }
+        if (kind === 'flop') {
+          /* over an edge and down onto a face */
+          fx.current?.puff(fx.current.spot(dice[die].shade), power * 0.7)
+          playSound('tile', power)
+          return
+        }
         const at = fx.current?.spot(dice[die].shade) ?? null
+        const first = power === 1
         fx.current?.puff(at, power)
-        if (landing === 0) fx.current?.ring(at, dice[die].mover.offsetWidth * 1.3, 0.34)
-        playSound(landing === 0 ? 'dice' : 'tile', power)
-        if (landing === 0 && die === 0) buzz(12)
+        if (first) fx.current?.ring(at, dice[die].mover.getBoundingClientRect().width * 1.3, 0.3)
+        playSound(first ? 'dice' : 'tile', power)
+        if (first && die === 0) buzz(12)
       })
+    } else if (dice) {
+      dice.forEach((rig, i) => settle(rig, res.dice[i]))
     }
     if (gone.current) return
 
@@ -400,12 +460,12 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
             aria-hidden="true"
             className="room-breathe pointer-events-none absolute top-[60%] left-1/2 h-[26%] w-[120%] -translate-1/2 rounded-[50%] bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--gold)_15%,transparent),transparent)] mix-blend-plus-lighter @min-[600px]:top-[54%] @min-[600px]:left-[64%] @min-[600px]:h-[44%] @min-[600px]:w-[48%]"
           />
-          <span ref={feltRef} aria-hidden="true" className="absolute top-[61.5%] left-1/2 @min-[600px]:top-[60.5%] @min-[600px]:left-[66%]" />
+          <span ref={feltRef} aria-hidden="true" className="absolute top-[61.5%] left-1/2 @min-[600px]:top-[60.5%] @min-[600px]:left-[63%]" />
           {settled && settled.tier < 3 && (
             <span
               key={`glow-${throws}`}
               aria-hidden="true"
-              className="felt-glow absolute top-[63%] left-1/2 h-[22%] w-[92%] -translate-1/2 rounded-[50%] bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--gold)_38%,transparent),transparent)] @min-[600px]:top-[62%] @min-[600px]:left-[66%] @min-[600px]:h-[34%] @min-[600px]:w-[42%]"
+              className="felt-glow absolute top-[63%] left-1/2 h-[22%] w-[92%] -translate-1/2 rounded-[50%] bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--gold)_38%,transparent),transparent)] @min-[600px]:top-[62%] @min-[600px]:left-[63%] @min-[600px]:h-[34%] @min-[600px]:w-[42%]"
             />
           )}
 
@@ -417,22 +477,23 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
 
           {/* after Jako, so the dice are drawn over his cup as they go in and come out */}
           {([0, 1] as const).map((i) => {
-            const [dx, dy, lean] = scatterOf(i, throws)
+            const lean = scatterOf(i, throws)[2]
             return (
               <div
                 key={i}
                 ref={(el) => {
                   rests.current[i] = el
                 }}
-                className={cn('absolute size-(--s) -translate-1/2', RESTS[i])}
-                style={{ marginLeft: `calc(var(--s) * ${dx})`, marginTop: `calc(var(--s) * ${dy})` }}
+                className={REST_BOX}
+                style={restVars(i, throws)}
               >
                 <span
                   ref={(el) => {
                     shades.current[i] = el
                   }}
                   aria-hidden="true"
-                  className="absolute top-[84%] left-[-15%] h-[30%] w-[130%] rounded-[50%] bg-[radial-gradient(closest-side,rgb(0_0_0/0.8),transparent)]"
+                  /* under the whole footprint of the cube, which is seen from well above */
+                  className="absolute top-[36%] left-[-46%] h-[116%] w-[192%] rounded-[50%] bg-[radial-gradient(closest-side,rgb(0_0_0/0.85)_48%,transparent)]"
                 />
                 <Die
                   value={shown[i]}
