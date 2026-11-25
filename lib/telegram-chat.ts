@@ -3,6 +3,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { rows, sql } from '@/lib/db'
 import { botToken, callBot, ensureTables, entitiesToCleanText } from '@/lib/telegram-mirror'
 import { SITE_URL } from '@/lib/seo'
+import { askStanding } from '@/lib/tg-standing'
 import { TG_HTML, escapeHtml, noticeMarkup, noticePlain, tgMemberMessage, tgNotice, type TgMark, type TgNotice } from '@/lib/tg-format'
 
 export type ChatMessage = {
@@ -374,21 +375,26 @@ const JOINED_CACHE_MS = 5 * 60 * 1000
 const NOT_JOINED_CACHE_MS = 8_000
 const joinedCache = new Map<string, { at: number; joined: boolean }>()
 
-export async function isGroupMember(userId: string): Promise<boolean> {
+const FRESH_GAP_MS = 3_000
+const NOT_IN = { joined: false, uncertain: false }
+
+/**
+ * `uncertain` means Telegram could not be asked, so the person must not be told they have not joined.
+ * `fresh` looks again instead of trusting what was remembered, at most once every few seconds per person.
+ */
+export async function groupStanding(userId: string, fresh = false) {
   const hit = joinedCache.get(userId)
-  if (hit && Date.now() - hit.at < (hit.joined ? JOINED_CACHE_MS : NOT_JOINED_CACHE_MS)) return hit.joined
+  const keep = fresh ? FRESH_GAP_MS : hit?.joined ? JOINED_CACHE_MS : NOT_JOINED_CACHE_MS
+  if (hit && Date.now() - hit.at < keep) return { joined: hit.joined, uncertain: false }
   const config = await getChatConfig()
-  if (!config) return false
+  if (!config) return NOT_IN
   const link = await rows<{ tg_id: string }>(sql`SELECT tg_id FROM tg_links WHERE user_id = ${userId}`)
-  if (!link[0]) return false
-  const member = await callBot<{ status: string }>(await botToken(config.botId), 'getChatMember', {
-    chat_id: config.chatId,
-    user_id: Number(link[0].tg_id),
-  }).catch(() => null)
-  if (!member) return hit?.joined ?? false
-  const joined = !['left', 'kicked'].includes(member.status)
+  if (!link[0]) return NOT_IN
+  const standing = await askStanding(config.chatId, Number(link[0].tg_id), config.botId, fresh)
+  if (standing === 'unknown') return { joined: hit?.joined ?? false, uncertain: !hit?.joined }
+  const joined = standing === 'in'
   joinedCache.set(userId, { at: Date.now(), joined })
-  return joined
+  return { joined, uncertain: false }
 }
 
 export async function unlink(userId: string) {

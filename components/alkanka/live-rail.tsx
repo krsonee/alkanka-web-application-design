@@ -37,7 +37,7 @@ import {
   type TelegramAccess,
 } from '@/lib/telegram-channels-shared'
 import { useTelegramUrl } from './telegram-address'
-import { useChannelFeed, useChatFeed, type ChatResponse } from './use-chat-feed'
+import { CHAT_FEED_KEY, channelFeedKey, useAccessRecheck, useChannelFeed, useChatFeed, type ChatResponse } from './use-chat-feed'
 import { MemberBadge, MemberName, MemberRank } from './kp/member-rank'
 
 export const OPEN_CHAT_EVENT = 'alkanka:open-chat'
@@ -93,11 +93,23 @@ function JoinGate({
 }: {
   me: TelegramAccess
   inviteUrl: string
-  place: { name: string; join: string }
-  onRecheck: () => void
+  place: Place
+  onRecheck: () => Promise<TelegramAccess>
 }) {
   const step = !me.loggedIn ? 1 : !me.link ? 2 : 3
   const steps = ['Giriş yap', "Telegram'ı bağla", place.join]
+  const [note, setNote] = useState<string | null>(null)
+  const [checking, startCheck] = useTransition()
+
+  function check() {
+    startCheck(async () => {
+      setNote(null)
+      const now = await onRecheck().catch(() => null)
+      // Once the person is in, the gate is replaced by the content and there is nothing left to say.
+      if (now?.joined) return
+      setNote(now ? missingStep(now, place) : 'Şu an kontrol edemedik. Birkaç saniye sonra yeniden dene.')
+    })
+  }
 
   return (
     <li className="flex flex-1 flex-col items-center justify-center gap-4 px-2 text-center">
@@ -107,7 +119,7 @@ function JoinGate({
       <div className="flex flex-col gap-1.5">
         <p className="text-sm font-semibold text-foreground text-balance">{place.name} üyelere özel</p>
         <p className="text-xs leading-relaxed text-muted-foreground text-pretty">
-          {`Mesajları görmek ve yorum yapmak için Telegram'da ${place.name.toLocaleLowerCase('tr-TR')} katılmış olman gerekiyor.`}
+          {`Mesajları görmek ve yorum yapmak için Telegram'da ${place.into} katılmış olman gerekiyor.`}
         </p>
       </div>
 
@@ -167,16 +179,30 @@ function JoinGate({
         {step >= 2 && (
           <button
             type="button"
-            onClick={onRecheck}
-            className="flex items-center justify-center gap-1.5 text-xs font-semibold text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            onClick={check}
+            disabled={checking}
+            className="flex min-h-9 items-center justify-center gap-1.5 text-xs font-semibold text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:no-underline disabled:opacity-70"
           >
-            <RefreshCw className="size-3" aria-hidden="true" />
-            {step === 2 ? 'Bağladım, kontrol et' : 'Katıldım, kontrol et'}
+            <RefreshCw className={cn('size-3', checking && 'animate-spin')} aria-hidden="true" />
+            {checking ? 'Kontrol ediliyor…' : step === 2 ? 'Bağladım, kontrol et' : 'Katıldım, kontrol et'}
           </button>
         )}
+        <p role="status" className={cn('text-xs leading-relaxed text-foreground text-pretty', !note && 'sr-only')}>
+          {note}
+        </p>
       </div>
     </li>
   )
+}
+
+type Place = { name: string; into: string; join: string }
+
+/** What a person who pressed "check" is still missing, in the order the steps are taken. */
+function missingStep(me: TelegramAccess, place: Place) {
+  if (!me.loggedIn) return 'Oturumun kapanmış görünüyor. Yeniden giriş yapıp tekrar dene.'
+  if (!me.link) return "Telegram hesabın henüz bağlanmamış. Açılan Telegram sohbetinde Başlat'a bas, sonra yeniden dene."
+  if (me.uncertain) return 'Telegram şu an üyeliğini doğrulayamadı. Sorun sende değil, birkaç dakika sonra yeniden dene.'
+  return `${me.link.tgName} hesabı ${place.name.toLocaleLowerCase('tr-TR')} üyeleri arasında görünmüyor. Telegram'da bu hesapla katıldıktan sonra yeniden dene.`
 }
 
 function ConnectedAs({ me, url, label }: { me: TelegramAccess; url: string; label: string }) {
@@ -360,7 +386,15 @@ function ModMenu({ message, up, onDone, children }: { message: ChatMessage; up: 
   )
 }
 
-function ChatPanel({ data, onRefresh }: { data: ChatResponse | undefined; onRefresh: () => void }) {
+function ChatPanel({
+  data,
+  onRefresh,
+  onRecheck,
+}: {
+  data: ChatResponse | undefined
+  onRefresh: () => void
+  onRecheck: () => Promise<TelegramAccess>
+}) {
   const listRef = useStickToBottom(data?.messages.at(-1)?.id)
   const telegramUrl = useTelegramUrl()
   const inviteUrl = data?.inviteUrl ?? telegramUrl
@@ -385,7 +419,12 @@ function ChatPanel({ data, onRefresh }: { data: ChatResponse | undefined; onRefr
         {!data ? (
           <Loading />
         ) : locked ? (
-          <JoinGate me={data.me} inviteUrl={inviteUrl} place={{ name: 'Sohbet grubu', join: 'Sohbete katıl' }} onRecheck={onRefresh} />
+          <JoinGate
+            me={data.me}
+            inviteUrl={inviteUrl}
+            place={{ name: 'Sohbet grubu', into: 'sohbet grubuna', join: 'Sohbete katıl' }}
+            onRecheck={onRecheck}
+          />
         ) : !data.configured || data.messages.length === 0 ? (
           <EmptyState
             title={data.configured ? 'Henüz mesaj yok' : 'Sohbet yakında burada'}
@@ -593,7 +632,17 @@ function PostCard({ slug, post, onRefresh }: { slug: BroadcastSlug; post: Channe
   )
 }
 
-function ChannelPanel({ slug, data, onRefresh }: { slug: BroadcastSlug; data: ChannelFeed | undefined; onRefresh: () => void }) {
+function ChannelPanel({
+  slug,
+  data,
+  onRefresh,
+  onRecheck,
+}: {
+  slug: BroadcastSlug
+  data: ChannelFeed | undefined
+  onRefresh: () => void
+  onRecheck: () => Promise<TelegramAccess>
+}) {
   const listRef = useStickToBottom(`${slug}:${data?.locked}:${data?.posts.at(-1)?.id}`)
   const telegramUrl = useTelegramUrl()
   const label = BROADCAST_CHANNELS.find((c) => c.slug === slug)!.title
@@ -607,7 +656,12 @@ function ChannelPanel({ slug, data, onRefresh }: { slug: BroadcastSlug; data: Ch
         ) : !data.configured ? (
           <EmptyState title={`${name} yakında burada`} body="Kanalımız bağlandığında paylaşımlar burada görünecek." />
         ) : data.locked ? (
-          <JoinGate me={data.me} inviteUrl={data.inviteUrl ?? telegramUrl} place={{ name, join: 'Kanala katıl' }} onRecheck={onRefresh} />
+          <JoinGate
+            me={data.me}
+            inviteUrl={data.inviteUrl ?? telegramUrl}
+            place={{ name, into: `${label.toLocaleLowerCase('tr-TR')}na`, join: 'Kanala katıl' }}
+            onRecheck={onRecheck}
+          />
         ) : data.posts.length === 0 ? (
           <EmptyState title="Henüz paylaşım yok" body="Kanala atılan yeni paylaşımlar burada görünecek." />
         ) : (
@@ -652,6 +706,7 @@ export function LiveRail() {
   const closeRef = useRef<HTMLButtonElement>(null)
   const chat = useChatFeed(railVisible && tab === 'sohbet')
   const channel = useChannelFeed(railVisible && tab !== 'sohbet' ? tab : null)
+  const recheck = useAccessRecheck()
 
   const subtitle =
     tab === 'sohbet'
@@ -788,9 +843,15 @@ export function LiveRail() {
 
       <div role="tabpanel" id="tg-tabpanel" aria-labelledby={`tg-tab-${tab}`} className="flex min-h-0 flex-1 flex-col">
         {tab === 'sohbet' ? (
-          <ChatPanel data={chat.data} onRefresh={() => chat.mutate()} />
+          <ChatPanel data={chat.data} onRefresh={() => chat.mutate()} onRecheck={() => recheck(CHAT_FEED_KEY)} />
         ) : (
-          <ChannelPanel key={tab} slug={tab} data={channel.data} onRefresh={() => channel.mutate()} />
+          <ChannelPanel
+            key={tab}
+            slug={tab}
+            data={channel.data}
+            onRefresh={() => channel.mutate()}
+            onRecheck={() => recheck(channelFeedKey(tab))}
+          />
         )}
       </div>
     </aside>

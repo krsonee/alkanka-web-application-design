@@ -13,6 +13,8 @@ export type TelegramAccess = {
   loggedIn: boolean
   link: { tgName: string; tgUsername: string | null } | null
   joined: boolean
+  /** Telegram could not be asked, so `joined: false` says nothing about the person. */
+  uncertain?: boolean
 }
 
 export type ChannelComment = {
