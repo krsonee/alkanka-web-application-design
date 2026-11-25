@@ -2,7 +2,9 @@
 
 /*
   Zar At at its own table: a navy felt dice table seen from the shooter's end runs away down the stage to a padded
-  wall, and Jako, the croupier, stands at its near end, lower left, with a dice cup. There is one pair of dice, the
+  wall (the same table on phones: the tall picture is the middle of the wide one), and Jako, the croupier, stands
+  at its near end, lower left, with a dice cup. A die is read from its top face: what the result says is what
+  the two dice show on top. There is one pair of dice, the
   two on the felt: his clips show the cup and never dice of their own. A throw makes them jump into the cup; he
   swings it out over the table and the same two fly out of its mouth, at the frame of his clip where the swing ends
   (the stage follows the clip's clock, and measures where the mouth is on screen). They fly down the table, hit the
@@ -80,7 +82,7 @@ const MOUTH = { left: '92.8%', top: '46.6%' }
 /** How wide a die is while it is inside the cup, against the width of Jako's picture. */
 const IN_CUP = 0.06
 const START: Pair = [5, 3]
-/** How far each die is turned away from the viewer at rest. */
+/** How far each die is turned about the upright at rest: its value is on top, and two sides show under it. */
 const LEANS = [24, -18]
 /** Coins that spill onto the felt, by what the throw was. */
 const COINS = [30, 16, 9, 4]
@@ -113,12 +115,12 @@ const CROUPIER_BOX = 'pointer-events-none absolute bottom-0 left-[-36.2%] aspect
 */
 const RESTS: { wide: [number, number][]; tall: [number, number][] } = {
   wide: [
-    [0.9, 3.6],
-    [2.1, 2.5],
+    [1.02, 4.1],
+    [2.4, 2.85],
   ],
   tall: [
-    [-0.7, 3.35],
-    [0.65, 2.3],
+    [-0.8, 1.9],
+    [0.75, 1.2],
   ],
 }
 
@@ -490,7 +492,8 @@ export function DiceRoll({ lockedFor, playsLeft, canPlay, onPlayed, draw = serve
                     shades.current[i] = el
                   }}
                   aria-hidden="true"
-                  className="absolute top-[82%] left-[-18%] h-[30%] w-[136%] rounded-[50%] bg-[radial-gradient(closest-side,rgb(0_0_0/0.8),transparent)]"
+                  /* under the whole footprint of the cube, which is seen from well above */
+                  className="absolute top-[36%] left-[-46%] h-[116%] w-[192%] rounded-[50%] bg-[radial-gradient(closest-side,rgb(0_0_0/0.85)_48%,transparent)]"
                 />
                 <Die
                   value={shown[i]}

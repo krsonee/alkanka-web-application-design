@@ -42,9 +42,11 @@ export type ActorCast = {
   mirrored?: boolean
   /**
    * A reaction's still moment, in seconds: `hold` is when it stops moving, `back` when it starts for the stance
-   * again. Nothing moves between the two, so the player may skip from anywhere in between to `back`.
+   * again. Nothing moves between the two, so the player may skip from anywhere in between to `back`. With
+   * `freeze` the clip stops on `hold` and stays there until another state is asked for, however long that takes
+   * (the stage decides when the move is over), then goes on from `back`.
    */
-  beats?: Partial<Record<ActorState, { hold: number; back: number }>>
+  beats?: Partial<Record<ActorState, { hold: number; back: number; freeze?: boolean }>>
   /** How fast a reaction's way back is played when another reaction is waiting for it; BACK_RATE unless given. */
   backRate?: number
 }
@@ -242,6 +244,8 @@ export function JakoActor({
     let queued: ActorState | null = null
     /** The waiting loop is being run home, or a reaction's way back is being played fast. */
     let homing = false
+    /** The reaction on screen has stopped on its `hold` frame and waits there for the next state (beats.freeze). */
+    let frozen = false
     let homeTimer: ReturnType<typeof setTimeout> | undefined
     let running = false
     let on = true
@@ -261,10 +265,16 @@ export function JakoActor({
         setLive(true)
       }
       tell(video)
-      /* a reaction that another one is waiting for skips the rest of its still moment */
-      if (video && top && queued && !homing) {
+      if (video && top && !homing && !frozen) {
         const beats = cast.beats?.[top]
-        if (beats && video.currentTime >= beats.hold) leave(video, beats.back)
+        if (beats && video.currentTime >= beats.hold) {
+          /* a reaction that another one is waiting for skips the rest of its still moment */
+          if (queued) leave(video, beats.back)
+          else if (beats.freeze) {
+            frozen = true
+            video.pause()
+          }
+        }
       }
       if (running) frames.request(draw)
     }
@@ -277,6 +287,7 @@ export function JakoActor({
 
     const settleHome = () => {
       homing = false
+      frozen = false
       clearTimeout(homeTimer)
       const idle = videos.get('idle')
       if (idle) {
@@ -305,8 +316,10 @@ export function JakoActor({
     /** Plays what is left of the clip on screen fast, from `at` if given; whatever is queued starts when it ends. */
     function leave(video: HTMLVideoElement, at?: number) {
       homing = true
+      frozen = false
       if (at !== undefined && video.currentTime < at) video.currentTime = at
       video.playbackRate = cast.backRate ?? BACK_RATE
+      if (video.paused && on) void video.play().catch(() => {})
       clearTimeout(homeTimer)
       homeTimer = setTimeout(arrive, HOME_LIMIT_MS + 600)
     }
@@ -338,6 +351,13 @@ export function JakoActor({
     function ask(asked: ActorState) {
       const s = cast.clips[asked] ? asked : 'idle'
       const video = top ? videos.get(top) : null
+      if (frozen && video && top) {
+        /* it was waiting on its hold frame for exactly this: its way back is played, then what was asked for starts */
+        if (s !== 'idle') warm(s)
+        queued = s === 'idle' ? null : s
+        leave(video, cast.beats?.[top]?.back)
+        return
+      }
       const playing = Boolean(video && !video.paused && !video.ended)
       if (s === 'idle') {
         /* a reaction on screen plays to its end and hands back to waiting by itself */
@@ -426,7 +446,7 @@ export function JakoActor({
           return
         }
         if (video && top === wanted && video.paused && !video.ended) {
-          void video.play().catch(() => {})
+          if (!frozen) void video.play().catch(() => {})
           loop(true)
         } else start(wanted)
       },

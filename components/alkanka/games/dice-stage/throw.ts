@@ -40,14 +40,39 @@ export type Table = {
   cup: number
 }
 
-/** Measured on the two table pictures (the wide one and the tall one for phones). */
+/*
+  Measured on the wide table picture. Phones show the same table: the tall picture is the middle half of the wide
+  one, set 14% down a 9 : 16 stage (so it is 56.25% of the stage's height) with the felt carried on below it. Its
+  numbers follow from the wide one's: twice as wide, 0.5625 times as tall.
+
+  `s0` and `ed` both go with how wide a die is against the table: 17.5 and 0.417 for a die as wide as one sixth of
+  the felt's near end, times WIDE_DIE on the wide stage and TALL_DIE on phones.
+*/
+const WIDE_DIE = 0.88
+const TALL_DIE = 0.63
+const WIDE: Table = { vpx: 50.1, vpy: 27, k: 73, s0: 17.5 * WIDE_DIE, ed: 0.417 * WIDE_DIE, wall: 4.7, cup: 1.5 }
+const TALL_TOP = 14
+const TALL_PART = 0.5625
+
 export const TABLES: { wide: Table; tall: Table } = {
-  wide: { vpx: 50.1, vpy: 27, k: 73, s0: 17.5, ed: 0.417, wall: 4.7, cup: 1.5 },
-  tall: { vpx: 50, vpy: 16.8, k: 83.2, s0: 38, ed: 0.312, wall: 4.45, cup: 1.1 },
+  wide: WIDE,
+  tall: {
+    vpx: 50,
+    vpy: TALL_TOP + WIDE.vpy * TALL_PART,
+    k: WIDE.k * TALL_PART,
+    s0: 17.5 * 2 * TALL_DIE,
+    ed: 0.417 * TALL_DIE,
+    wall: WIDE.wall,
+    /* the cup is held nearer than the near end of the picture's felt */
+    cup: 0.8,
+  },
 }
 
-/** The camera looks down on the dice by this much. */
-const PITCH = 22
+/**
+ * The camera looks down on the dice by this much: steep enough for a die's top face, the one that counts, to be
+ * the face seen best.
+ */
+const PITCH = 52
 /** How much of a height shows on screen at that angle. */
 const LIFT = Math.cos((PITCH * Math.PI) / 180)
 /** How far above its spot on the felt a resting die's middle is drawn, in die widths. */
@@ -84,7 +109,7 @@ function turn([x, y, z]: Vec, deg: number): Mat {
 const AX: Vec = [1, 0, 0]
 const AY: Vec = [0, 1, 0]
 
-/** The cube's own turn (around X, then Y) that brings a value to the front. */
+/** The cube's own turn (around X, then Y) that brings a value to the front; lying() then tips that face up. */
 const FRONT: Record<number, [number, number]> = {
   1: [0, 0],
   6: [0, 180],
@@ -96,8 +121,11 @@ const FRONT: Record<number, [number, number]> = {
 
 const VIEW = turn(AX, -PITCH)
 
-/** A die lying on the felt showing `value`, turned `lean` degrees away from the viewer. */
-const lying = (value: number, lean: number) => mul(turn(AY, lean), mul(turn(AX, FRONT[value][0]), turn(AY, FRONT[value][1])))
+/**
+ * A die lying on the felt with `value` on top, the way a thrown die is read, turned `lean` degrees about the
+ * upright so two of its sides show as well.
+ */
+const lying = (value: number, lean: number) => mul(turn(AY, lean), mul(turn(AX, 90 + FRONT[value][0]), turn(AY, FRONT[value][1])))
 
 const n4 = (v: number) => (Math.abs(v) < 0.00005 ? '0' : v.toFixed(4))
 
@@ -115,14 +143,17 @@ const NORMALS: Vec[] = [
   [0, -1, 0],
   [0, 1, 0],
 ]
-/** The lamp hangs over the table, a little toward the viewer and to the left. */
-const LAMP: Vec = [-0.38, -0.78, 0.5]
+/**
+ * The lamp hangs right over the table, a little toward the viewer and to the left: a die's top face is its
+ * brightest, and its sides are in half shade, so the top is what the eye reads.
+ */
+const LAMP: Vec = [-0.24, -0.93, 0.28]
 
 /** How dark each face is (0 to 1) for a cube turned by `o`: faces turned from the lamp are in shade. */
 function shadesOf(o: Mat) {
   return NORMALS.map(([x, y, z]) => {
     const lit = (o[0] * x + o[1] * y + o[2] * z) * LAMP[0] + (o[3] * x + o[4] * y + o[5] * z) * LAMP[1] + (o[6] * x + o[7] * y + o[8] * z) * LAMP[2]
-    return lit >= 0 ? 0.5 * (1 - Math.min(1, lit)) ** 1.5 : 0.5 + 0.16 * Math.min(1, -lit)
+    return lit >= 0 ? 0.62 * (1 - Math.min(1, lit)) ** 1.5 : 0.62 + 0.14 * Math.min(1, -lit)
   })
 }
 
@@ -307,7 +338,7 @@ function plan(scene: Scene, rig: DieRig, value: number, index: number): Plan {
   const { table } = scene
   const rest = rig.at
   const lean = rig.lean * RAD
-  /* it faces the way it rolled: the last quarter turns bring the face it shows over toward the viewer */
+  /* it faces the way it rolled: the last quarter turns bring the face it shows over onto the top */
   const facing: [number, number] = [Math.sin(lean), -Math.cos(lean)]
   const wallZ = (table.wall - 1) / table.ed
   const quarters = wallZ - rest[1] > 4.2 && Math.random() < 0.6 ? 2 : 1

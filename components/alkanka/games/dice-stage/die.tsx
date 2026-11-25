@@ -1,6 +1,6 @@
 /*
   One die as a real cube: six faces around a centre, with three planes through the middle so nothing shows through
-  its rounded edges while it tumbles. It rests showing `value`; a throw moves and turns it frame by frame through
+  its rounded edges while it tumbles. It rests with `value` on its top face, the way a thrown die is read; a throw moves and turns it frame by frame through
   the two elements it hands out (throw.ts), and ends on the same pose this component draws. Each face has a dark
   layer over it (data-shade): the faces turned away from the lamp over the table are in shade, and the throw
   rewrites that on every frame, so the cube reads as a solid thing while it turns.
@@ -68,7 +68,7 @@ export function Die({
 }: {
   value: number
   tone: keyof typeof TONES
-  /** How far the cube is turned away from the viewer, so two of its sides show. */
+  /** How far the cube is turned about the upright, so two of its sides show under the top face. */
   lean: number
   moverRef: Ref<HTMLDivElement>
   cubeRef: Ref<HTMLDivElement>
