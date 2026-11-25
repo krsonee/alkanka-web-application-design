@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import Image from 'next/image'
 import type { WheelSegment } from '@/lib/rewards-shared'
 import { cn } from '@/lib/utils'
 
@@ -46,6 +47,68 @@ export function RewardChips({ segments, landing }: { segments: WheelSegment[]; l
         <li key={i} className={cn('flex h-12 min-w-0 flex-col items-center justify-center rounded-lg px-1 text-center', rowTone(i, landing))}>
           <span className={cn('text-sm leading-4 font-extrabold tabular-nums', isGold(i) ? 'text-gold' : 'text-foreground')}>{segment.short}</span>
           <span className="w-full truncate text-[10px] leading-[13px] font-medium text-muted-foreground">{segment.label}</span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+/** The game's name on the gold plaque: top right on phones, at the head of the middle column from 600 wide. */
+export function StagePlaque({ children, long = false }: { children: ReactNode; long?: boolean }) {
+  return (
+    <div className="absolute top-[3%] right-[3%] w-[40%] @min-[600px]:top-[6%] @min-[600px]:right-auto @min-[600px]:left-[31.5%] @min-[600px]:w-[19.5%]">
+      <div className="relative aspect-[900/387]">
+        <Image src="/images/wheel/plaque.webp" alt="" fill sizes="(min-width: 640px) 240px, 46vw" className="object-contain" />
+        <span
+          aria-hidden="true"
+          className={cn(
+            'absolute inset-0 flex items-center justify-center pb-[2%] font-display font-extrabold tracking-tight whitespace-nowrap text-foreground',
+            long
+              ? 'text-[clamp(11px,3.3cqw,22px)] @min-[600px]:text-[clamp(10px,1.7cqw,20px)]'
+              : 'text-[clamp(14px,4.4cqw,28px)] @min-[600px]:text-[clamp(12px,2.2cqw,26px)]',
+          )}
+        >
+          {children}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+export type PayRow = { name: string; prize: string }
+
+const payTone = (i: number, lit: number | null) =>
+  lit === i ? 'bg-gold/20 inset-ring-2 inset-ring-gold' : 'bg-background/70 inset-ring inset-ring-foreground/10'
+
+/** What each outcome pays, as rows in the middle column; the outcome that just happened is lit. Shown from 600 wide. */
+export function PayRows({ label, rows, lit }: { label: string; rows: PayRow[]; lit: number | null }) {
+  return (
+    <ol aria-label={label} className="flex flex-col gap-[3px]">
+      {rows.map((row, i) => (
+        <li key={i} className={cn('flex h-[clamp(24px,3.2cqw,38px)] items-center gap-2 rounded-md px-2', payTone(i, lit))}>
+          <span
+            className={cn(
+              'min-w-0 flex-1 truncate text-[clamp(10px,1.2cqw,13px)] font-bold',
+              lit === i ? 'text-foreground' : 'text-foreground/75',
+            )}
+          >
+            {row.name}
+          </span>
+          <span className="shrink-0 text-[clamp(10px,1.2cqw,13px)] font-extrabold whitespace-nowrap text-gold tabular-nums">{row.prize}</span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+/** The same rows for phones, as chips under the stage. */
+export function PayChips({ label, rows, lit, columns }: { label: string; rows: PayRow[]; lit: number | null; columns: 2 | 3 }) {
+  return (
+    <ol aria-label={label} className={cn('grid gap-1.5', columns === 3 ? 'grid-cols-3' : 'grid-cols-2')}>
+      {rows.map((row, i) => (
+        <li key={i} className={cn('flex h-12 min-w-0 flex-col items-center justify-center rounded-lg px-1.5 text-center', payTone(i, lit))}>
+          <span className="w-full truncate text-xs leading-4 font-bold text-foreground">{row.name}</span>
+          <span className="w-full truncate text-xs leading-4 font-extrabold text-gold tabular-nums">{row.prize}</span>
         </li>
       ))}
     </ol>
