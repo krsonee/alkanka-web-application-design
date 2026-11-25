@@ -1,14 +1,16 @@
 /*
   One die as a real cube: six faces around a centre, with three planes through the middle so nothing shows through
   its rounded edges while it tumbles. It rests showing `value`; a throw moves and turns it frame by frame through
-  the two elements it hands out (throw.ts), and ends on the same pose this component draws.
+  the two elements it hands out (throw.ts), and ends on the same pose this component draws. Each face has a dark
+  layer over it (data-shade): the faces turned away from the lamp over the table are in shade, and the throw
+  rewrites that on every frame, so the cube reads as a solid thing while it turns.
 
   Its edge length is --s, set by the stage (container units), so the cube scales with the stage.
 */
 
 import type { Ref } from 'react'
 import { cn } from '@/lib/utils'
-import { restPose } from './throw'
+import { restPose, restShades } from './throw'
 
 const PIPS: Record<number, number[]> = {
   1: [4],
@@ -72,18 +74,19 @@ export function Die({
   cubeRef: Ref<HTMLDivElement>
 }) {
   const look = TONES[tone]
+  const shades = restShades(value, lean)
   return (
-    <div ref={moverRef} className="size-(--s) origin-bottom will-change-transform">
+    <div ref={moverRef} className="size-(--s) will-change-transform">
       <div role="img" aria-label={`Zar: ${value}`} className="size-full [perspective:calc(var(--s)*9)]">
         <div ref={cubeRef} className="relative size-full [transform-style:preserve-3d]" style={{ transform: restPose(value, lean) }}>
           {CORE.map((place) => (
             <span key={place} aria-hidden="true" className={cn('absolute inset-[5%]', look.core)} style={{ transform: place }} />
           ))}
-          {FACES.map((face) => (
+          {FACES.map((face, at) => (
             <span
               key={face.value}
               aria-hidden="true"
-              className={cn('absolute inset-0 grid grid-cols-3 grid-rows-3 rounded-[13%] p-[13%] [backface-visibility:hidden]', look.face)}
+              className={cn('absolute inset-0 grid grid-cols-3 grid-rows-3 overflow-hidden rounded-[13%] p-[13%] [backface-visibility:hidden]', look.face)}
               style={{ transform: `${face.place} translateZ(calc(var(--s) / 2))` }}
             >
               {Array.from({ length: 9 }, (_, i) => (
@@ -91,6 +94,7 @@ export function Die({
                   {PIPS[face.value].includes(i) && <span className={cn('size-[62%] rounded-full', look.pip)} />}
                 </span>
               ))}
+              <span data-shade="" className="pointer-events-none absolute inset-0 bg-background" style={{ opacity: shades[at] }} />
             </span>
           ))}
         </div>
