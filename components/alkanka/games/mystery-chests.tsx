@@ -6,14 +6,15 @@
   the keeper, stands at the lower right with the vault's key. What he says is over his head (beside him on
   phones, where the stage is 9 : 16).
 
-  While they wait the chests stir now and then, light slides over their metal and their keyholes glow. Choosing
-  one puts it under the ceiling lamp; Jako points and the key's light flies to its lock, the chest shakes and
-  light leaks from under its lid until the server answers. Then it is thrown open under turning rays, its coins
-  spill onto the floor (mini-stage/room-fx.tsx), the win counts up across the top of the vault, and the other two
-  chests open one after the other to show what they held.
+  While they wait the chests stir now and then, light slides over their metal and their keyholes glow. The member
+  does not choose a chest: there is one button, and Jako chooses. The ceiling lamp runs over the three chests,
+  slows down and stops on one; the key's light flies from Jako's wing to its lock, the chest shakes and light leaks
+  from under its lid. Then it is thrown open under turning rays, its coins spill onto the floor
+  (mini-stage/room-fx.tsx), the win counts up across the top of the vault, and the other two chests open one after
+  the other to show what they held.
 
-  Which chest pays what is decided on the server (playMini) once a chest is chosen; this component shows the chosen
-  chest opening and what the other two held.
+  Which chest is opened (by the chances set in the panel) and what each one held are decided on the server
+  (playMini); the lamp only stops where the server said.
 */
 
 import { useEffect, useRef, useState } from 'react'
@@ -39,26 +40,32 @@ import { ActionButton } from './wheel-stage/parts'
 const rulesFor = (dailyPlays: number) => [
   `Günde ${dailyPlays} sandık hakkın var, haklar her gün 00:00’da yenilenir.`,
   'Her sandıkta garantili ödül vardır, boş sandık yoktur.',
-  'Hangi sandığı açacağını sen seçersin; her sandığın ödül aralığı üstünde yazar.',
+  'Sandığı sen seçmezsin: “Sandığı aç” düğmesine basınca Jako üç sandıktan birini rastgele seçip açar.',
+  'Her sandığın ödül aralığı üstünde yazar; değerli sandık daha seyrek çıkar.',
   'Kazanılan Kanka Coin anında bakiyene eklenir.',
   'Promo kod ödülleri hesabındaki “Kodlarım” alanına düşer, 7 gün geçerlidir.',
   'Bot, çoklu hesap veya otomasyon tespit edilirse ödüller iptal edilir.',
 ]
 
-export type ChestDraw = (
-  index: number,
-) => Promise<{ ok: true; prizes: number[]; points: number; balance: number } | { ok: false; error: string; balance?: number }>
+type Drawn = { ok: true; chest: number; prizes: number[]; points: number; balance: number } | { ok: false; error: string; balance?: number }
 
-const serverDraw: ChestDraw = async (index) => {
-  const res = await playMini('sandik', index)
-  if (res.ok && res.game === 'sandik') return { ok: true, prizes: res.prizes, points: res.points, balance: res.balance }
+/** `chest` is the one that was opened, by its place in the list. */
+export type ChestDraw = () => Promise<Drawn>
+
+const serverDraw: ChestDraw = async () => {
+  const res = await playMini('sandik')
+  if (res.ok && res.game === 'sandik') return { ok: true, chest: res.chest, prizes: res.prizes, points: res.points, balance: res.balance }
   return { ok: false, error: res.ok ? 'Sandık açılamadı, tekrar dene.' : res.error, balance: res.balance }
 }
 
-type Phase = 'idle' | 'opening' | 'opened'
+/* 'choosing': the lamp is running over the chests; 'opening': it has stopped on one and the key is on its way */
+type Phase = 'idle' | 'choosing' | 'opening' | 'opened'
 
-/** Jako's pointing wing is out this long after a chest is chosen; the key's light leaves it then. */
-const POINT_MS = 460
+/** The lamp moves on this often while it runs, for at least this long, and whatever the server takes. */
+const RUN_MS = 85
+const RUN_MIN_MS = 700
+/** Its last steps onto the chest that was drawn: the lamp slows down, then rests on it. */
+const SLOWING_MS = [130, 190, 270, 400]
 const FLIGHT_MS = 340
 /** The least a lock takes to give once the key is in it, however fast the server answers. */
 const LOCK_MS = 620
@@ -76,11 +83,16 @@ const DUST: { wide: Zone; tall: Zone } = { wide: { x: [0.22, 0.78], y: [0.04, 0.
 
 const wait = (ms: number) => new Promise<void>((done) => setTimeout(done, ms))
 
-/** The keeper: key in hand while waiting, the key offered while the lock turns, the key held up over a win. No chest is empty. */
+/*
+  The keeper: key in hand while waiting, the key offered while the lock turns, the key held up over a win. No chest
+  is empty. Each clip is played out and back over the same frames, so it ends on the frame it began on.
+*/
 const KEEPER: ActorCast = {
   still: '/images/chests/jako.webp',
   clips: { idle: '/video/chests/jako-idle.mp4', spin: '/video/chests/jako-spin.mp4', win: '/video/chests/jako-win.mp4' },
   frame: { width: 896, height: 640 },
+  mirrored: true,
+  beats: { spin: { hold: 1.417, back: 2.75 }, win: { hold: 1.667, back: 1.667 } },
 }
 
 const rewardRange = (rewards: number[]) => `${Math.min(...rewards)}–${Math.max(...rewards)} KC`
@@ -107,7 +119,10 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
   const jackpot = Math.max(...chests.flatMap((chest) => chest.rewards))
   const locked = lockedFor > 0
   const [phase, setPhase] = useState<Phase>('idle')
+  /** The chest that was drawn, once the lamp has stopped on it. */
   const [picked, setPicked] = useState<number | null>(null)
+  /** The chest the lamp is on while it runs. */
+  const [eye, setEye] = useState<number | null>(null)
   const [contents, setContents] = useState<number[]>([])
   const [won, setWon] = useState(0)
   const [error, setError] = useState('')
@@ -117,11 +132,13 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
   const [turned, setTurned] = useState(false)
   /** The chests that were not chosen and have been opened to show what they held. */
   const [lifted, setLifted] = useState<number[]>([])
-  const chestRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const chestRefs = useRef<(HTMLDivElement | null)[]>([])
   const handRef = useRef<HTMLSpanElement>(null)
   const fx = useRef<RoomFxHandle>(null)
   const timers = useRef<ReturnType<typeof setTimeout>[]>([])
   const gone = useRef(false)
+  /** A chest is being chosen or opened: the button does nothing until it is open. */
+  const busy = useRef(false)
 
   useEffect(() => {
     gone.current = false
@@ -153,11 +170,44 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
     return () => clearInterval(timer)
   }, [turned, phase, picked])
 
+  /**
+   * Jako chooses: the lamp runs over the chests, left to right and round again, until the server has answered, then
+   * takes its last, slower steps onto the chest that was drawn and rests there.
+   */
+  async function choose(asked: Promise<Drawn>) {
+    const answer: { res: Drawn | null } = { res: null }
+    void asked.then((res) => {
+      answer.res = res
+    })
+    const started = performance.now()
+    /* where the lamp starts is for show only: where it stops is the server's */
+    let at = Math.floor(Math.random() * chestCount)
+    for (;;) {
+      setEye(at % chestCount)
+      playSound('tick', 0.45)
+      await wait(RUN_MS)
+      if (gone.current || (answer.res && performance.now() - started >= RUN_MIN_MS)) break
+      at += 1
+    }
+    const drawn = answer.res ?? (await asked)
+    if (!drawn.ok || gone.current) return drawn
+    /* at least two more steps, so the lamp is seen to slow down before it stops */
+    let steps = (((drawn.chest - at) % chestCount) + chestCount) % chestCount
+    if (steps < 2) steps += chestCount
+    const gaps = SLOWING_MS.slice(-Math.min(steps, SLOWING_MS.length))
+    for (let k = 0; k < steps && !gone.current; k++) {
+      at += 1
+      setEye(at % chestCount)
+      playSound('tick', 0.7)
+      await wait(gaps[Math.max(0, k - (steps - gaps.length))])
+    }
+    return drawn
+  }
+
   /** The key's light leaves Jako's wing, flies to the chest's lock and turns in it. */
   async function turnKey(index: number) {
     const el = chestRefs.current[index]
     const [kx, ky] = keyholeOf(chests[index]?.id ?? '')
-    await wait(POINT_MS)
     await fx.current?.streak(fx.current.spot(handRef.current), fx.current.spot(el, kx, ky), FLIGHT_MS)
     if (gone.current) return
     const lock = fx.current?.spot(el, kx, ky) ?? null
@@ -169,26 +219,38 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
     await wait(LOCK_MS)
   }
 
-  async function open(index: number) {
-    if (phase !== 'idle' || !canPlay()) return
-    setPicked(index)
-    setPhase('opening')
+  /** The one button: closes whatever stands open, lets Jako choose a chest and opens it. */
+  async function open() {
+    if (busy.current || locked || !canPlay()) return
+    busy.current = true
+    timers.current.forEach(clearTimeout)
+    timers.current = []
+    setPicked(null)
+    setEye(null)
+    setPhase('choosing')
     setTurned(false)
     setLifted([])
     setError('')
     setMood('spin')
     playSound('chip')
-    const [res] = await Promise.all([draw(index), reduced ? null : turnKey(index)])
+    const res = await (reduced ? draw() : choose(draw()))
     if (gone.current) return
     if (!res.ok) {
+      busy.current = false
       setPhase('idle')
-      setPicked(null)
-      setTurned(false)
+      setEye(null)
       setMood('idle')
       setError(res.error)
       if (typeof res.balance === 'number') setBalance(res.balance)
       return
     }
+    const index = Math.max(0, Math.min(chestCount - 1, res.chest))
+    setPicked(index)
+    setEye(null)
+    setPhase('opening')
+    if (!reduced) await turnKey(index)
+    if (gone.current) return
+    busy.current = false
     setContents(res.prizes)
     setWon(res.points)
     setPhase('opened')
@@ -231,31 +293,26 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
     onPlayed()
   }
 
-  function reset() {
-    timers.current.forEach(clearTimeout)
-    timers.current = []
-    setPhase('idle')
-    setPicked(null)
-    setTurned(false)
-    setLifted([])
-    setMood('idle')
-  }
-
   const revealed = phase === 'opened'
+  const working = phase === 'choosing' || phase === 'opening'
+  /** The chest under the lamp: the one it is passing while it runs, then the one that was drawn. */
+  const lit = phase === 'choosing' ? eye : picked
   const plays = Math.max(1, playsLeft ?? 1)
   const says = error
     ? error
-    : phase === 'opening'
-      ? turned
-        ? 'Kilit dönüyor…'
-        : 'Anahtar geliyor kanka…'
-      : revealed
-        ? won >= jackpot
-          ? 'Jackpot! Helal kanka.'
-          : 'Helal kanka, cebe girdi.'
-        : locked
-          ? 'Bugünkü sandığını açtın, yarın yine gel.'
-          : 'Bir sandığa dokun kanka, içindeki senin.'
+    : phase === 'choosing'
+      ? 'Hangisini açsam… Dur, seçiyorum.'
+      : phase === 'opening'
+        ? turned
+          ? 'Kilit dönüyor…'
+          : `${shortName(chests[picked ?? 0]?.name ?? 'Bu')} sandık! Anahtar geliyor…`
+        : revealed
+          ? won >= jackpot
+            ? 'Jackpot! Helal kanka.'
+            : 'Helal kanka, cebe girdi.'
+          : locked
+            ? 'Bugünkü sandığını açtın, yarın yine gel.'
+            : 'Düğmeye bas kanka, sandığı ben seçeyim.'
 
   return (
     <article className="flex min-w-0 flex-col gap-3">
@@ -301,31 +358,34 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
             const shownOpen = opened || lifted.includes(i)
             const amount = isPicked ? won : (contents[i] ?? 0)
             const waiting = phase === 'idle' && !locked
+            const isLit = lit === i
             const [kx, ky] = keyholeOf(chest.id)
             return (
-              <button
+              <div
                 key={i}
                 ref={(el) => {
                   chestRefs.current[i] = el
                 }}
-                type="button"
-                onClick={() => open(i)}
-                disabled={!waiting}
-                aria-label={revealed ? `${chest.name}: ${amount} Kanka Coin` : `${chest.name} aç, ${rewardRange(chest.rewards)}`}
-                className={cn(
-                  'group absolute aspect-square -translate-x-1/2 rounded-2xl outline-offset-[-6px] [-webkit-tap-highlight-color:transparent] disabled:cursor-default',
-                  SPOTS[i] ?? SPOTS[0],
-                )}
+                role="img"
+                aria-label={shownOpen ? `${chest.name}: ${amount} Kanka Coin` : `${chest.name}, ${rewardRange(chest.rewards)}`}
+                className={cn('absolute aspect-square -translate-x-1/2', SPOTS[i] ?? SPOTS[0])}
               >
-                {isPicked && phase !== 'idle' && (
+                {isLit && (
                   <>
+                    {/* the lamp snaps from chest to chest while it runs, and settles in once it has stopped */}
                     <span
                       aria-hidden="true"
-                      className="vault-beam pointer-events-none absolute bottom-[16%] left-1/2 h-[420%] w-[128%] origin-top -translate-x-1/2 bg-linear-to-b from-gold/35 via-gold/12 to-gold/5 mix-blend-plus-lighter [clip-path:polygon(41%_0,59%_0,100%_100%,0_100%)]"
+                      className={cn(
+                        'pointer-events-none absolute bottom-[16%] left-1/2 h-[420%] w-[128%] origin-top -translate-x-1/2 bg-linear-to-b from-gold/35 via-gold/12 to-gold/5 mix-blend-plus-lighter [clip-path:polygon(41%_0,59%_0,100%_100%,0_100%)]',
+                        phase !== 'choosing' && 'vault-beam',
+                      )}
                     />
                     <span
                       aria-hidden="true"
-                      className="wheel-fade pointer-events-none absolute top-[74%] left-1/2 h-[20%] w-[124%] -translate-x-1/2 rounded-[50%] bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--gold)_50%,transparent),transparent)] mix-blend-plus-lighter"
+                      className={cn(
+                        'pointer-events-none absolute top-[74%] left-1/2 h-[20%] w-[124%] -translate-x-1/2 rounded-[50%] bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--gold)_50%,transparent),transparent)] mix-blend-plus-lighter',
+                        phase !== 'choosing' && 'wheel-fade',
+                      )}
                     />
                   </>
                 )}
@@ -337,10 +397,13 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
                 )}
                 <span
                   className={cn(
-                    'absolute inset-0 transition-[filter,scale] duration-300',
-                    waiting && 'chest-wait group-hover:scale-[1.07] group-hover:brightness-125 group-active:scale-100',
+                    'absolute inset-0 transition-[filter,scale]',
+                    /* the lamp is quick while it runs: a chest must light and dim within one of its steps */
+                    phase === 'choosing' ? 'duration-75' : 'duration-300',
+                    waiting && 'chest-wait',
+                    phase === 'choosing' && (isLit ? 'scale-[1.07] brightness-125' : 'brightness-[0.5] saturate-[0.6]'),
                     isPicked && phase === 'opening' && (turned ? 'chest-rattle-hard' : 'chest-rattle'),
-                    !isPicked && (phase === 'opening' || locked) && 'brightness-[0.45] saturate-[0.5]',
+                    !isPicked && (phase === 'opening' || (locked && !working)) && 'brightness-[0.45] saturate-[0.5]',
                     !isPicked && revealed && 'brightness-[0.68] saturate-[0.7]',
                   )}
                   style={{ animationDelay: `${i * -1.9}s` }}
@@ -406,7 +469,7 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
                     </>
                   )}
                 </span>
-              </button>
+              </div>
             )
           })}
 
@@ -433,21 +496,25 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
                 {says}
               </CallerBubble>
             </div>
-            {(revealed || locked) && (
-              <div className="flex flex-col items-stretch @min-[600px]:absolute @min-[600px]:bottom-[4.5%] @min-[600px]:left-1/2 @min-[600px]:w-[20%] @min-[600px]:-translate-x-1/2">
-                <ActionButton onClick={reset} disabled={locked}>
-                  {locked ? (
-                    <>
-                      <Clock className="size-4" aria-hidden="true" />
-                      <span className="sr-only">Sonraki sandık: </span>
-                      {formatRemaining(lockedFor)}
-                    </>
-                  ) : (
-                    'Tekrar dene'
-                  )}
-                </ActionButton>
-              </div>
-            )}
+            <div className="flex flex-col items-stretch @min-[600px]:absolute @min-[600px]:bottom-[4.5%] @min-[600px]:left-1/2 @min-[600px]:z-[4] @min-[600px]:w-[22%] @min-[600px]:-translate-x-1/2">
+              <ActionButton onClick={open} disabled={working || locked}>
+                {locked && !working ? (
+                  <>
+                    <Clock className="size-4" aria-hidden="true" />
+                    <span className="sr-only">Sonraki sandık: </span>
+                    {formatRemaining(lockedFor)}
+                  </>
+                ) : phase === 'choosing' ? (
+                  'Jako seçiyor…'
+                ) : phase === 'opening' ? (
+                  'Sandık açılıyor…'
+                ) : revealed ? (
+                  'Yeni sandık aç'
+                ) : (
+                  'Sandığı aç'
+                )}
+              </ActionButton>
+            </div>
           </div>
         </div>
       </section>
@@ -465,7 +532,10 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
         <ul className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {chests.map((chest, i) => (
             <li key={i} className="flex flex-col gap-1">
-              <span className="text-xs font-semibold text-foreground">{chest.name}</span>
+              <span className="flex items-baseline gap-1.5 text-xs font-semibold text-foreground">
+                {chest.name}
+                {chest.odds && <span className="font-medium text-muted-foreground">{chest.odds}</span>}
+              </span>
               <span className="flex flex-wrap gap-1">
                 {[...new Set(chest.rewards)]
                   .sort((a, b) => a - b)
@@ -498,7 +568,7 @@ export function MysteryChests({ lockedFor, playsLeft, canPlay, onPlayed, draw = 
                 eyebrow: 'Mini oyun',
                 title: 'Gizemli Sandıklar kuralları',
                 image: '/images/mascots/jako-sandik.png',
-                description: 'Üç sandıktan birini seç, içindeki ödül anında senin. Sandık türüne göre ödül aralığı değişir.',
+                description: 'Düğmeye bas, Jako üç sandıktan birini seçip açsın; içindeki ödül anında senin. Sandık türüne göre ödül aralığı değişir.',
                 prizes: chests.map((chest) => ({ place: chest.name, prize: rewardRange(chest.rewards) })),
                 rules: rulesFor(config.dailyPlays),
               }

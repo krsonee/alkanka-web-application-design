@@ -1,6 +1,7 @@
 export type WheelTone = 'cyan' | 'purple' | 'gold' | 'muted'
 export type WheelSegment = { short: string; label: string; points: number; tone: WheelTone }
-export type ChestConfig = { name: string; odds: string; rewards: number[] }
+/** `weight` is how often Jako opens this chest, against the other chests' weights: the member does not choose. */
+export type ChestConfig = { name: string; odds: string; rewards: number[]; weight: number }
 
 export type RewardConfig = {
   wheel: { cooldownHours: number; segments: WheelSegment[] }
@@ -10,6 +11,7 @@ export type RewardConfig = {
 
 export const WHEEL_SEGMENT_COUNT = 8
 export const CHEST_IDS = ['bronze', 'gold', 'silver'] as const
+export const MAX_CHEST_WEIGHT = 1000
 export const WHEEL_TONES: { id: WheelTone; label: string }[] = [
   { id: 'gold', label: 'Altın' },
   { id: 'purple', label: 'Mor' },
@@ -34,9 +36,9 @@ export const DEFAULT_REWARDS: RewardConfig = {
   chest: {
     dailyPlays: 1,
     chests: [
-      { name: 'Bronz Sandık', odds: 'Sık', rewards: [40, 60, 75, 90] },
-      { name: 'Altın Sandık', odds: 'Nadir', rewards: [150, 200, 300, 500] },
-      { name: 'Gümüş Sandık', odds: 'Orta', rewards: [75, 100, 120, 150] },
+      { name: 'Bronz Sandık', odds: 'Sık', rewards: [40, 60, 75, 90], weight: 55 },
+      { name: 'Altın Sandık', odds: 'Nadir', rewards: [150, 200, 300, 500], weight: 15 },
+      { name: 'Gümüş Sandık', odds: 'Orta', rewards: [75, 100, 120, 150], weight: 30 },
     ],
   },
   dice: { dailyPlays: 3, jackpot: 400, doubleX: 40, highMin: 10, highX: 10, lowX: 5 },
@@ -57,6 +59,9 @@ export function mergeRewards(raw: unknown): RewardConfig {
   const d = DEFAULT_REWARDS
   const segs = Array.isArray(r.wheel?.segments) ? r.wheel.segments : []
   const chests = Array.isArray(r.chest?.chests) ? r.chest.chests : []
+  /* a saved set of weights that adds up to nothing would leave no chest to open: the defaults stand in */
+  const weights = d.chest.chests.map((def, i) => clampInt((chests[i] as Partial<ChestConfig> | undefined)?.weight, 0, MAX_CHEST_WEIGHT, def.weight))
+  const weighed = weights.some((w) => w > 0)
   return {
     wheel: {
       cooldownHours: clampInt(r.wheel?.cooldownHours, 1, 168, d.wheel.cooldownHours),
@@ -81,6 +86,7 @@ export function mergeRewards(raw: unknown): RewardConfig {
           name: text(c.name, 30, def.name),
           odds: text(c.odds, 20, def.odds),
           rewards: [...(rewards.length >= 2 ? rewards : def.rewards)].sort((a, b) => a - b),
+          weight: weighed ? weights[i] : def.weight,
         }
       }),
     },
@@ -93,6 +99,24 @@ export function mergeRewards(raw: unknown): RewardConfig {
       lowX: clampInt(r.dice?.lowX, 0, 10000, d.dice.lowX),
     },
   }
+}
+
+/** Each chest's share of the plays, 0 to 1, in list order. */
+export function chestShares(chests: ChestConfig[]) {
+  const total = chests.reduce((sum, chest) => sum + chest.weight, 0)
+  return chests.map((chest) => (total > 0 ? chest.weight / total : 1 / chests.length))
+}
+
+/** The chest Jako opens. `roll(n)` gives a whole number from 0 to n - 1; the server passes a secure one. */
+export function pickChest(chests: ChestConfig[], roll: (max: number) => number) {
+  const total = chests.reduce((sum, chest) => sum + chest.weight, 0)
+  if (total <= 0) return roll(chests.length)
+  let left = roll(total)
+  for (let i = 0; i < chests.length; i++) {
+    if (left < chests[i].weight) return i
+    left -= chests[i].weight
+  }
+  return chests.length - 1
 }
 
 export function diceReward(a: number, b: number, d: RewardConfig['dice']) {

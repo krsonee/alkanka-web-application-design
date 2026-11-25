@@ -10,8 +10,16 @@
   would need two encodings (VP9 for Chrome, HEVC for Safari) and Safari's cannot be produced outside macOS.
 
   Every clip starts and ends on the same frame as the still picture, so the waiting loop repeats without a seam and a
-  reaction hands back to waiting without a cut. Cutting into a reaction from the middle of the waiting loop is
-  cross-faded over a few frames instead.
+  reaction hands back to waiting without a cut.
+
+  A cast whose clips are built out-and-back (the same frames played forward, then in reverse) never cuts between two
+  different poses either:
+  - a move asked for in the middle of the waiting loop first runs that loop home: the loop is the same going out as
+    coming back, so the player jumps to the matching frame of the way back and plays it fast, and the move starts
+    from the stance;
+  - a reaction asked for while another is on screen waits for that one's still moment, skips the rest of it and
+    plays its way back fast, and starts from the stance too.
+  A cast without those marks is cross-faded over a few frames instead, as is anything that takes too long.
 
   The still alone is shown under reduced motion, with data saver on, when WebGL is missing and whenever the browser
   refuses to autoplay (iOS Low Power Mode). Clips pause while the stage is off-screen or the tab is hidden.
@@ -30,7 +38,17 @@ export type ActorCast = {
   clips: { idle: string } & Partial<Record<ActorState, string>>
   /** The clips' picture size: half the height of the stacked video frame. */
   frame: { width: number; height: number }
+  /** The waiting clip is played out and back over the same frames: its second half mirrors its first. */
+  mirrored?: boolean
+  /**
+   * A reaction's still moment, in seconds: `hold` is when it stops moving, `back` when it starts for the stance
+   * again. Nothing moves between the two, so the player may skip from anywhere in between to `back`.
+   */
+  beats?: Partial<Record<ActorState, { hold: number; back: number }>>
 }
+
+/** What is on screen right now, for a stage that moves things in step with a clip. */
+export type ActorClock = { clip: ActorState | null; time: number }
 
 const WHEEL_CAST: ActorCast = {
   still: '/images/wheel/jako.webp',
@@ -44,6 +62,14 @@ const WHEEL_CAST: ActorCast = {
 }
 
 const FADE_MS = 160
+/** The waiting loop is run home in about this long, and never for longer than HOME_LIMIT_MS. */
+const HOME_MS = 260
+const HOME_LIMIT_MS = 650
+const HOME_MAX_RATE = 8
+/** How fast a reaction's way back is played when another reaction is waiting for it. */
+const BACK_RATE = 2.5
+/** Closer than this to either end, the waiting loop counts as standing in the stance. */
+const STANCE_S = 0.09
 
 const VERTEX = `
 attribute vec2 corner;
@@ -171,17 +197,19 @@ function createPainter(canvas: HTMLCanvasElement): Painter | null {
 const savesData = () =>
   typeof navigator !== 'undefined' && Boolean((navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData)
 
-/** `cast` must be a constant: a new object would rebuild the player. */
+/** `cast` must be a constant: a new object would rebuild the player. `clock` is written to on every frame drawn. */
 export function JakoActor({
   state,
   armed,
   className,
   cast = WHEEL_CAST,
+  clock,
 }: {
   state: ActorState
   armed: boolean
   className?: string
   cast?: ActorCast
+  clock?: { current: ActorClock }
 }) {
   const reduced = usePrefersReducedMotion()
   const hidden = usePageHidden()
@@ -208,10 +236,19 @@ export function JakoActor({
     const frames = pacedFrames(30)
     let wanted: ActorState = 'idle'
     let top: ActorState | null = null
+    /** The reaction that starts once what is on screen has come back to the stance. */
+    let queued: ActorState | null = null
+    /** The waiting loop is being run home, or a reaction's way back is being played fast. */
+    let homing = false
+    let homeTimer: ReturnType<typeof setTimeout> | undefined
     let running = false
     let on = true
     let lastTime = -1
     let fresh = false
+
+    const tell = (video: HTMLVideoElement | null | undefined) => {
+      if (clock) clock.current = { clip: video ? top : null, time: video ? video.currentTime : 0 }
+    }
 
     const draw = (now: number) => {
       const video = top ? videos.get(top) : null
@@ -220,6 +257,12 @@ export function JakoActor({
         fresh = false
         lastTime = video.currentTime
         setLive(true)
+      }
+      tell(video)
+      /* a reaction that another one is waiting for skips the rest of its still moment */
+      if (video && top && queued && !homing) {
+        const beats = cast.beats?.[top]
+        if (beats && video.currentTime >= beats.hold) leave(video, beats.back)
       }
       if (running) frames.request(draw)
     }
@@ -230,18 +273,102 @@ export function JakoActor({
       else frames.cancel()
     }
 
+    const settleHome = () => {
+      homing = false
+      clearTimeout(homeTimer)
+      const idle = videos.get('idle')
+      if (idle) {
+        idle.loop = true
+        idle.playbackRate = 1
+      }
+    }
+
     const start = (s: ActorState) => {
       const video = videos.get(s)
       if (!video || !on) return
-      if (top === s && !video.paused && !video.ended) return
+      if (top === s && !video.paused && !video.ended && !homing) return
+      settleHome()
+      video.playbackRate = 1
       video.currentTime = 0
       void video.play().catch(() => {})
     }
     const request = (asked: ActorState) => {
       const s = cast.clips[asked] ? asked : 'idle'
       wanted = s
+      queued = null
       warm(s)
       start(s)
+    }
+
+    /** Plays what is left of the clip on screen fast, from `at` if given; whatever is queued starts when it ends. */
+    function leave(video: HTMLVideoElement, at?: number) {
+      homing = true
+      if (at !== undefined && video.currentTime < at) video.currentTime = at
+      video.playbackRate = BACK_RATE
+      clearTimeout(homeTimer)
+      homeTimer = setTimeout(arrive, HOME_LIMIT_MS + 600)
+    }
+
+    /** The clip on screen is back in the stance (or took too long): what was asked for starts. */
+    function arrive() {
+      if (!homing) return
+      const next = queued ?? 'idle'
+      settleHome()
+      request(next)
+    }
+
+    /** Runs the waiting loop home: to the matching frame of its way back, then fast to its end. */
+    function runHome(idle: HTMLVideoElement) {
+      const length = idle.duration
+      const at = idle.currentTime
+      if (!Number.isFinite(length) || at < STANCE_S || length - at < STANCE_S) return false
+      homing = true
+      idle.loop = false
+      const back = at < length / 2 ? length - at : at
+      if (back !== at) idle.currentTime = back
+      idle.playbackRate = Math.min(HOME_MAX_RATE, Math.max(1, ((length - back) * 1000) / HOME_MS))
+      clearTimeout(homeTimer)
+      homeTimer = setTimeout(arrive, HOME_LIMIT_MS)
+      return true
+    }
+
+    /** A new state was asked for by the stage: decides whether it can start now or has to wait for the stance. */
+    function ask(asked: ActorState) {
+      const s = cast.clips[asked] ? asked : 'idle'
+      const video = top ? videos.get(top) : null
+      const playing = Boolean(video && !video.paused && !video.ended)
+      if (s === 'idle') {
+        /* a reaction on screen plays to its end and hands back to waiting by itself */
+        queued = null
+        wanted = 'idle'
+        if (top && top !== 'idle' && playing) return
+        if (top === 'idle' && playing) return
+        request('idle')
+        return
+      }
+      warm(s)
+      if (!video || !playing || !top) {
+        request(s)
+        return
+      }
+      if (homing) {
+        queued = s
+        return
+      }
+      if (top === 'idle') {
+        queued = s
+        if (cast.mirrored && runHome(video)) return
+        request(s)
+        return
+      }
+      const beats = cast.beats?.[top]
+      if (!beats) {
+        request(s)
+        return
+      }
+      if (s === top && video.currentTime < beats.hold) return
+      queued = s
+      if (video.currentTime >= beats.hold) leave(video, beats.back)
     }
 
     function warm(s: ActorState) {
@@ -258,7 +385,7 @@ export function JakoActor({
       // Kept in the page, one pixel large: some browsers only decode a clip that is attached to the document.
       video.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none'
       video.addEventListener('playing', () => {
-        if (wanted !== s) {
+        if (wanted !== s && !(homing && top === s)) {
           video.pause()
           return
         }
@@ -271,7 +398,9 @@ export function JakoActor({
         loop(true)
       })
       video.addEventListener('ended', () => {
-        if (top === s) request('idle')
+        if (top !== s) return
+        if (homing) arrive()
+        else request(queued ?? 'idle')
       })
       video.src = src
       layer?.appendChild(video)
@@ -285,14 +414,7 @@ export function JakoActor({
     canvas.addEventListener('webglcontextlost', lost)
 
     control.current = {
-      request(s) {
-        // A reaction on screen plays to its end; it hands back to waiting by itself.
-        const playing = top ? videos.get(top) : null
-        if (!cast.clips[s] || s === 'idle') {
-          if (top && top !== 'idle' && playing && !playing.ended) return
-        }
-        request(s)
-      },
+      request: ask,
       setActive(next) {
         on = next
         const video = top ? videos.get(top) : null
@@ -312,6 +434,8 @@ export function JakoActor({
 
     return () => {
       control.current = null
+      clearTimeout(homeTimer)
+      if (clock) clock.current = { clip: null, time: 0 }
       loop(false)
       canvas.removeEventListener('webglcontextlost', lost)
       for (const video of videos.values()) {
@@ -323,7 +447,7 @@ export function JakoActor({
       painter.dispose()
       setLive(false)
     }
-  }, [reduced, cast])
+  }, [reduced, cast, clock])
 
   useEffect(() => {
     control.current?.setActive(active)

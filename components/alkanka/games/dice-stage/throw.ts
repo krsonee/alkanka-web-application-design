@@ -1,8 +1,11 @@
 /*
-  A throw, frame by frame. Each die leaves Jako's hand (--from-x / --from-y, set by the stage on the die's resting
-  place), flies in an arc, lands three times with less height each time and slides to a stop while it twists on the
-  felt. The value it shows is decided before it is thrown: the tumbling is laid over the resting pose and runs out
-  exactly when the die stops, so it always ends on the server's value, lying flat.
+  A throw, frame by frame. There is one pair of dice: the ones on the felt. They are swept into Jako's cup, and the
+  same two come out of its mouth. --from-x / --from-y, set by the stage on the die's resting place, is where the
+  cup's mouth is from there: its rim while the cup stands, its opening once it is tipped. A die is small while it
+  is inside the cup, grows as it comes out, flies in an arc, lands three times with less height each time and
+  slides to a stop while it twists on the felt. The value it shows is decided before it is thrown: the tumbling is
+  laid over the resting pose and runs out exactly when the die stops, so it always ends on the server's value,
+  lying flat.
 
   At every landing the cube is turned by a whole number of quarter turns from its resting pose, so it meets the
   felt on a face, never on a corner pushed through the table.
@@ -74,18 +77,35 @@ export function settle(rig: DieRig, value: number) {
   rig.shade.style.opacity = '1'
 }
 
-/** The dice on the felt are swept back toward Jako's cup and are gone: the table is clear for the next throw. */
-export function scoop(frames: Frames, rigs: DieRig[], values: number[], ms = 380) {
-  return play(frames, ms, (elapsed) => {
-    const u = elapsed / ms
-    const e = u * u
+/** How big a die is while it is inside the cup, against its size on the felt. */
+const IN_CUP = 0.34
+/** The second die goes into the cup a moment after the first. */
+const SCOOP_GAP_MS = 70
+
+/**
+ * The dice on the felt jump into Jako's cup (--from-x / --from-y: its rim) and are gone: the table is clear for
+ * the next throw. `onIn` is called as each one drops in.
+ */
+export function scoop(frames: Frames, rigs: DieRig[], values: number[], onIn: (die: number) => void, ms = 460) {
+  const inside = rigs.map(() => false)
+  return play(frames, ms + SCOOP_GAP_MS * (rigs.length - 1), (elapsed) => {
     rigs.forEach((rig, i) => {
-      rig.mover.style.translate = `calc(var(--from-x) * ${0.7 * e}) calc(var(--from-y) * ${0.7 * e} - var(--s) * ${0.5 * Math.sin(Math.PI * u)})`
-      rig.mover.style.scale = `${1 + 0.25 * e}`
-      rig.mover.style.opacity = `${1 - e ** 2}`
-      rig.cube.style.transform = `rotateX(${TILT}deg) rotateY(${rig.lean + (i ? -200 : 200) * e}deg) rotateX(${-160 * e}deg) ${face(values[i])}`
-      rig.shade.style.translate = `calc(var(--from-x) * ${0.7 * e}) calc(var(--from-y) * ${0.7 * e})`
-      rig.shade.style.opacity = `${1 - u}`
+      const u = clamp01((elapsed - i * SCOOP_GAP_MS) / ms)
+      /* slow off the felt, fast into the cup */
+      const e = u * u * (3 - 2 * u)
+      const lift = Math.sin(Math.PI * u) * (1 - 0.35 * u)
+      rig.mover.style.translate = `calc(var(--from-x) * ${e}) calc(var(--from-y) * ${e} - var(--s) * ${0.9 * lift})`
+      rig.mover.style.scale = `${1 - (1 - IN_CUP) * e}`
+      /* it drops below the rim at the very end */
+      rig.mover.style.opacity = `${1 - clamp01((u - 0.86) / 0.14)}`
+      rig.cube.style.transform = `rotateX(${TILT}deg) rotateY(${rig.lean + (i ? -260 : 260) * e}deg) rotateX(${-270 * e}deg) ${face(values[i])}`
+      rig.shade.style.translate = `calc(var(--from-x) * ${0.25 * e}) calc(var(--from-y) * ${0.25 * e})`
+      rig.shade.style.scale = `${1 + 0.6 * lift}`
+      rig.shade.style.opacity = `${Math.max(0, 1 - 2.2 * u)}`
+      if (u >= 1 && !inside[i]) {
+        inside[i] = true
+        onIn(i)
+      }
     })
   })
 }
@@ -109,15 +129,15 @@ function flight(): Flight {
   const len = Math.hypot(ax[0], ax[1], ax[2])
   return {
     lands: [first, second, second + rand(0.14, 0.17)],
-    peaks: [rand(1.05, 1.5), rand(0.42, 0.58), rand(0.13, 0.19)],
+    peaks: [rand(0.75, 1.05), rand(0.4, 0.55), rand(0.13, 0.19)],
     axis: [ax[0] / len, ax[1] / len, ax[2] / len],
     spin: rand(420, 640),
     twist: rand(150, 250) * (Math.random() < 0.5 ? -1 : 1),
   }
 }
 
-/** A die leaves the hand already above the table: the first arc starts this far along its parabola. */
-const LAUNCH = 0.2
+/** A die is out of the cup, and full size, this far into the throw. */
+const OUT_BY = 0.13
 const arc = (s: number) => 4 * s * (1 - s)
 
 function pose(rig: DieRig, value: number, plan: Flight, tau: number) {
@@ -139,7 +159,8 @@ function pose(rig: DieRig, value: number, plan: Flight, tau: number) {
   let since = 1
   if (tau < t1) {
     const s = tau / t1
-    height = plan.peaks[0] * arc(LAUNCH + (1 - LAUNCH) * s)
+    /* the first arc starts in the cup's mouth, not above it */
+    height = plan.peaks[0] * arc(s)
     rollX = -270
     rollZ = 90
     free = plan.spin * (1 - s)
@@ -161,9 +182,13 @@ function pose(rig: DieRig, value: number, plan: Flight, tau: number) {
 
   /* a landing presses the die into the felt for a moment */
   const press = since < 0.05 ? 1 - since / 0.05 : 0
-  const size = 1 + 0.3 * left + 0.05 * height
+  /* small inside the cup, full size once it is out of it */
+  const out = clamp01(tau / OUT_BY)
+  const size = (IN_CUP + (1 - IN_CUP) * (1 - (1 - out) ** 2)) * (1 + 0.05 * height)
+  /* the felt is not under the cup: the shadow appears as the die comes over the table */
+  const over = clamp01((along - 0.12) / 0.3)
 
-  rig.mover.style.opacity = '1'
+  rig.mover.style.opacity = `${clamp01(tau / 0.02)}`
   rig.mover.style.translate = `calc(var(--from-x) * ${left}) calc(var(--from-y) * ${left} - var(--s) * ${0.85 * height})`
   rig.mover.style.scale = `${size * (1 + 0.06 * press)} ${size * (1 - 0.11 * press)}`
   rig.cube.style.transform =
@@ -171,7 +196,7 @@ function pose(rig: DieRig, value: number, plan: Flight, tau: number) {
     `rotate3d(${plan.axis[0]}, ${plan.axis[1]}, ${plan.axis[2]}, ${free}deg) ${face(value)}`
   rig.shade.style.translate = `calc(var(--from-x) * ${left}) calc(var(--from-y) * ${left})`
   rig.shade.style.scale = `${1 + 0.7 * height}`
-  rig.shade.style.opacity = `${0.95 / (1 + 2.4 * height)}`
+  rig.shade.style.opacity = `${(0.95 * over) / (1 + 2.4 * height)}`
 }
 
 /**

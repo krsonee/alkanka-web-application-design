@@ -1,4 +1,4 @@
-import { diceReward, mergeRewards, wheelBigIndices, type RewardConfig } from './rewards-shared'
+import { chestShares, diceReward, mergeRewards, wheelBigIndices, type RewardConfig } from './rewards-shared'
 
 export type MiniGameId = 'cark' | 'zar' | 'sandik'
 export const MINI_GAME_IDS: MiniGameId[] = ['cark', 'zar', 'sandik']
@@ -14,7 +14,7 @@ export const EMPTY_MINI_STATS: MiniPlayStats = {
 export const STATS_DAYS = 7
 
 export type MiniForecast = {
-  /** Average coins one play pays. The chest depends on which chest the member picks, so it is a range. */
+  /** Average coins one play pays; `low` and `high` differ only where the outcome depends on a choice. */
   perPlay: { low: number; high: number }
   /** Free plays one member gets in a day. */
   freePlays: number
@@ -51,14 +51,16 @@ export function forecastRewards(raw: RewardConfig, winRate: number): Record<Mini
   }
   const dice = p * diceWhen(true) + (1 - p) * diceWhen(false)
 
-  const chests = config.chest.chests.map((chest) => {
-    const split = Math.floor(chest.rewards.length / 2)
-    return p * mean(chest.rewards.slice(split)) + (1 - p) * mean(chest.rewards.slice(0, split))
-  })
+  /* the chest is drawn by its weight first, then its prize the same way as the others */
+  const shares = chestShares(config.chest.chests)
+  const chest = config.chest.chests.reduce((sum, item, i) => {
+    const split = Math.floor(item.rewards.length / 2)
+    return sum + shares[i] * (p * mean(item.rewards.slice(split)) + (1 - p) * mean(item.rewards.slice(0, split)))
+  }, 0)
 
   return {
     cark: { perPlay: { low: wheel, high: wheel }, freePlays: 24 / config.wheel.cooldownHours },
     zar: { perPlay: { low: dice, high: dice }, freePlays: config.dice.dailyPlays },
-    sandik: { perPlay: { low: Math.min(...chests), high: Math.max(...chests) }, freePlays: config.chest.dailyPlays },
+    sandik: { perPlay: { low: chest, high: chest }, freePlays: config.chest.dailyPlays },
   }
 }
