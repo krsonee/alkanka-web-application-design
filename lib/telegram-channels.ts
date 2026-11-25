@@ -3,6 +3,7 @@ import { rows, sql } from '@/lib/db'
 import { botToken, callBot, ensureTables, fetchChannel, normalizeChannel, scrapedHtmlToCleanText } from '@/lib/telegram-mirror'
 import { displayName, getChatConfig, getLink, memberMark, messageText, type TgMessage } from '@/lib/telegram-chat'
 import { TG_HTML, tgMemberMessage } from '@/lib/tg-format'
+import { askStanding } from '@/lib/tg-standing'
 import {
   BROADCAST_CHANNELS,
   type BroadcastSlug,
@@ -21,6 +22,7 @@ const MAX_COMMENT = 500
 const COMMENT_COOLDOWN_MS = 5000
 const JOINED_CACHE_MS = 5 * 60 * 1000
 const NOT_JOINED_CACHE_MS = 8_000
+const FRESH_GAP_MS = 3_000
 
 const settingKey = (slug: BroadcastSlug) => `channel_${slug}`
 const idKey = (slug: BroadcastSlug) => `channel_${slug}_id`
@@ -120,21 +122,25 @@ async function tgIdFor(userId: string) {
   return r[0] ? Number(r[0].tg_id) : null
 }
 
-async function isChannelMember(userId: string, config: ChannelConfig, fresh = false) {
-  if (!config.channelId) return false
+const NOT_IN = { joined: false, uncertain: false }
+
+/**
+ * `uncertain` means Telegram could not be asked, so the person must not be told they have not joined.
+ * `fresh` looks again instead of trusting what was remembered, at most once every few seconds per person.
+ */
+async function channelStanding(userId: string, config: ChannelConfig, fresh = false) {
+  if (!config.channelId) return NOT_IN
   const cacheKey = `${config.slug}:${userId}`
   const hit = joinedCache.get(cacheKey)
-  if (!fresh && hit && Date.now() - hit.at < (hit.joined ? JOINED_CACHE_MS : NOT_JOINED_CACHE_MS)) return hit.joined
+  const keep = fresh ? FRESH_GAP_MS : hit?.joined ? JOINED_CACHE_MS : NOT_JOINED_CACHE_MS
+  if (hit && Date.now() - hit.at < keep) return { joined: hit.joined, uncertain: false }
   const [chat, tgId] = await Promise.all([getChatConfig(), tgIdFor(userId)])
-  if (!chat || !tgId) return false
-  const member = await callBot<{ status: string }>(await botToken(chat.botId), 'getChatMember', {
-    chat_id: config.channelId,
-    user_id: tgId,
-  }).catch(() => null)
-  if (!member) return hit?.joined ?? false
-  const joined = !['left', 'kicked'].includes(member.status)
+  if (!chat || !tgId) return NOT_IN
+  const standing = await askStanding(config.channelId, tgId, chat.botId, fresh)
+  if (standing === 'unknown') return { joined: hit?.joined ?? false, uncertain: !hit?.joined }
+  const joined = standing === 'in'
   joinedCache.set(cacheKey, { at: Date.now(), joined })
-  return joined
+  return { joined, uncertain: false }
 }
 
 async function commentsFor(channelId: string, postIds: number[]) {
@@ -167,10 +173,13 @@ async function commentsFor(channelId: string, postIds: number[]) {
 export async function hasJoinedAnnouncements(userId: string): Promise<boolean> {
   const config = (await getChannelConfigs()).find((c) => c.slug === 'duyuru')
   if (!config) return false
-  return isChannelMember(userId, config).catch(() => false)
+  return channelStanding(userId, config).then(
+    (s) => s.joined,
+    () => false,
+  )
 }
 
-export async function getChannelFeed(slug: BroadcastSlug, userId: string | null): Promise<ChannelFeed> {
+export async function getChannelFeed(slug: BroadcastSlug, userId: string | null, fresh = false): Promise<ChannelFeed> {
   const meta = BROADCAST_CHANNELS.find((c) => c.slug === slug)!
   const config = (await getChannelConfigs()).find((c) => c.slug === slug)
   const link = userId ? await getLink(userId) : null
@@ -180,8 +189,8 @@ export async function getChannelFeed(slug: BroadcastSlug, userId: string | null)
     return { ...base, configured: false, locked: false, username: null, inviteUrl: null, me: { loggedIn: Boolean(userId), link, joined: false } }
   }
 
-  const joined = userId && link ? await isChannelMember(userId, config) : false
-  const me: TelegramAccess = { loggedIn: Boolean(userId), link, joined }
+  const { joined, uncertain } = userId && link ? await channelStanding(userId, config, fresh) : NOT_IN
+  const me: TelegramAccess = { loggedIn: Boolean(userId), link, joined, uncertain }
   const shared = { ...base, configured: true, username: config.username, inviteUrl: `https://t.me/${config.username}`, me }
   if (!joined || !config.channelId) return { ...shared, locked: true }
 
@@ -269,7 +278,7 @@ export async function sendChannelComment(userId: string, slug: BroadcastSlug, po
 
   const link = await rows<{ tg_id: string; tg_name: string }>(sql`SELECT tg_id, tg_name FROM tg_links WHERE user_id = ${userId}`)
   if (!link[0]) throw new Error('Yorum yapmak için önce Telegram hesabını bağla.')
-  if (!(await isChannelMember(userId, config, true))) throw new Error('Yorum yapabilmek için önce kanala katılmalısın.')
+  if (!(await channelStanding(userId, config, true)).joined) throw new Error('Yorum yapabilmek için önce kanala katılmalısın.')
 
   const thread = await rows<{ thread_message_id: string }>(sql`SELECT thread_message_id FROM tg_channel_threads
     WHERE channel_id = ${config.channelId} AND post_id = ${postId}`)
