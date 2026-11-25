@@ -1136,42 +1136,37 @@
 @media (prefers-reduced-motion: reduce) {
   .sponsor-strip-art { animation: none; }
 }
-@keyframes wheel-bulb {
-  0%, 100% { opacity: 1; box-shadow: 0 0 8px 2px var(--gold); }
-  50% { opacity: 0.35; box-shadow: 0 0 2px 0 var(--gold); }
+/* Şans Çarkı stage: the light turning on the wheel rim, the drifting mist strips and the result card arriving. */
+.wheel-sheen { animation: wheel-turn 7s linear infinite; }
+.wheel-sheen-fast { animation-duration: 0.8s; }
+.wheel-rise { animation: wheel-rise 260ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.wheel-fade { animation: wheel-fade 200ms ease both; }
+/* A mist strip is three tiles wide (--tile is set per band in ambience.tsx) and slides by exactly one tile,
+   so the repeating texture loops without a seam. --mist-play pauses it while the stage is off-screen. */
+.dw-mist {
+  width: calc(3 * var(--tile));
+  background: url('/images/wheel/mist.webp') repeat-x left center / var(--tile) 100%;
+  animation: wheel-drift var(--dur, 60s) linear infinite;
+  animation-play-state: var(--mist-play, running);
 }
 
-@keyframes wheel-coin-float {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50% { transform: translateY(-8px) rotate(8deg); }
+@keyframes wheel-turn {
+  to { rotate: 360deg; }
 }
-
-@keyframes jako-idle {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50% { transform: translateY(-6px) rotate(-1.5deg); }
+@keyframes wheel-rise {
+  from { opacity: 0; translate: 0 6px; }
 }
-
-@keyframes jako-spin {
-  0% { transform: translateX(0) rotate(0deg); }
-  22% { transform: translateX(-10px) rotate(-7deg) scale(0.98); }
-  48% { transform: translateX(18px) rotate(9deg) scale(1.04); }
-  70% { transform: translateX(4px) rotate(2deg); }
-  100% { transform: translateX(0) rotate(0deg); }
+@keyframes wheel-fade {
+  from { opacity: 0; }
 }
-
-@keyframes jako-cheer {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  25% { transform: translateY(-14px) rotate(-4deg); }
-  50% { transform: translateY(0) rotate(0deg); }
-  75% { transform: translateY(-8px) rotate(3deg); }
-}
-
-@keyframes wheel-ring-spin {
-  to { transform: rotate(360deg); }
+@keyframes wheel-drift {
+  from { translate: -33.3333% 0; }
+  to { translate: 0 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .wheel-bulb, .wheel-coin, .wheel-jako, .wheel-ring { animation: none !important; }
+  .wheel-rise, .wheel-fade, .dw-mist { animation: none; }
+  .wheel-sheen { animation: none; opacity: 0; }
 }
 
 @keyframes glow {

@@ -1,5 +1,6 @@
 'use client'
 
+import { cn } from '@/lib/utils'
 import { usePoints } from '../points-context'
 import { LuckyWheel } from './lucky-wheel'
 import { MysteryChests } from './mystery-chests'
@@ -22,7 +23,7 @@ export function GameStage({ game }: { game: keyof typeof GAMES }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div className={cn('mx-auto w-full', game === 'cark' ? 'max-w-5xl' : 'max-w-2xl')}>
       <LandscapeFit label={LABELS[game]}>
         <Game
           onWin={onWin}
