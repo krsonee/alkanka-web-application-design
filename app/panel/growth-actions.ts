@@ -6,6 +6,8 @@ import { canPanel } from '@/lib/admin-auth'
 import { checkAffTarget, deleteAffLink, saveAffLink, setAffActive, type AffInput } from '@/lib/aff-links'
 import { importWagers, notifyAddressChange, setFlag, setSiteLink, setSponsorAccountStatus } from '@/lib/growth'
 import { siteNameLookup } from '@/lib/sites'
+import { getShortDomain } from '@/lib/links'
+import { shortUrl } from '@/lib/links-shared'
 import { setContent } from '@/lib/content'
 import { cleanWagerBox, WAGER_BOX_KEY, type WagerBox } from '@/lib/wager-box'
 
@@ -40,7 +42,9 @@ export async function saveAffLinkAction(input: AffInput): Promise<Result> {
     const r = await saveAffLink(input)
     revalidatePath('/panel')
     await logPanel('growth', input.id ? 'Affiliate link güncellendi' : 'Affiliate link eklendi', r.code)
-    return { ok: true, message: `Kaydedildi. Kısa link: ${siteBase()}/r/${r.code}` }
+    const host = await getShortDomain().catch(() => '')
+    const url = shortUrl({ kind: input.siteId === null ? 'dis' : 'sponsor', code: r.code, path: `/r/${r.code}`, clash: false }, siteBase(), host)
+    return { ok: true, message: `Kaydedildi. Kısa link: ${url}` }
   } catch (error) {
     return fail(error)
   }
