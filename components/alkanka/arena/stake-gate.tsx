@@ -545,12 +545,13 @@ export function StakeGate({
             <span className="absolute inset-0 bg-gradient-to-t from-card via-card/50 to-transparent max-sm:from-background max-sm:via-background/45" aria-hidden="true" />
           </>
         )}
-        <div className={cn('flex flex-col gap-1 p-4', poster ? 'lg:px-8 lg:py-6' : 'absolute inset-x-0 bottom-0 max-sm:gap-1.5 max-sm:pb-2 lg:p-8')}>
+        <div className={cn('flex flex-col gap-1 p-4', poster ? 'gap-2 max-sm:pb-1 lg:px-8 lg:py-5' : 'absolute inset-x-0 bottom-0 max-sm:gap-1.5 max-sm:pb-2 lg:p-8')}>
           <span className="flex w-fit items-center gap-1.5 rounded-md bg-background/90 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-primary">
             <Users className="size-3.5" aria-hidden="true" />
             {meta.players}
           </span>
-          <h2 className={cn('font-display font-bold uppercase leading-none text-foreground max-sm:normal-case', poster ? 'text-2xl lg:text-3xl' : 'text-3xl max-sm:text-4xl lg:text-5xl')}>{meta.title}</h2>
+          {/* The poster already carries the game name in its own lettering, so it is not printed a second time. */}
+          <h2 className={cn('font-display font-bold uppercase leading-none text-foreground max-sm:normal-case', poster ? 'sr-only' : 'text-3xl max-sm:text-4xl lg:text-5xl')}>{meta.title}</h2>
           <p className="line-clamp-1 text-sm text-muted-foreground max-sm:line-clamp-2 max-sm:text-foreground/80 max-sm:text-pretty lg:line-clamp-none">{meta.short}</p>
         </div>
       </div>
