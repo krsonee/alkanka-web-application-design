@@ -3,7 +3,7 @@
 import { BookOpen, Clapperboard, Film, ImagePlus, Lightbulb, Palette, RefreshCw, Sticker, TriangleAlert, Wallet } from 'lucide-react'
 import type { ReactNode } from 'react'
 
-type Section = 'guide' | 'create' | 'brands' | 'library'
+type Section = 'guide' | 'create' | 'motion' | 'brands' | 'library'
 
 const QUICK_START: { title: string; body: string; target: Section }[] = [
   {
@@ -20,6 +20,11 @@ const QUICK_START: { title: string; body: string; target: Section }[] = [
     title: 'Üret',
     body: '"Üret" sekmesinde işi (Banner, Hareketli GIF, Video, Sticker) ve markayı seç, formu doldur ya da hazır bir tarif seç, "Üret"e bas. Her markanın üretimleri kendi alanında durur: üstteki "Marka alanları" şeridinden markaya basınca form da liste de o markaya geçer.',
     target: 'create',
+  },
+  {
+    title: 'Hareketli banner kur',
+    body: '"Hareketli banner" sekmesinde mesajlarını satır satır yaz, boyutları işaretle, "GIF üret"e bas. Yazıyı ve logoyu model çizmez: harfler gerçek yazı tipiyle, logo kendi dosyasıyla kurulur ve aynı kurgu her boyutta çıkar. Beğendiğin bir banner GIF\'ini "Örnek tarzlar"a eklersen sistem ondan sadece tarzı (geçiş, yazının gelişi, hız, zemin, renk) alır; yazısını, logosunu, görselini almaz.',
+    target: 'motion',
   },
   {
     title: 'Revize et, hareketlendir, indir',
@@ -44,6 +49,8 @@ const PRICES: [string, string, string][] = [
   ['Video + ses', 'saniye başı ~$0.05 (standart) / ~$0.08 (yüksek)', '1-3 dk'],
   ['Hareketli sticker, gerçek hareket', 'Sticker + ~$0.12', '1-2 dk'],
   ['Sallanan sticker, paket ikonu', 'Ücretsiz', '5-20 sn'],
+  ['Hareketli banner (kurgulu GIF), boyut başına', 'Ücretsiz', '10-60 sn'],
+  ['Örnek banner inceleme', 'Kuruşun altında', '5-15 sn'],
 ]
 
 const PROMPT_EXAMPLES = [
@@ -69,6 +76,10 @@ const HINTS: Record<Exclude<Section, 'guide'>, { title: string; body: string }> 
   create: {
     title: 'Nasıl üretilir?',
     body: 'İşi ve markayı seç, format(lar)ı işaretle, başlık ve buton yazısını kendi alanlarına yaz; konu, sahne, karakter ve stil alanlarında sadece görseli anlat. Hazır tarif seçersen alanlar dolar, "İsteği geliştir" kısa yazdığını ayrıntılandırır. Logo ve yazılar yapay zekaya çizdirilmez; orijinal logo ve gerçek fontla birebir basılır.',
+  },
+  motion: {
+    title: 'Hareketli banner nasıl kurulur?',
+    body: 'Mesajları satır satır yaz, vurgulu kelimeyi *yıldız* arasına al, boyutları işaretle. Üstteki önizleme çıkacak GIF ile aynıdır. Yazı ve logo model tarafından çizilmez, bu yüzden bozulmaz. Örnek bir GIF eklersen sadece tarzı alınır, içeriği kopyalanmaz.',
   },
   brands: {
     title: 'Marka kiti nedir?',

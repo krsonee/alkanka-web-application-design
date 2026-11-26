@@ -65,6 +65,7 @@ const SETTINGS: ({ title: string; words?: string; query?: string; anyOf?: PanelM
   { title: 'Stüdyo görselini slider\'a ekle', words: 'banner slayt gönder aktar', row: 'studio' },
   { title: 'Stüdyo hazır tarifler ve isteği geliştir', words: 'form konu sahne karakter stil tarif şablon prompt talimat', row: 'studio' },
   { title: 'Stüdyo hareketli GIF ve video kalitesi', words: 'gerçek hareket ışık efekti standart yüksek 720p 1080p süre kamera', row: 'studio' },
+  { title: 'Stüdyo hareketli banner (kurgulu GIF)', words: 'gif banner reklam 728x90 şerit kule boyut mesaj patlama geçiş harf harf coin örnek tarz örnek banner ekle kopyalamadan', row: 'studio' },
   { title: 'Stüdyo hareketli sticker', words: 'telegram video sticker kenar çizgisi şeffaf sallanma webm', row: 'studio' },
   { title: 'Slayt telefon görseli', words: 'mobil dikey görsel slider telefon', row: 'slide', query: 's=slider' },
   { title: 'Rehber yazısını ileri tarihe zamanla', words: 'yayın zamanı tarih saat zamanla blog yazı', row: 'seo' },

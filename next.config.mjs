@@ -13,6 +13,8 @@ const nextConfig = {
   outputFileTracingIncludes: {
     '/api/studio/animate': ['./node_modules/ffmpeg-static/ffmpeg', './assets/studio-fonts/*.ttf'],
     '/api/studio/generate': ['./assets/studio-fonts/*.ttf'],
+    '/api/studio/motion': ['./node_modules/ffmpeg-static/ffmpeg', './assets/studio-fonts/*.ttf'],
+    '/api/studio/motion/font': ['./assets/studio-fonts/*.ttf'],
     '/panel/telegram-kilavuz': ['./assets/panel-guides/*.html'],
   },
   // Production only: `pnpm build` runs scripts/make-webp.mjs first, which guarantees

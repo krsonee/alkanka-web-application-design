@@ -237,7 +237,7 @@ const BACKDROP_REACH = 72
  * one even color, the backdrop is cut away and the logo is cropped to the mark; a dark mark is cut out
  * too, because it is set on a light plate afterwards. In every other case the logo is used as uploaded.
  */
-async function cutOutLogo(logo: Buffer) {
+export async function cutOutLogo(logo: Buffer) {
   const { data, info } = await sharp(logo).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
   const { width, height } = info
   const total = width * height
@@ -299,7 +299,7 @@ type Box = { left: number; top: number; width: number; height: number }
 type Placed = { input: Buffer; left: number; top: number }
 
 /** Crops a logo to its visible mark, so an empty margin saved in the file neither shrinks nor shifts it. */
-async function trimClear(logo: Buffer) {
+export async function trimClear(logo: Buffer) {
   const { data, info } = await sharp(logo).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
   let [left, top, right, bottom] = [info.width, info.height, -1, -1]
   for (let p = 0; p < info.width * info.height; p++) {

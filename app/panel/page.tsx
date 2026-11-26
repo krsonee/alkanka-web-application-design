@@ -74,6 +74,7 @@ import { CommunityManager } from '@/components/panel/community'
 import { adminComplaints, pendingReviews, publishedReviews } from '@/lib/community'
 import { listLeagueMatches } from '@/lib/predictions'
 import { siteOptions } from '@/lib/sites'
+import { listMotionStyles } from '@/lib/motion/styles'
 import { listAssets, listBrands, listJobsByBrand, studioSpend } from '@/lib/studio'
 import { getStudioCap } from '@/lib/studio-budget'
 import { budgetState } from '@/lib/studio-types'
@@ -1018,6 +1019,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           assets={await listAssets().catch(miss([]))}
           jobs={board.jobs}
           totals={board.totals}
+          motionStyles={await listMotionStyles().catch(miss([]))}
           initialArea={params.marka}
           spend={session.isOwner ? spend : null}
           budget={session.isOwner ? { cap, canEdit: true } : null}
