@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Check, Coins, UserCheck, X } from 'lucide-react'
 import { requestMarketItem } from '@/app/actions/market'
 import type { LinkedSponsorAccount, MarketProduct } from '@/lib/market'
-import { dealShown, dealSpentText, dealUsesText, rewardText } from '@/lib/market-shared'
+import { dealShown, dealSpentText, dealUsesText, dealWaitText, rewardText, type DealWait } from '@/lib/market-shared'
 import { useEscape } from '@/lib/use-escape'
 import { formatAC } from '../points-context'
 
@@ -17,6 +17,7 @@ export function RequestDialog({
   taskDone,
   dealLeft = 0,
   dealSpent = false,
+  dealWait = null,
   account,
   checking,
   points,
@@ -31,6 +32,8 @@ export function RequestDialog({
   /** Units the finished task still buys at the task price, this purchase included. */
   dealLeft?: number
   dealSpent?: boolean
+  /** The task is finished, but not since it was linked to this product. */
+  dealWait?: DealWait | null
   /** The account the member linked at this product's sponsor; the reward goes to it and no name is typed. */
   account: LinkedSponsorAccount | null
   /** True while the member's linked accounts are still being read. */
@@ -46,7 +49,8 @@ export function RequestDialog({
   const short = pay - points
   const auto = item.deliveryMode === 'auto' && item.reward
   const viaTask = taskDone && dealShown(item, true) && pay === item.dealPrice
-  const taskOpen = !taskDone && !dealSpent && dealShown(item, false) && item.dealTask
+  const waiting = !taskDone && dealWait && dealShown(item, false) && item.dealTask ? dealWait : null
+  const taskOpen = !taskDone && !dealSpent && !waiting && dealShown(item, false) && item.dealTask
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -151,6 +155,14 @@ export function RequestDialog({
             item.sale && pay < item.price && <p className="text-xs leading-relaxed text-muted-foreground text-pretty">{`${item.sale.name}: %${item.sale.pct} indirim uygulandı.`}</p>
           )}
           {dealSpent && dealShown(item, false) && <p className="text-xs leading-relaxed text-muted-foreground text-pretty">{dealSpentText(item)}</p>}
+          {waiting && (
+            <p className="text-xs leading-relaxed text-muted-foreground text-pretty">
+              {`${dealWaitText(item, waiting)} `}
+              <Link href={`/gorevler?gorev=${item.dealTaskId}`} className="font-semibold text-primary underline-offset-2 hover:underline">
+                Göreve git
+              </Link>
+            </p>
+          )}
           {taskOpen && (
             <p className="text-xs leading-relaxed text-muted-foreground text-pretty">
               {`"${taskOpen.title}" görevini tamamlarsan bu ürünü ${formatAC(item.dealPrice)} KC'ye alırsın. ${dealUsesText(item)} `}

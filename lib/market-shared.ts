@@ -120,6 +120,20 @@ export function dealUsesText(item: { dealUses: number; dealTask: { repeats: bool
 }
 
 /** What a member who has used up the task price is told. */
+/** A finished task that does not open the task price yet: what was done since the task was linked, out of what it asks for. */
+export type DealWait = { have: number; need: number }
+
+/** Said to a member whose task was done (wholly or partly) before the discount existed. */
+export function dealWaitText(item: { dealPrice: number; dealTask: { repeats: boolean } | null }, wait: DealWait) {
+  const price = `${item.dealPrice.toLocaleString('tr-TR')} KC`
+  if (wait.need > 0) {
+    return `İndirim, ürüne bağlandıktan sonra yaptıklarını sayar: ${wait.have} / ${wait.need}. Kalan ${wait.need - wait.have} tamamlanınca fiyat ${price} olur.`
+  }
+  return item.dealTask?.repeats
+    ? `Bu görevi indirim başlamadan önce tamamlamıştın. Görevi yeniden tamamlayınca fiyat ${price} olur.`
+    : 'Bu görevi indirim başlamadan önce tamamlamıştın; indirim görevi sonradan tamamlayanlara açık.'
+}
+
 export function dealSpentText(item: { dealUses: number; dealTask: { repeats: boolean } | null }) {
   return item.dealTask?.repeats
     ? `Görev indirimini kullandın. Görevi yeniden tamamlayınca ${item.dealUses} adet daha indirimli alırsın.`

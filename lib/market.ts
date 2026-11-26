@@ -10,7 +10,7 @@ import { stockWarning } from '@/lib/market-stock'
 import type { SponsorReminder } from '@/lib/sponsor-reminders'
 import { isAllowedImage } from '@/lib/site-registry'
 import { boughtFrameOf } from '@/lib/frames-shared'
-import { afterPct, bestSale, dealWins, isRewardKind, rewardMeta, type DeliveryMode, type Reward } from '@/lib/market-shared'
+import { afterPct, bestSale, dealWins, isRewardKind, rewardMeta, type DealWait, type DeliveryMode, type Reward } from '@/lib/market-shared'
 
 /**
  * Frame products the team created in the panel on the live site, by the id the panel gave them, and the frame
@@ -54,6 +54,8 @@ export type MarketProduct = {
   dealPrice: number
   /** How many units one completion of the task buys at the task price; the next unit costs the usual price again. */
   dealUses: number
+  /** When the task was linked to this product. The task price counts what the member did from then on, never earlier. */
+  dealSince?: string | null
   /** The linked task as it stands now; null when it was deleted, which switches the task price off. `repeats` is false for a one-off task. */
   dealTask: { title: string; live: boolean; repeats: boolean } | null
   /** The discount campaign the product is sold under right now. */
@@ -138,6 +140,9 @@ function ensure() {
     // A task price is spent per completion: each discounted purchase names the completion it was charged to.
     await rows(sql`ALTER TABLE market_items ADD COLUMN IF NOT EXISTS deal_uses int NOT NULL DEFAULT 1`)
     await rows(sql`ALTER TABLE market_requests ADD COLUMN IF NOT EXISTS deal_ref text`)
+    // A task price never looks back: it counts what the member did after the task was linked to the product.
+    await rows(sql`ALTER TABLE market_items ADD COLUMN IF NOT EXISTS deal_since timestamptz`)
+    if (process.env.VERCEL_ENV === 'production') await stampOpenDeals()
     // Products from before the delivery setting: the three the site already delivered keep doing so,
     // every other one goes to the staff queue instead of being marked delivered with nothing handed over.
     await rows(sql`UPDATE market_items SET
@@ -177,7 +182,15 @@ type ItemRow = {
   description: string; delivery: string; rules: string[]; image: string; price: number; stock: number; total: number
   per_user: number; needs_username: boolean; active: boolean; sort: number
   delivery_mode: string | null; reward_kind: string | null; reward_amount: number; reward_ref: string | null; featured: boolean
-  deal_task_id: number | null; deal_price: number; deal_uses: number
+  deal_task_id: number | null; deal_price: number; deal_uses: number; deal_since?: string | Date | null
+}
+
+/**
+ * Task prices linked before the link time was kept start counting from the first visit after this
+ * release. Without it they would keep accepting everything the member did earlier in the period.
+ */
+export async function stampOpenDeals() {
+  await rows(sql`UPDATE market_items SET deal_since = now() WHERE deal_task_id IS NOT NULL AND deal_since IS NULL`)
 }
 
 function toProduct(r: ItemRow): MarketProduct {
@@ -198,6 +211,7 @@ function toProduct(r: ItemRow): MarketProduct {
     dealTaskId: hasDeal ? Number(r.deal_task_id) : null,
     dealPrice: hasDeal ? Number(r.deal_price) : 0,
     dealUses: Math.max(1, Math.floor(Number(r.deal_uses) || 1)),
+    dealSince: hasDeal && r.deal_since ? new Date(r.deal_since).toISOString() : null,
     dealTask: null,
     sale: null,
     salePrice: r.price,
@@ -236,45 +250,82 @@ async function priced(items: MarketProduct[], strict = false): Promise<MarketPro
 }
 
 export type DealRights = {
-  /** Linked tasks the member has finished in the current period. */
+  /** Linked tasks whose completion opens a task price for the member in the current period. */
   done: number[]
   /** By product: how many more units the finished task still buys at the task price. */
   left: Record<string, number>
+  /**
+   * By product: a finished task that does not open the price, because it was done before the task was
+   * linked to the product. `need` is what the task asks for and `have` what was done since the link;
+   * `need` is 0 for a task that cannot be counted again.
+   */
+  waiting: Record<string, DealWait>
+}
+
+export const NO_DEAL_RIGHTS: DealRights = { done: [], left: {}, waiting: {} }
+
+type DealLink = { id: string; task: number; since: string | null }
+type DealStanding = { ref: string; earned: boolean; have: number; need: number }
+
+/** Where the member stands on each product's task price. A product whose task the member has not finished is left out. */
+async function dealStandings(userId: string, links: DealLink[]): Promise<Map<string, DealStanding>> {
+  const out = new Map<string, DealStanding>()
+  if (!links.length) return out
+  const { taskCompletions, earnedSince, listTasks } = await import('@/lib/tasks')
+  const done = await taskCompletions(userId)
+  if (!links.some((link) => done.has(link.task))) return out
+  const tasks = new Map((await listTasks()).map((task) => [task.id, task]))
+  const memo = new Map<string, Promise<number>>()
+  for (const link of links) {
+    const completion = done.get(link.task)
+    const task = tasks.get(link.task)
+    if (!completion || !task) continue
+    out.set(link.id, { ref: completion.ref, ...(await earnedSince(userId, task, completion, link.since, memo)) })
+  }
+  return out
 }
 
 /** What the member's finished tasks are still worth in the market, so the site shows the price they will actually pay. */
 export async function dealRights(userId: string): Promise<DealRights> {
   await ensure()
-  const linked = await rows<{ id: string; task: number; uses: number }>(sql`SELECT id, deal_task_id AS task, deal_uses AS uses FROM market_items
-    WHERE active AND deal_task_id IS NOT NULL AND deal_price > 0`)
-  if (!linked.length) return { done: [], left: {} }
-  const { completedTaskRefs } = await import('@/lib/tasks')
-  const refs = await completedTaskRefs(userId)
-  if (!refs.size) return { done: [], left: {} }
+  const linked = await rows<{ id: string; task: number; uses: number; since: string | Date | null }>(sql`SELECT id, deal_task_id AS task, deal_uses AS uses, deal_since AS since
+    FROM market_items WHERE active AND deal_task_id IS NOT NULL AND deal_price > 0`)
+  if (!linked.length) return NO_DEAL_RIGHTS
+  const standings = await dealStandings(
+    userId,
+    linked.map((row) => ({ id: String(row.id), task: Number(row.task), since: row.since ? new Date(row.since).toISOString() : null })),
+  )
+  if (!standings.size) return NO_DEAL_RIGHTS
   const spent = await rows<{ item_id: string; deal_ref: string; c: string }>(sql`SELECT item_id, deal_ref, count(*) AS c FROM market_requests
     WHERE user_id = ${userId} AND deal_ref IS NOT NULL AND status <> 'reddedildi' GROUP BY item_id, deal_ref`)
   const left: Record<string, number> = {}
+  const waiting: Record<string, DealWait> = {}
+  const done = new Set<number>()
   for (const row of linked) {
-    const ref = refs.get(Number(row.task))
-    if (!ref) continue
-    const used = Number(spent.find((s) => String(s.item_id) === String(row.id) && String(s.deal_ref) === ref)?.c ?? 0)
+    const standing = standings.get(String(row.id))
+    if (!standing) continue
+    if (!standing.earned) {
+      waiting[String(row.id)] = { have: standing.have, need: standing.need }
+      continue
+    }
+    done.add(Number(row.task))
+    const used = Number(spent.find((s) => String(s.item_id) === String(row.id) && String(s.deal_ref) === standing.ref)?.c ?? 0)
     left[String(row.id)] = Math.max(0, Math.max(1, Number(row.uses) || 1) - used)
   }
-  return { done: [...new Set(linked.map((r) => Number(r.task)).filter((id) => refs.has(id)))], left }
+  return { done: [...done], left, waiting }
 }
 
 /**
  * The task completion a discounted purchase is charged to, or null when the member has not finished the
- * task or has already bought every unit that completion covers.
+ * task since it was linked to the product or has already bought every unit that completion covers.
  */
 async function openDealRef(userId: string, item: MarketProduct): Promise<string | null> {
   if (!dealWins(item) || !item.dealTaskId) return null
-  const { completedTaskRefs } = await import('@/lib/tasks')
-  const ref = (await completedTaskRefs(userId)).get(item.dealTaskId)
-  if (!ref) return null
+  const standing = (await dealStandings(userId, [{ id: item.id, task: item.dealTaskId, since: item.dealSince ?? null }])).get(item.id)
+  if (!standing?.earned) return null
   const used = await rows<{ c: string }>(sql`SELECT count(*) AS c FROM market_requests
-    WHERE user_id = ${userId} AND item_id = ${item.id} AND deal_ref = ${ref} AND status <> 'reddedildi'`)
-  return Number(used[0]?.c ?? 0) < item.dealUses ? ref : null
+    WHERE user_id = ${userId} AND item_id = ${item.id} AND deal_ref = ${standing.ref} AND status <> 'reddedildi'`)
+  return Number(used[0]?.c ?? 0) < item.dealUses ? standing.ref : null
 }
 
 export type LinkedSponsorAccount = { username: string; status: 'pending' | 'approved' }
@@ -370,21 +421,26 @@ export async function saveProduct(input: ProductInput) {
   const deal = await cleanDeal(input, price, reward)
   // A new product goes to the end of the list; an edited one keeps the place it was dragged to.
   const sort = input.id ? int(input.sort, 0, 99_999) : null
+  // The task price counts from the moment the task is linked: changing the price or the units keeps that
+  // moment, linking a different task (or linking again after removing it) starts a new one.
   await rows(sql`INSERT INTO market_items (id, kind, sponsor_id, sponsor_name, type, name, description, delivery, rules, image, price, stock, total, per_user, needs_username, active, sort,
-      delivery_mode, reward_kind, reward_amount, reward_ref, featured, deal_task_id, deal_price, deal_uses)
+      delivery_mode, reward_kind, reward_amount, reward_ref, featured, deal_task_id, deal_price, deal_uses, deal_since)
     VALUES (${id}, ${kind}, ${kind === 'sponsor' ? clean(input.sponsorId, 80) || null : null}, ${sponsorName}, ${clean(input.type, 30) || 'HEDİYE'}, ${name},
       ${clean(input.description, 600)}, ${clean(input.delivery, 300)}, ${JSON.stringify(rules)}::jsonb, ${image},
       ${price}, ${stock}, ${total}, ${int(input.perUser, 1, 100)}, ${Boolean(input.needsUsername) || kind === 'sponsor'},
       ${input.active !== false}, COALESCE(${sort}::int, (SELECT COALESCE(max(sort), -1) + 1 FROM market_items)),
       ${reward ? 'auto' : 'manual'}, ${reward?.kind ?? null}, ${reward?.amount ?? 0}, ${reward?.ref ?? null}, ${Boolean(input.featured)},
-      ${deal.taskId}, ${deal.price}, ${deal.uses})
+      ${deal.taskId}, ${deal.price}, ${deal.uses}, CASE WHEN ${deal.taskId}::int IS NULL THEN NULL ELSE now() END)
     ON CONFLICT (id) DO UPDATE SET kind = EXCLUDED.kind, sponsor_id = EXCLUDED.sponsor_id, sponsor_name = EXCLUDED.sponsor_name,
       type = EXCLUDED.type, name = EXCLUDED.name, description = EXCLUDED.description, delivery = EXCLUDED.delivery, rules = EXCLUDED.rules,
       image = EXCLUDED.image, price = EXCLUDED.price, stock = EXCLUDED.stock, total = EXCLUDED.total, per_user = EXCLUDED.per_user,
       needs_username = EXCLUDED.needs_username, active = EXCLUDED.active, sort = EXCLUDED.sort,
       delivery_mode = EXCLUDED.delivery_mode, reward_kind = EXCLUDED.reward_kind, reward_amount = EXCLUDED.reward_amount,
       reward_ref = EXCLUDED.reward_ref, featured = EXCLUDED.featured,
-      deal_task_id = EXCLUDED.deal_task_id, deal_price = EXCLUDED.deal_price, deal_uses = EXCLUDED.deal_uses`)
+      deal_task_id = EXCLUDED.deal_task_id, deal_price = EXCLUDED.deal_price, deal_uses = EXCLUDED.deal_uses,
+      deal_since = CASE WHEN EXCLUDED.deal_task_id IS NULL THEN NULL
+        WHEN market_items.deal_task_id IS DISTINCT FROM EXCLUDED.deal_task_id OR market_items.deal_since IS NULL THEN EXCLUDED.deal_since
+        ELSE market_items.deal_since END`)
   // The task list shows this price on the task itself; it reads a shared copy, which is stale the moment a product changes.
   await import('@/lib/shared-read').then((m) => m.forgetSharedRead('tasks:market-deals'))
   return id

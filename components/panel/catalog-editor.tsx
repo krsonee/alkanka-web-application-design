@@ -23,7 +23,7 @@ import type { HiddenMap, HiddenScope } from '@/lib/hidden-shared'
 type Kind = 'events' | 'predictions' | 'campaigns' | 'bonuses'
 const SCOPE: Record<Kind, HiddenScope> = { events: 'event', predictions: 'prediction', campaigns: 'campaign', bonuses: 'bonus' }
 type Item = Record<string, unknown>
-type Option = { id: string; name: string }
+type Option = { id: string; name: string; logo?: string; initials?: string }
 
 type Field =
   | { key: string; label: string; type: 'text' | 'textarea' | 'image'; max?: number; wide?: boolean }
@@ -35,6 +35,8 @@ type Field =
   /** A name picked from the suggestions or typed by hand. */
   | { key: string; label: string; type: 'combo'; options: string[]; max: number }
   | { key: string; label: string; type: 'toggle'; text: string }
+  /** The sponsor's logo over the middle of the record's picture: `sponsor` and `image` name the fields it is drawn from. */
+  | { key: string; label: string; type: 'sponsorLogo'; sponsor: string; image: string; wide?: boolean }
   | { key: string; label: string; type: 'lines'; hint: string }
   | { key: string; label: string; type: 'pairs'; hint: string; a: string; b: string; numericB?: boolean }
 
@@ -94,7 +96,7 @@ const SCHEMAS: Record<Kind, { title: string; hint: string; field: string; fields
       { key: 'endsAt', label: 'Bitiş tarihi', type: 'datetime' },
       { key: 'url', label: 'Yönlendirme linki · boşsa sponsorun linki kullanılır', type: 'text', max: 400, wide: true },
       { key: 'image', label: 'Görsel', type: 'image', wide: true },
-      { key: 'logo', label: 'Sponsor logosu', type: 'toggle', text: 'Sponsorun logosunu görselin ortasına yerleştir' },
+      { key: 'logo', label: 'Görselin ortasında sponsor logosu', type: 'sponsorLogo', sponsor: 'sponsorId', image: 'image', wide: true },
       { key: 'description', label: 'Açıklama', type: 'textarea', max: 300, wide: true },
     ],
     blank: () => {
@@ -148,6 +150,62 @@ function fromPairs(text: string, a: string, b: string, numericB?: boolean, prev?
       // Prize amounts are typed the Turkish way ("5.000"), which Number() would read as five.
       [b]: b === 'kc' ? parseKc(y) || 0 : numericB ? Math.max(0, Number(y) || 0) : y,
     }))
+}
+
+/**
+ * "Use the logo / don't" for a record with a sponsor and a picture, with the picture drawn the way the
+ * site draws it, so the choice is made by looking at the result.
+ */
+function SponsorLogoChoice({ id, on, sponsor, image, onChange }: { id: string; on: boolean; sponsor?: Option; image: string; onChange: (on: boolean) => void }) {
+  const shown = on && Boolean(sponsor)
+  const pick = (value: boolean, text: string, first?: boolean) => (
+    <button
+      id={first ? id : undefined}
+      type="button"
+      disabled={!sponsor}
+      aria-pressed={shown === value}
+      onClick={() => onChange(value)}
+      className={cn(
+        'min-h-10 flex-1 rounded-lg border px-3 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+        shown === value ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground',
+      )}
+    >
+      {text}
+    </button>
+  )
+  return (
+    <span className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <span className="relative block aspect-[4/3] w-40 shrink-0 overflow-hidden rounded-lg border border-border bg-background">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {image ? <img src={image} alt="" className="size-full object-cover" /> : null}
+        {shown && sponsor ? (
+          <span className="absolute left-1/2 top-1/2 flex size-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center overflow-hidden rounded-xl border border-foreground/15 bg-background/85 p-1.5 shadow-lg">
+            {sponsor.logo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={sponsor.logo} alt={`${sponsor.name} logosu`} className="size-full object-contain" />
+            ) : (
+              <span className="font-display text-base font-bold text-primary">{sponsor.initials || sponsor.name.slice(0, 2)}</span>
+            )}
+          </span>
+        ) : null}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-2">
+        <span role="group" aria-label="Sponsor logosu" className="flex gap-2">
+          {pick(true, 'Logoyu kullan', true)}
+          {pick(false, 'Kullanma')}
+        </span>
+        <span className="text-xs font-normal leading-relaxed text-muted-foreground text-pretty">
+          {!sponsor
+            ? 'Önce yukarıdan sponsoru seç: logo, seçtiğin sponsorun logosudur.'
+            : !shown
+              ? 'Kampanya sitede sadece arka plan görseliyle görünür.'
+              : sponsor.logo
+                ? `${sponsor.name} logosu, kampanyanın göründüğü her yerde arka plan görselinin ortasına oturur. Soldaki önizleme sitedeki yerleşimi gösterir.`
+                : `${sponsor.name} için yüklü logo yok. Sponsorlar ekranından logo yükleyene kadar ortada sponsorun baş harfleri görünür.`}
+        </span>
+      </span>
+    </span>
+  )
 }
 
 function FieldInput({ field, item, set, sponsors, library, used = [] }: { field: Field; item: Item; set: (v: Item) => void; sponsors: Option[]; library: string[]; used?: string[] }) {
@@ -230,6 +288,14 @@ function FieldInput({ field, item, set, sponsors, library, used = [] }: { field:
           <input id={id} type="checkbox" className="size-4 shrink-0 accent-primary" checked={value === true} onChange={(e) => set({ [field.key]: e.target.checked })} />
           {field.text}
         </span>
+      ) : field.type === 'sponsorLogo' ? (
+        <SponsorLogoChoice
+          id={id}
+          on={value === true}
+          sponsor={sponsors.find((s) => s.id === String(item[field.sponsor] ?? ''))}
+          image={String(item[field.image] ?? '')}
+          onChange={(on) => set({ [field.key]: on })}
+        />
       ) : field.type === 'textarea' ? (
         <textarea id={id} rows={3} maxLength={field.max} className={cn(input, 'resize-y leading-relaxed')} value={String(value ?? '')} onChange={(e) => set({ [field.key]: e.target.value })} />
       ) : field.type === 'lines' ? (
