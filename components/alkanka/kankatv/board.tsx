@@ -850,7 +850,7 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
               aria-selected={tab === key}
               onClick={() => setTab(key)}
               className={cn(
-                'flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border-2 px-4 text-sm font-bold transition-colors md:flex-none',
+                'flex h-12 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl border-2 px-4 text-sm font-bold transition-colors max-sm:gap-1.5 max-sm:px-2 md:flex-none',
                 tab === key
                   ? 'border-primary bg-primary text-primary-foreground shadow-md'
                   : 'tab-attention border-primary/60 bg-card text-foreground hover:bg-muted',
@@ -858,7 +858,7 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
             >
               <TabIcon className="size-4 shrink-0" aria-hidden="true" />
               {label}
-              {tab !== key && <ChevronRight className="size-4 shrink-0 text-primary" aria-hidden="true" />}
+              {tab !== key && <ChevronRight className="size-4 shrink-0 text-primary max-sm:hidden" aria-hidden="true" />}
             </button>
           ))}
         </div>

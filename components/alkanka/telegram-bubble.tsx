@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { usePathname } from 'next/navigation'
 import { MessageCircle } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { OPEN_CHAT_EVENT } from './live-rail'
 import { useChatFeed } from './use-chat-feed'
 
@@ -46,10 +47,30 @@ function useChatSignal() {
   return { onGameTable, messages, lastId, seen, unread, open }
 }
 
+/** True while the page moves and for a moment after it stops. */
+function useScrolling(restMs = 650) {
+  const [scrolling, setScrolling] = useState(false)
+  useEffect(() => {
+    let rest: ReturnType<typeof setTimeout> | undefined
+    const onScroll = () => {
+      setScrolling(true)
+      clearTimeout(rest)
+      rest = setTimeout(() => setScrolling(false), restMs)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      clearTimeout(rest)
+    }
+  }, [restMs])
+  return scrolling
+}
+
 /** Phone and tablet chat: a floating button above the bottom menu, with a short preview of each new message beside it. */
 export function TelegramBubble() {
   const { onGameTable, messages, lastId, seen, unread, open } = useChatSignal()
   const [peekId, setPeekId] = useState<number | null>(null)
+  const scrolling = useScrolling()
 
   useEffect(() => {
     if (lastId === null || seen === null || lastId <= seen) {
@@ -82,7 +103,12 @@ export function TelegramBubble() {
         type="button"
         onClick={open}
         aria-label={unread > 0 ? `Sohbeti aç, ${unread} yeni mesaj` : 'Sohbeti aç'}
-        className="pointer-events-auto relative flex size-12 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-[0_10px_28px_-8px_var(--accent)] ring-4 ring-background transition-[scale] duration-150 active:scale-95"
+        // While the page is being read the button steps half off the edge, so it stops covering the right end of
+        // rows and buttons; it comes back as soon as the page rests. A new message keeps it fully in view.
+        className={cn(
+          'pointer-events-auto relative flex size-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-[0_10px_28px_-8px_var(--accent)] ring-2 ring-background transition-[scale,translate,opacity] duration-200 active:scale-95 motion-reduce:transition-none',
+          scrolling && !peek && unread === 0 && 'translate-x-[62%] opacity-70',
+        )}
       >
         {unread > 0 && <span aria-hidden="true" className="absolute inset-0 animate-ping rounded-full bg-accent/50 [animation-duration:2.4s] motion-reduce:hidden" />}
         <MessageCircle className="relative size-[1.375rem]" strokeWidth={2.25} aria-hidden="true" />

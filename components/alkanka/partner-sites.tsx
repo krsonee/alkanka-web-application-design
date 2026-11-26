@@ -203,7 +203,7 @@ function MainSponsorCompact({ sponsor }: { sponsor: Sponsor }) {
         </div>
         <span aria-hidden className="bonus-sheen" />
 
-        <div className="sponsor-logo-plate relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl px-2 py-1.5 h-14 w-24 sm:h-20 sm:w-40 sm:px-4">
+        <div className="sponsor-logo-plate relative flex h-14 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl px-2 py-1.5 sm:h-20 sm:w-40 sm:px-4">
           <SponsorLogoPlate sponsor={sponsor} compact className="max-h-full max-w-full text-lg drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]" />
         </div>
 
@@ -212,7 +212,7 @@ function MainSponsorCompact({ sponsor }: { sponsor: Sponsor }) {
             <span className="truncate font-display text-sm font-bold text-foreground sm:text-base">{sponsor.name}</span>
             <TierTag tier={sponsor.tier} className="px-1 text-[9px]" />
           </span>
-          <p className="line-clamp-1 font-display text-base font-bold text-primary sm:text-xl">{sponsor.welcome}</p>
+          <p className="line-clamp-2 font-display text-sm font-bold leading-tight text-primary text-pretty sm:line-clamp-1 sm:text-xl">{sponsor.welcome}</p>
           <ul className="hidden min-w-0 flex-wrap gap-1.5 md:flex">
             {sponsor.perks.slice(0, 3).map((p) => (
               <li

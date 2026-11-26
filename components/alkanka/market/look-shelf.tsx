@@ -62,7 +62,8 @@ export function LookShelf() {
                   const short = data.signedIn && !mine && points < a.price
                   return (
                     <li key={a.id} className="panel-gold flex flex-col gap-2 rounded-xl p-3">
-                      <div className="relative aspect-square overflow-hidden rounded-lg bg-secondary">
+                      {/* Avatars are drawn to be worn round; a square frame showed the white corners some of them have. */}
+                      <div className="relative aspect-square overflow-hidden rounded-full bg-secondary ring-1 ring-primary/25">
                         <Image src={a.src || '/placeholder.svg'} alt="" fill sizes="(min-width: 1024px) 15vw, 45vw" className="object-cover" />
                       </div>
                       <div className="flex items-start justify-between gap-2">

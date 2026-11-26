@@ -172,7 +172,8 @@ function TierBlock({
                   <LevelEmblem level={i + 1} size="lg" locked={locked && !isNext} className="hidden lg:flex" />
                 </span>
                 <span className="flex w-full min-w-0 flex-col">
-                  <span className={cn('truncate text-xs font-bold sm:text-sm', locked && !isNext ? 'text-muted-foreground' : 'text-foreground')}>{l.name}</span>
+                  {/* Phones: five badges share a row, so a two-word name breaks onto a second line instead of ending in dots. */}
+                  <span className={cn('text-xs font-bold max-sm:flex max-sm:min-h-[1.75rem] max-sm:items-center max-sm:justify-center max-sm:text-[11px] max-sm:leading-[0.875rem] max-sm:text-balance sm:truncate sm:text-sm', locked && !isNext ? 'text-muted-foreground' : 'text-foreground')}>{l.name}</span>
                   <span className="hidden truncate text-[11px] text-muted-foreground sm:block">{l.badge}</span>
                 </span>
                 {isNext ? (

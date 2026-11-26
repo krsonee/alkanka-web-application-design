@@ -616,7 +616,8 @@ function BoardRow({ row, unit, isMe, tip, sticky, move }: { row: Row; unit: stri
               {isMe && <span className="text-primary"> (sen)</span>}
             </span>
             <Pins pins={row.pins} />
-            {row.level ? <RankChip level={row.level} /> : tip ? <MemberRank userId={row.userId} /> : null}
+            {/* Phones: the emblem on the left already shows the level, so the chip gives its room to the name. */}
+            <span className="flex shrink-0 items-center max-sm:hidden">{row.level ? <RankChip level={row.level} /> : tip ? <MemberRank userId={row.userId} /> : null}</span>
             <MoveMark move={move} />
           </span>
           <span className="truncate text-[11px] text-muted-foreground">{row.detail}</span>

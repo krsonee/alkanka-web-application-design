@@ -608,10 +608,10 @@ export function Tasks({
                   {!active && group.open > 0 && (
                     <span
                       aria-hidden="true"
-                      className="absolute -right-1 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold tabular-nums text-primary-foreground shadow"
+                      className="absolute -right-1 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold leading-none tabular-nums text-primary-foreground shadow"
                     >
-                      <span className="absolute inset-0 animate-ping rounded-full bg-primary/50" />
-                      <span className="relative">{group.open}</span>
+                      <span className="absolute inset-0 animate-ping rounded-full bg-primary/50 motion-reduce:hidden" />
+                      <span className="relative">{group.open > 99 ? '99+' : group.open}</span>
                     </span>
                   )}
                   <span className="max-w-full truncate text-xs font-semibold leading-tight sm:text-sm">{PERIOD_LABEL[group.period]}</span>

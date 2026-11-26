@@ -100,8 +100,9 @@ function OddCard({ odd }: { odd: SpecialOdd }) {
       </div>
 
       <div className="flex items-center gap-1.5 md:gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg bg-background px-2.5 py-1 md:flex-none md:gap-2 md:px-3 md:py-2">
-          {odd.market && <span className="truncate text-xs text-muted-foreground md:text-sm">{odd.market}</span>}
+        {/* Phones: the bet name gets its own line above the odds, so it is read whole instead of ending in dots. */}
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg bg-background px-2.5 py-1 max-md:flex-wrap max-md:gap-y-0.5 max-md:py-1.5 md:flex-none md:gap-2 md:px-3 md:py-2">
+          {odd.market && <span className="truncate text-xs text-muted-foreground max-md:basis-full max-md:whitespace-normal max-md:text-pretty md:text-sm">{odd.market}</span>}
           {odd.oldOdd != null && (
             <>
               <span className="text-xs text-muted-foreground line-through tabular-nums md:text-sm">{odd.oldOdd.toFixed(2)}</span>
