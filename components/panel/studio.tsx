@@ -34,7 +34,9 @@ import { ALL_KINDS, AreaBar, AreaHead, areaOf, areaTotal, inKindGroup, startArea
 import { BriefFields, MotionFields } from '@/components/panel/studio-brief-form'
 import { StudioGuide, StudioHint } from '@/components/panel/studio-guide'
 import { AutoReferences, ReferencePicker, StudioLibrary } from '@/components/panel/studio-library'
+import { StudioMotion } from '@/components/panel/studio-motion'
 import { amountInput } from '@/lib/amount'
+import type { MotionStyle } from '@/lib/motion/styles'
 import { bestAssets } from '@/lib/studio-refs'
 import {
   briefProblem,
@@ -73,7 +75,7 @@ import {
 } from '@/lib/studio-types'
 import { cn } from '@/lib/utils'
 
-type StudioView = 'guide' | 'create' | 'brands' | 'library'
+type StudioView = 'guide' | 'create' | 'motion' | 'brands' | 'library'
 type AnimateMode = 'gif' | 'aigif' | 'video' | 'tgsticker' | 'tgmotion' | 'tgicon'
 type AnimateOptions = { mode: AnimateMode; duration: number; audio: boolean; motion: Motion; quality: MotionQuality }
 const PAID_MOTION: AnimateMode[] = ['aigif', 'video', 'tgmotion']
@@ -84,6 +86,8 @@ type Props = {
   /** The newest jobs of every brand, so each brand's area can be shown on its own. */
   jobs: StudioJob[]
   totals: StudioAreaTotal[]
+  /** Manners read from example banners, for the motion banner maker. */
+  motionStyles: MotionStyle[]
   /** The brand area named in the address, if any. */
   initialArea?: string
   /** Spend and cap are sent to the owner account only; everyone else gets `null`. */
@@ -195,7 +199,7 @@ function BudgetMeter({ spend, budget }: { spend: NonNullable<Props['spend']>; bu
   )
 }
 
-export function Studio({ brands, assets, jobs, totals, initialArea, spend, budget, capFull, canSlide }: Props) {
+export function Studio({ brands, assets, jobs, totals, motionStyles, initialArea, spend, budget, capFull, canSlide }: Props) {
   const [view, setView] = useState<StudioView>(brands.length ? 'create' : 'guide')
   const [picked, setPicked] = useState<StudioArea>(() => startArea(initialArea, brands))
   // A brand kit deleted while its area is open falls back to the first brand.
@@ -221,6 +225,7 @@ export function Studio({ brands, assets, jobs, totals, initialArea, spend, budge
             [
               ['guide', 'Rehber'],
               ['create', 'Üret'],
+              ['motion', 'Hareketli banner'],
               ['brands', `Marka kitleri (${brands.length})`],
               ['library', `Sağlayıcı kütüphanesi (${assets.length})`],
             ] as const
@@ -267,6 +272,8 @@ export function Studio({ brands, assets, jobs, totals, initialArea, spend, budge
           fromLibrary={libraryPick}
           onLibraryDone={() => setLibraryPick(null)}
         />
+      ) : view === 'motion' ? (
+        <StudioMotion brands={brands} assets={assets} styles={motionStyles} area={area} onArea={pickArea} />
       ) : view === 'brands' ? (
         <BrandKits brands={brands} />
       ) : view === 'library' ? (
