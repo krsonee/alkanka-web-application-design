@@ -101,7 +101,7 @@ export function MarketProductForm({
         data-no-guard
         onSubmit={(e) => {
           e.preventDefault()
-          onSave({ ...v, deliveryMode: mode, reward: mode === 'auto' ? reward : null, dealTaskId: dealOn ? v.dealTaskId : null, dealPrice: dealOn ? v.dealPrice : 0 })
+          onSave({ ...v, deliveryMode: mode, reward: mode === 'auto' ? reward : null, dealTaskId: dealOn ? v.dealTaskId : null, dealPrice: dealOn ? v.dealPrice : 0, dealUses: dealOn ? v.dealUses : 1 })
         }}
         className="grid gap-4 md:grid-cols-2"
       >
@@ -201,10 +201,25 @@ export function MarketProductForm({
                   className={field}
                 />
               </Label>
+              <Label text="Görevi bir kez tamamlayan kaç adet indirimli alır?">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  required
+                  min={1}
+                  max={100}
+                  value={v.dealUses}
+                  onChange={(e) => set('dealUses', Number(e.target.value))}
+                  className={field}
+                />
+              </Label>
+              <p className="self-end text-xs leading-relaxed text-muted-foreground text-pretty">
+                {`Üye görevi her tamamlayışında ${Math.max(1, Number(v.dealUses) || 1)} adet indirimli alır; sonraki adetler normal fiyattan satılır. ${dealTask && dealTask.period !== 'once' ? 'Tekrarlanan görevde hak, görev yeniden tamamlanınca yenilenir.' : 'Tek seferlik görevde hak bir kez verilir.'} Kişi başı toplam adet sınırı yine geçerlidir.`}
+              </p>
               <p className={cn('text-xs leading-relaxed text-pretty sm:col-span-2', dealBad ? 'text-destructive' : 'text-muted-foreground')}>
                 {dealBad
                   ? 'Görev fiyatı normal fiyattan düşük olmalı.'
-                  : `Üye bu ürünü ${Number(v.price).toLocaleString('tr-TR')} KC ödeyerek her zaman alabilir. Seçtiğin görevi tamamlamışsa ${Number(v.dealPrice).toLocaleString('tr-TR')} KC öder; fiyat kendiliğinden uygulanır, sana iş düşmez. Ürün markette "Görevli fırsatlar" sekmesinde de görünür.`}
+                  : `Üye bu ürünü ${Number(v.price).toLocaleString('tr-TR')} KC ödeyerek her zaman alabilir. Seçtiğin görevi tamamlamışsa ve indirimli adet hakkı duruyorsa ${Number(v.dealPrice).toLocaleString('tr-TR')} KC öder; fiyat kendiliğinden uygulanır, sana iş düşmez. Ürün markette "Görevli fırsatlar" sekmesinde de görünür.`}
               </p>
               <p className="text-xs leading-relaxed text-muted-foreground text-pretty sm:col-span-2">
                 Günlük görevde üyenin görevi o gün, haftalık görevde o hafta tamamlamış olması gerekir. Onay isteyen görevde indirim, görev onaylandıktan sonra açılır.

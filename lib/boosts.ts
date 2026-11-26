@@ -1,8 +1,9 @@
 import 'server-only'
-import { rows, sql } from '@/lib/db'
+import { pool, rows, sql } from '@/lib/db'
 import { getContent, setContent } from '@/lib/content'
 import { driftMessage } from '@/lib/drift'
 import {
+  HOUSE_SOURCE,
   LEGACY_BOOST_KEYS,
   activeBoosts,
   applyMult,
@@ -29,6 +30,7 @@ const BOOST_LABELS = {
   streak14: '14 gün serisi ödülü',
   shieldPrice: 'Kalkan fiyatı',
   'bestBonus.kp': 'En iyi bonus puanı',
+  houseCap: 'Blackjack ve Rulette günlük çarpan sınırı',
   mult: 'Çarpan',
   pct: 'Yüzde',
   coin: 'Coin',
@@ -73,6 +75,51 @@ export async function boostedBy(source: BoostSource, amount: number) {
   const cfg = await getBoostConfig().catch(() => null)
   const mult = cfg ? boostFor(cfg, source) : 1
   return { amount: applyMult(amount, mult), mult }
+}
+
+let houseReady: Promise<unknown> | null = null
+const ensureHouse = () =>
+  (houseReady ??= rows(sql`CREATE TABLE IF NOT EXISTS boost_house (user_id text NOT NULL, day date NOT NULL, extra int NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day))`).catch((e) => {
+    houseReady = null
+    throw e
+  }))
+
+/**
+ * What a running campaign adds to a Blackjack or Roulette profit. Nothing unless a campaign names the
+ * house source, and never more per member per day than the panel's ceiling: these games are played
+ * against the house, so an unlimited multiplier would pay out more than the tables take in. The day's
+ * total is kept under a row lock, so hands settling at the same moment cannot both use the same room.
+ * Never throws: a failure pays the plain winnings.
+ */
+export async function houseLift(userId: string, profit: number): Promise<{ extra: number; mult: number }> {
+  const none = { extra: 0, mult: 1 }
+  if (profit <= 0) return none
+  try {
+    const cfg = await getBoostConfig()
+    const mult = boostFor(cfg, HOUSE_SOURCE)
+    const want = applyMult(profit, mult) - profit
+    if (mult <= 1 || want <= 0 || cfg.houseCap <= 0) return none
+    await ensureHouse()
+    const day = trDayOf()
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query(`INSERT INTO boost_house (user_id, day, extra) VALUES ($1, $2, 0) ON CONFLICT DO NOTHING`, [userId, day])
+      const held = await client.query(`SELECT extra FROM boost_house WHERE user_id = $1 AND day = $2 FOR UPDATE`, [userId, day])
+      const extra = Math.min(want, Math.max(0, cfg.houseCap - Number(held.rows[0]?.extra ?? 0)))
+      if (extra > 0) await client.query(`UPDATE boost_house SET extra = extra + $3 WHERE user_id = $1 AND day = $2`, [userId, day, extra])
+      await client.query('COMMIT')
+      return extra > 0 ? { extra, mult } : none
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {})
+      throw error
+    } finally {
+      client.release()
+    }
+  } catch (error) {
+    console.error('[boosts] kasa oyunu çarpanı işlenemedi', error)
+    return none
+  }
 }
 
 export const multLabel = (mult: number) => `x${String(mult).replace('.', ',')}`

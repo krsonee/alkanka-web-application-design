@@ -39,6 +39,7 @@ import {
   SideBetPicker,
   SideBetTags,
   SidePayoutCard,
+  sideBetSummary,
   type SideStakes,
 } from "./blackjack-side-bets";
 import { BlackjackLobby, BlackjackTables, BlackjackWatchers } from "./blackjack-tables";
@@ -601,7 +602,7 @@ function SeatPod({
           </span>
         </span>
       </div>
-      <SideBetTags side={seat.side} />
+      <SideBetTags side={seat.side} mine={seat.mine} />
       {seat.insurance > 0 && phase !== "result" && (
         <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none text-foreground">
           Sigortalı {formatAC(seat.insurance)}
@@ -1100,10 +1101,16 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
             ) : (
               <p className="text-center text-sm text-muted-foreground">
                 Kararın alındı. Diğer oyuncular bekleniyor, sonra krupiye kapalı karta bakacak.
+                {me && sideBetSummary(me.side) ? ` ${sideBetSummary(me.side)}` : ""}
               </p>
             )
           ) : myTurn ? (
             <div className={cn("flex flex-col items-center gap-2", MOBILE_BAR)}>
+              {sideBetSummary(me.side) && (
+                <p role="status" className="text-center text-xs font-semibold leading-relaxed text-foreground text-pretty">
+                  {sideBetSummary(me.side)}
+                </p>
+              )}
               {me.split && (
                 <p className="text-center text-xs font-bold uppercase tracking-wide text-primary">
                   {me.hands.findIndex((h) => h.active) + 1}. eli oynuyorsun

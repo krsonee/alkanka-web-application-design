@@ -93,20 +93,54 @@ export function SideBetPicker({ value, onChange }: { value: SideStakes; onChange
   )
 }
 
-/** Small tag on a seat showing how its side bets landed. */
-export function SideBetTags({ side }: { side: { pairs: number; t213: number; pairsHit: SideHit | null; t213Hit: SideHit | null; settled: boolean } }) {
-  if (!side.settled || (side.pairs === 0 && side.t213 === 0)) return null
-  const hits = [side.pairsHit, side.t213Hit].filter(Boolean) as SideHit[]
-  if (hits.length === 0) return null
+type SeatSide = { pairs: number; t213: number; pairsHit: SideHit | null; t213Hit: SideHit | null; settled: boolean }
+
+/**
+ * A seat's side bets on the felt. While the cards are still out each bet shows its stake, so the table can
+ * see it was placed; once the opening cards are down it says whether it hit and what it paid or cost.
+ */
+export function SideBetTags({ side, mine }: { side: SeatSide; mine?: boolean }) {
+  const lines = [
+    { key: 'pairs', short: 'Çift', stake: side.pairs, hit: side.pairsHit },
+    { key: 't213', short: '21+3', stake: side.t213, hit: side.t213Hit },
+  ].filter((l) => l.stake > 0)
+  if (!lines.length) return null
   return (
-    <div className="flex flex-wrap justify-center gap-0.5">
-      {hits.map((h) => (
-        <span key={h.key} className="pop-in rounded-full bg-primary px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none text-primary-foreground">
-          {h.label} {h.x}:1
-        </span>
+    <ul className="flex flex-wrap justify-center gap-0.5" aria-label="Yan bahisler">
+      {lines.map((l) => (
+        <li
+          key={l.key}
+          className={cn(
+            'whitespace-nowrap rounded-full px-1.5 py-0.5 font-bold uppercase leading-none tabular-nums shadow',
+            mine ? 'text-[10px] sm:text-[11px]' : 'text-[9px]',
+            !side.settled
+              ? 'border border-primary/60 bg-background/90 text-primary'
+              : l.hit
+                ? 'pop-in bg-primary text-primary-foreground'
+                : 'pop-in bg-destructive text-primary-foreground',
+          )}
+        >
+          {!side.settled
+            ? `${l.short} ${formatAC(l.stake)}`
+            : l.hit
+              ? `${l.hit.label} ${l.hit.x}:1 +${formatAC(l.stake * l.hit.x)}`
+              : `${l.short} tutmadı -${formatAC(l.stake)}`}
+        </li>
       ))}
-    </div>
+    </ul>
   )
+}
+
+/** One sentence for the player's own side bets once the opening cards are down; null when none was placed. */
+export function sideBetSummary(side: SeatSide): string | null {
+  if (!side.settled) return null
+  const parts = [
+    { name: 'Mükemmel Çift', stake: side.pairs, hit: side.pairsHit },
+    { name: '21+3', stake: side.t213, hit: side.t213Hit },
+  ]
+    .filter((l) => l.stake > 0)
+    .map((l) => (l.hit ? `${l.name} tuttu (${l.hit.label}, ${l.hit.x}:1): +${formatAC(l.stake * l.hit.x)} KC` : `${l.name} tutmadı: -${formatAC(l.stake)} KC`))
+  return parts.length ? `Yan bahis: ${parts.join(' · ')}` : null
 }
 
 /** Reference card with every side bet payout, shown in the sidebar. */

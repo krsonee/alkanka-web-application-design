@@ -3,6 +3,7 @@ import { rows, sql } from '@/lib/db'
 import { ensureCommunity } from '@/lib/community'
 import { wholeInRange } from '@/lib/drift'
 import { SPRINT_MULTIPLIER, sprintState } from '@/lib/sprint'
+import { BOUGHT_FRAMES } from '@/lib/frames-shared'
 import {
   BADGE_ICONS, BADGE_TIERS, DEFAULT_LEVELS, DEFAULT_RULES, NO_ROLE_LIMITS, ROLE_STYLES, publicRankName,
   type BadgeTier, type LevelDef, type MemberRole, type PointRules, type RoleLimit, type RoleLimits,
@@ -77,6 +78,15 @@ const MARKET_BADGES = [
     sort: 41,
     perk: 0,
   },
+  // The drawn frames. Their ids, names and pictures are in lib/frames-shared.ts; a frame without a row here cannot be handed over.
+  ...BOUGHT_FRAMES.filter((f) => f.badge !== 'ozel-cerceve').map((f, i) => ({
+    id: f.badge,
+    name: f.name,
+    description: f.about,
+    icon: 'gem',
+    sort: 42 + i,
+    perk: 0,
+  })),
 ]
 
 let limitColumns = false
@@ -745,8 +755,12 @@ export async function awardBadge(badgeId: string, userId: string, period = 'tek'
   const r = await rows(sql`INSERT INTO kp_awards (badge_id, user_id, period, note) VALUES (${badgeId}, ${userId}, ${period}, ${note?.slice(0, 120) ?? null})
     ON CONFLICT DO NOTHING RETURNING id`)
   if (!r.length) return false
-  // The frame around the avatar follows the badges held, so a new badge shows without waiting for the cache.
-  await import('@/lib/badge-value').then((m) => m.dropFrameCache()).catch(() => {})
+  // The frame around the avatar follows the badges held, so a new badge shows without waiting for the cache,
+  // and a bought frame is put on at once. The badge is already saved: if only this step fails the member
+  // still holds the frame and can put it on from their profile.
+  await import('@/lib/badge-value')
+    .then((m) => m.frameAwarded(userId, badgeId))
+    .catch((error) => console.error('[frames] yeni çerçeve takılamadı', error))
   if (Number(badge.bonus) > 0) {
     await rows(sql`INSERT INTO kp_events (user_id, source, points, ref, note)
       VALUES (${userId}, 'rozet', ${Number(badge.bonus)}, ${`${badgeId}:${period}`}, ${badge.name}) ON CONFLICT DO NOTHING`)

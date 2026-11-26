@@ -1,3 +1,4 @@
+import type { FrameState } from '@/lib/frames-shared'
 export type AvatarUnlock = 'free' | 'level' | 'coin'
 export type AvatarGroup = 'jako' | 'takim'
 
@@ -29,6 +30,7 @@ export type LookState = {
   balance: number
   rewardPending: boolean
   reward: number
+  frames: FrameState
 }
 
 export const FIRST_AVATAR_REWARD = 100

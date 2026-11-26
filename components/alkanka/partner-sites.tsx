@@ -738,11 +738,11 @@ function BonusCard({ b, onRules }: { b: Bonus; onRules: () => void }) {
       <dl className="grid grid-cols-2 overflow-hidden rounded-xl border border-border bg-background/70 text-xs">
         <div className="flex min-w-0 flex-col gap-0.5 px-3 py-2">
           <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">Tutar</dt>
-          <dd className="truncate font-display text-sm font-bold text-primary">{b.amount}</dd>
+          <dd className="font-display text-sm font-bold leading-snug text-primary text-pretty [overflow-wrap:anywhere]">{b.amount}</dd>
         </div>
         <div className="flex min-w-0 flex-col gap-0.5 border-l border-border px-3 py-2">
           <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">Şart</dt>
-          <dd className="truncate font-display text-sm font-bold text-foreground">{b.wager}</dd>
+          <dd className="font-display text-sm font-bold leading-snug text-foreground text-pretty [overflow-wrap:anywhere]">{b.wager}</dd>
         </div>
       </dl>
 
@@ -766,19 +766,41 @@ function BonusCard({ b, onRules }: { b: Bonus; onRules: () => void }) {
 export function BonusBoard() {
   const sponsorById = useSponsorById()
   const { bonuses: BONUSES, order } = useCatalog()
-  const types = ['Tümü', ...sortByOrder(BONUSES.map((b) => b.type), order?.bonusTypes ?? [])]
   const [type, setType] = useState('Tümü')
+  const [site, setSite] = useState('')
   const [detail, setDetail] = useState<Bonus | null>(null)
-  const list = BONUSES.filter((b) => type === 'Tümü' || b.type === type)
+  // Sponsors in the order their first bonus appears, so the row follows the list the panel was dragged into.
+  const sites = Array.from(new Set(BONUSES.map((b) => b.sponsorId))).flatMap((id) => {
+    const sponsor = sponsorById(id)
+    return sponsor ? [{ id, name: sponsor.name }] : []
+  })
+  const ofSite = BONUSES.filter((b) => !site || b.sponsorId === site)
+  const types = ['Tümü', ...sortByOrder(ofSite.map((b) => b.type), order?.bonusTypes ?? [])]
+  const picked = types.includes(type) ? type : 'Tümü'
+  const list = ofSite.filter((b) => picked === 'Tümü' || b.type === picked)
   const detailSponsor = detail ? sponsorById(detail.sponsorId) : undefined
 
   return (
     <section aria-label="Bonus listesi" className="flex flex-col gap-4">
+      {sites.length > 1 && (
+        <ChipRail label="Sponsor siteler">
+          <Chip active={!site} onClick={() => setSite('')}>
+            Tüm siteler
+            <Count n={BONUSES.length} active={!site} />
+          </Chip>
+          {sites.map((s) => (
+            <Chip key={s.id} active={site === s.id} onClick={() => setSite(site === s.id ? '' : s.id)}>
+              {s.name}
+              <Count n={BONUSES.filter((b) => b.sponsorId === s.id).length} active={site === s.id} />
+            </Chip>
+          ))}
+        </ChipRail>
+      )}
       <ChipRail label="Bonus türleri">
         {types.map((t) => (
-          <Chip key={t} active={type === t} onClick={() => setType(type === t ? 'Tümü' : t)}>
+          <Chip key={t} active={picked === t} onClick={() => setType(picked === t ? 'Tümü' : t)}>
             {t}
-            <Count n={t === 'Tümü' ? BONUSES.length : BONUSES.filter((b) => b.type === t).length} active={type === t} />
+            <Count n={t === 'Tümü' ? ofSite.length : ofSite.filter((b) => b.type === t).length} active={picked === t} />
           </Chip>
         ))}
       </ChipRail>
@@ -888,6 +910,21 @@ function campaignArt(c: Campaign) {
   return c.image || '/placeholder.svg'
 }
 
+/** The sponsor's logo over the middle of a campaign picture, for a campaign that asks for it in the panel. */
+function ArtLogo({ sponsor, className }: { sponsor?: Sponsor; className?: string }) {
+  if (!sponsor) return null
+  return (
+    <span
+      className={cn(
+        'pointer-events-none absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center overflow-hidden rounded-xl border border-foreground/15 bg-background/85 shadow-lg backdrop-blur-sm',
+        className,
+      )}
+    >
+      <SponsorLogoPlate sponsor={sponsor} compact className="size-full max-w-full object-contain text-base" />
+    </span>
+  )
+}
+
 function CampaignCard({ c, className }: { c: Campaign; className?: string }) {
   const sponsorById = useSponsorById()
   const s = sponsorById(c.sponsorId)
@@ -911,6 +948,7 @@ function CampaignCard({ c, className }: { c: Campaign; className?: string }) {
         </div>
         <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-card/40" />
         <span aria-hidden="true" className="coupon-sheen" />
+        {c.logo && <ArtLogo sponsor={s} className="size-16 p-1.5 sm:size-20" />}
         <span className="absolute bottom-2 left-2 rounded-md bg-background/85 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary backdrop-blur-sm">
           {c.tag}
         </span>
@@ -994,14 +1032,15 @@ export function CampaignBoard({ solo }: { solo?: string }) {
   const CAMPAIGNS = allCampaigns.filter((c) => isCampaignLive(c))
   const tags = ['Tümü', ...sortByOrder(CAMPAIGNS.map((c) => c.tag), order?.campaignTags ?? [])]
   const [tag, setTag] = useState('Tümü')
-  const [sort, setSort] = useState<'bitis' | 'uzun'>('bitis')
+  // The list opens in the order the panel was dragged into; the visitor can still sort by time left.
+  const [sort, setSort] = useState<'sira' | 'bitis' | 'uzun'>('sira')
   const [todayOnly, setTodayOnly] = useState(false)
   const [visible, setVisible] = useState(CAMPAIGN_PAGE)
 
   const featured = solo ? CAMPAIGNS.find((c) => c.id === solo) : CAMPAIGNS[0]
   const rest = CAMPAIGNS.slice(1)
     .filter((c) => (tag === 'Tümü' || c.tag === tag) && (!todayOnly || c.hoursLeft <= 24))
-    .sort((a, b) => (sort === 'bitis' ? a.hoursLeft - b.hoursLeft : b.hoursLeft - a.hoursLeft))
+    .sort((a, b) => (sort === 'sira' ? 0 : sort === 'bitis' ? a.hoursLeft - b.hoursLeft : b.hoursLeft - a.hoursLeft))
   const shown = rest.slice(0, visible)
   if (!featured) {
     return (
@@ -1023,6 +1062,8 @@ export function CampaignBoard({ solo }: { solo?: string }) {
           <Image src={featured.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 1024px) 1100px, 100vw" className="object-cover object-[65%_center] md:object-center" />
         </div>
         <div aria-hidden="true" className="absolute inset-x-0 top-0 -z-10 h-40 bg-gradient-to-t from-card to-transparent to-60% md:inset-0 md:h-auto md:bg-gradient-to-r md:from-card md:via-card/70 md:to-transparent md:to-100%" />
+        {/* Phones: the middle of the picture strip. From tablets up the text covers the left, so the logo sits in the middle of the part that shows. */}
+        {featured.logo && <ArtLogo sponsor={fs} className="top-20 h-20 w-36 p-2.5 md:left-[74%] md:top-1/2 md:h-28 md:w-52 md:p-4" />}
         <div className="flex max-w-xl flex-col justify-end gap-2.5 p-5 pt-32 sm:gap-3 sm:p-8 sm:pt-32 md:justify-center md:pt-8">
           <span className="self-start rounded-md bg-primary px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-primary-foreground">
             {solo ? featured.tag : 'Haftanın kampanyası'}
@@ -1067,6 +1108,7 @@ export function CampaignBoard({ solo }: { solo?: string }) {
               onChange={(e) => setSort(e.target.value as typeof sort)}
               className="h-8 rounded-lg border border-border bg-card px-3 text-xs text-foreground focus:border-primary/50 focus:outline-none"
             >
+              <option value="sira">Önerilen sıra</option>
               <option value="bitis">Bitmek üzere</option>
               <option value="uzun">En uzun süreli</option>
             </select>
@@ -1209,6 +1251,7 @@ function EndingCard({ c, index }: { c: Campaign; index: number }) {
         <div className="relative w-24 shrink-0 overflow-hidden sm:w-28">
           <Image src={campaignArt(c)} alt="" fill sizes="112px" className="ending-art object-cover" />
           <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-transparent to-card" />
+          {c.logo && <ArtLogo sponsor={s} className="size-14 p-1.5" />}
           <span aria-hidden="true" className="ending-sheen" />
           <span className="absolute left-1.5 top-1.5 rounded-md bg-background/80 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary backdrop-blur-sm">
             {c.tag}

@@ -3,6 +3,17 @@ import { rows, sql } from '@/lib/db'
 import { ensureKp, publicRankName, type BadgeTier } from '@/lib/kanka-puan'
 import { ALL_BADGES, MAX_RAFFLE_WINNERS, type RaffleRow } from '@/lib/badge-raffle-shared'
 import type { MemberRole } from '@/lib/kanka-puan-shared'
+import {
+  BOUGHT_FRAMES,
+  FRAME_BADGE_IDS,
+  TIER_FRAME_CHOICE,
+  boughtFrameOf,
+  frameLabel,
+  tierFrame,
+  wornFrame,
+  type AvatarFrame,
+  type FrameState,
+} from '@/lib/frames-shared'
 
 export const MAX_PINS = 3
 
@@ -24,6 +35,8 @@ function ensure() {
     await rows(sql`CREATE TABLE IF NOT EXISTS kp_raffles (id serial PRIMARY KEY, badge_id text NOT NULL, user_id text NOT NULL, prize int NOT NULL,
       note text, drawn_at timestamptz NOT NULL DEFAULT now())`)
     await rows(sql`ALTER TABLE kp_raffles ADD COLUMN IF NOT EXISTS badge_label text`)
+    // Which frame a member wears: a frame badge they hold, or 'rozet' for the one their badges earned.
+    await rows(sql`CREATE TABLE IF NOT EXISTS kp_frame_choice (user_id text PRIMARY KEY, frame text NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())`)
   })().catch((error) => {
     ready = null
     throw error
@@ -86,7 +99,7 @@ export async function pinnedFor(userIds: string[]): Promise<Record<string, Pinne
     const best = await rows<{ user_id: string; id: string; name: string; icon: string; tier: BadgeTier }>(sql`
       SELECT DISTINCT ON (a.user_id) a.user_id, b.id, b.name, b.icon, b.tier
       FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id
-      WHERE a.user_id IN ${bare} AND b.active AND b.role_style IS NULL AND b.id <> ${FRAME_BADGE}
+      WHERE a.user_id IN ${bare} AND b.active AND b.role_style IS NULL AND b.id NOT IN ${FRAME_BADGE_IDS}
       ORDER BY a.user_id, CASE b.tier WHEN 'efsane' THEN 3 WHEN 'elmas' THEN 2 WHEN 'altin' THEN 1 ELSE 0 END DESC, a.awarded_at DESC`)
     for (const x of best) out[x.user_id] = [{ id: x.id, name: x.name, icon: x.icon, tier: x.tier }]
   }
@@ -98,7 +111,7 @@ export const FRAME_BADGE = 'ozel-cerceve'
 /** The badge the market's "Altın Kanka Rozeti" hands over. */
 export const GOLD_BADGE = 'altin-kanka'
 
-export type AvatarFrame = 'altin' | 'elmas' | 'efsane' | 'ozel'
+export type { AvatarFrame } from '@/lib/frames-shared'
 
 const FRAME_CACHE_MS = 30_000
 let frameCache: { at: number; data: Record<string, AvatarFrame> } | null = null
@@ -107,26 +120,104 @@ export function dropFrameCache() {
   frameCache = null
 }
 
+/** A frame badge is a thing worn, not an achievement: it never counts toward the tier a member's badges reached. */
+const EARNED_RANK = sql`CASE WHEN b.id IN ${FRAME_BADGE_IDS} THEN 0 ELSE CASE b.tier WHEN 'efsane' THEN 3 WHEN 'elmas' THEN 2 WHEN 'altin' THEN 1 ELSE 0 END END`
+/** The frame badges held, newest first, as one comma-separated value. */
+const BOUGHT_LIST = sql`string_agg(b.id, ',' ORDER BY a.awarded_at DESC) FILTER (WHERE b.id IN ${FRAME_BADGE_IDS})`
+
+const listOf = (joined: string | null) => (joined ? joined.split(',') : [])
+
 /**
- * userId → the frame around their avatar everywhere on the site: the bought frame first, otherwise the highest
- * badge tier from gold up. Bronze badges give no frame, so a frame stays a mark worth having.
+ * userId → the frame around their avatar everywhere on the site: the bought frame they chose (the newest one
+ * when they never chose), otherwise the highest badge tier from gold up. Bronze badges give no frame, so a
+ * frame stays a mark worth having.
  */
 export async function frameMap(): Promise<Record<string, AvatarFrame>> {
   if (frameCache && Date.now() - frameCache.at < FRAME_CACHE_MS) return frameCache.data
   await ensure()
-  const r = await rows<{ user_id: string; top: number; bought: boolean }>(sql`
-    SELECT a.user_id, max(CASE b.tier WHEN 'efsane' THEN 3 WHEN 'elmas' THEN 2 WHEN 'altin' THEN 1 ELSE 0 END)::int AS top,
-      bool_or(b.id = ${FRAME_BADGE}) AS bought
-    FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id
+  const r = await rows<{ user_id: string; top: number; bought: string | null; choice: string | null }>(sql`
+    SELECT a.user_id, max(${EARNED_RANK})::int AS top, ${BOUGHT_LIST} AS bought, max(c.frame) AS choice
+    FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id LEFT JOIN kp_frame_choice c ON c.user_id = a.user_id
     WHERE b.active AND b.role_style IS NULL
     GROUP BY a.user_id`)
   const data: Record<string, AvatarFrame> = {}
   for (const x of r) {
-    const frame: AvatarFrame | null = x.bought ? 'ozel' : x.top >= 3 ? 'efsane' : x.top === 2 ? 'elmas' : x.top === 1 ? 'altin' : null
+    const frame = wornFrame(Number(x.top), listOf(x.bought), x.choice)
     if (frame) data[x.user_id] = frame
   }
   frameCache = { at: Date.now(), data }
   return data
+}
+
+/** One member's frames for the picker in their profile: what they wear, what they hold and where the rest is sold. */
+export async function frameState(userId: string): Promise<FrameState> {
+  await ensure()
+  const [[mine], onSale] = await Promise.all([
+    rows<{ top: number; bought: string | null; choice: string | null }>(sql`
+      SELECT COALESCE(max(${EARNED_RANK}), 0)::int AS top, ${BOUGHT_LIST} AS bought,
+        (SELECT frame FROM kp_frame_choice WHERE user_id = ${userId}) AS choice
+      FROM kp_awards a JOIN kp_badges b ON b.id = a.badge_id
+      WHERE a.user_id = ${userId} AND b.active AND b.role_style IS NULL`),
+    // A site that never opened its market has no such table: the frames are then simply not on sale.
+    rows<{ id: string; reward_ref: string }>(sql`SELECT id, reward_ref FROM market_items
+      WHERE active AND stock > 0 AND delivery_mode = 'auto' AND reward_kind = 'rozet' AND reward_ref IN ${FRAME_BADGE_IDS}
+      ORDER BY sort`).catch(() => []),
+  ])
+  const rank = Number(mine?.top ?? 0)
+  const bought = listOf(mine?.bought ?? null)
+  const worn = wornFrame(rank, bought, mine?.choice ?? null)
+  const earned = tierFrame(rank)
+  const wornBadge = BOUGHT_FRAMES.find((f) => f.frame === worn && bought.includes(f.badge))?.badge
+  return {
+    worn,
+    choice: wornBadge ?? TIER_FRAME_CHOICE,
+    options: [
+      {
+        id: TIER_FRAME_CHOICE,
+        frame: earned,
+        name: 'Rozet çerçevesi',
+        about: earned
+          ? `${frameLabel(earned)}: kazandığın en yüksek rozet kademesinin çerçevesi.`
+          : 'Altın ya da daha üst kademeden bir rozet kazanınca kendiliğinden gelir. Şimdilik avatarın çerçevesiz görünür.',
+        owned: true,
+        product: null,
+      },
+      ...BOUGHT_FRAMES.map((f) => ({
+        id: f.badge,
+        frame: f.frame,
+        name: f.name,
+        about: f.about,
+        owned: bought.includes(f.badge),
+        product: onSale.find((p) => p.reward_ref === f.badge)?.id ?? null,
+      })),
+    ],
+  }
+}
+
+const saveFrameChoice = (userId: string, choice: string) =>
+  rows(sql`INSERT INTO kp_frame_choice (user_id, frame) VALUES (${userId}, ${choice})
+    ON CONFLICT (user_id) DO UPDATE SET frame = EXCLUDED.frame, updated_at = now()`)
+
+/** Puts a frame the member holds on their avatar, or goes back to the one their badges earned. Returns its name. */
+export async function wearFrame(userId: string, choice: string): Promise<string> {
+  await ensure()
+  const bought = boughtFrameOf(choice)
+  if (choice !== TIER_FRAME_CHOICE && !bought) throw new Error('Böyle bir çerçeve yok.')
+  if (bought) {
+    const held = await rows(sql`SELECT 1 FROM kp_awards WHERE user_id = ${userId} AND badge_id = ${bought.badge} LIMIT 1`)
+    if (!held.length) throw new Error('Bu çerçeve sende yok. Marketten alınca takabilirsin.')
+  }
+  await saveFrameChoice(userId, choice)
+  dropFrameCache()
+  return bought?.name ?? 'Rozet çerçevesi'
+}
+
+/** Called for every badge handed over: a bought frame goes straight onto the avatar, whatever was worn before. */
+export async function frameAwarded(userId: string, badgeId: string) {
+  dropFrameCache()
+  if (!boughtFrameOf(badgeId)) return
+  await ensure()
+  await saveFrameChoice(userId, badgeId)
 }
 
 // --- Avatar frame (RZ1) ----------------------------------------------------

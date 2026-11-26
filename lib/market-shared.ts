@@ -113,3 +113,15 @@ export const payable = (item: Payable, taskDone: boolean) => (taskDone && dealWi
 
 /** A task price is shown to members who can still do the task, and to those who already did it. */
 export const dealShown = (item: Payable, taskDone: boolean) => dealWins(item) && (taskDone || Boolean(item.dealTask?.live))
+
+/** How many units the task price covers, said the way a member reads it. */
+export function dealUsesText(item: { dealUses: number; dealTask: { repeats: boolean } | null }) {
+  return item.dealTask?.repeats ? `Görevi her tamamlayışında ${item.dealUses} adet bu fiyata alınır.` : `Bu fiyata ${item.dealUses} adet alınır.`
+}
+
+/** What a member who has used up the task price is told. */
+export function dealSpentText(item: { dealUses: number; dealTask: { repeats: boolean } | null }) {
+  return item.dealTask?.repeats
+    ? `Görev indirimini kullandın. Görevi yeniden tamamlayınca ${item.dealUses} adet daha indirimli alırsın.`
+    : 'Görev indirimini kullandın, fiyat normale döndü.'
+}

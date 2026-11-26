@@ -39,6 +39,7 @@ import {
 import { useTelegramUrl } from './telegram-address'
 import { CHAT_FEED_KEY, channelFeedKey, useAccessRecheck, useChannelFeed, useChatFeed, type ChatResponse } from './use-chat-feed'
 import { MemberBadge, MemberName, MemberRank } from './kp/member-rank'
+import { MemberAvatar } from './member-avatar'
 
 export const OPEN_CHAT_EVENT = 'alkanka:open-chat'
 
@@ -438,6 +439,7 @@ function ChatPanel({
           data.messages.map((m, i) => (
             <li key={m.id} className="animate-slide-in flex flex-col gap-0.5 text-sm leading-relaxed has-[[role=menu]]:relative has-[[role=menu]]:z-10">
               <span className="flex items-center gap-1.5 text-xs">
+                {m.userId ? <MemberAvatar userId={m.userId} name={m.author} size="xs" className="mr-0.5" /> : null}
                 {isMod ? (
                   <ModMenu
                     message={m}

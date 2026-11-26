@@ -225,15 +225,48 @@
     0 0 0 1px color-mix(in oklch, var(--gold) 40%, transparent),
     0 0 36px -10px color-mix(in oklch, var(--gold) 60%, transparent);
 }
-/* The bought profile frame: a gold ring whose highlight travels around the avatar. Drawn inside the avatar's shell. */
+/* Avatar frames. The width follows the avatar's size; `-out` draws the frame around the picture rather than over its edge. */
+.avatar-frame {
+  --frame-w: 3px;
+}
+.avatar-frame[data-weight='sm'] {
+  --frame-w: 2px;
+}
+.avatar-frame[data-weight='lg'] {
+  --frame-w: 5px;
+}
+.avatar-frame-out {
+  inset: calc(var(--frame-w) * -1);
+}
+
+/* A badge tier's frame: a solid ring in the tier's colour. */
+.avatar-frame-tier {
+  box-shadow: inset 0 0 0 var(--frame-w) var(--frame-color);
+}
+.avatar-frame-tier[data-frame='altin'] {
+  --frame-color: var(--gold);
+}
+.avatar-frame-tier[data-frame='elmas'] {
+  --frame-color: var(--accent);
+}
+.avatar-frame-tier[data-frame='efsane'] {
+  --frame-color: var(--ruby);
+}
+.avatar-frame-out.avatar-frame-tier {
+  inset: 0;
+  box-shadow:
+    0 0 0 var(--frame-w) var(--frame-color),
+    0 0 calc(var(--frame-w) * 3) color-mix(in oklch, var(--frame-color) 55%, transparent);
+}
+
+/* The bought profile frame: a gold ring whose highlight travels around the avatar. */
 @property --frame-turn {
   syntax: '<angle>';
   inherits: false;
   initial-value: 0deg;
 }
-
 .avatar-frame-gold {
-  padding: 2px;
+  padding: var(--frame-w);
   background: conic-gradient(
     from var(--frame-turn),
     var(--gold) 0deg,
@@ -251,17 +284,8 @@
   mask:
     linear-gradient(#000 0 0) content-box exclude,
     linear-gradient(#000 0 0);
-  filter: drop-shadow(0 0 3px oklch(0.8 0.135 86 / 0.55));
+  filter: drop-shadow(0 0 calc(var(--frame-w) * 1.2) oklch(0.8 0.135 86 / 0.7));
   animation: avatar-frame-turn 3.2s linear infinite;
-}
-
-.avatar-frame-gold[data-weight='sm'] {
-  padding: 1.5px;
-  filter: none;
-}
-
-.avatar-frame-gold[data-weight='lg'] {
-  padding: 4px;
 }
 
 @keyframes avatar-frame-turn {
@@ -270,8 +294,26 @@
   }
 }
 
+/* A drawn frame shown large: its light breathes slowly. Small ones stay still, there can be dozens on a page. */
+.avatar-frame-art-live {
+  animation: avatar-frame-breathe 3.4s ease-in-out infinite alternate;
+}
+.avatar-frame-art-live[data-frame='defne'] {
+  animation-duration: 4.6s;
+}
+
+@keyframes avatar-frame-breathe {
+  from {
+    filter: brightness(0.96) saturate(1);
+  }
+  to {
+    filter: brightness(1.14) saturate(1.18);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .avatar-frame-gold {
+  .avatar-frame-gold,
+  .avatar-frame-art-live {
     animation: none;
   }
 }

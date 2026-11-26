@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { LevelEmblem, RankChip, SpecialEmblem } from './kp/emblem'
 import { MemberRank } from './kp/member-rank'
 import { jakoSrc } from './jako'
-import { AvatarFill } from './member-avatar'
+import { AvatarFill, MemberAvatar } from './member-avatar'
 import { Marquee } from './home/marquee'
 import { useAddressChoice } from './use-address-choice'
 
@@ -624,6 +624,7 @@ function BoardRow({ row, unit, isMe, tip, sticky, move }: { row: Row; unit: stri
       >
         <RankBadge n={row.rank} />
         {row.level ? <LevelEmblem level={row.level} size="xs" /> : null}
+        <MemberAvatar userId={row.userId} name={row.name} size="sm" />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="flex min-w-0 items-center gap-1.5">
             <span className="truncate text-sm font-semibold text-foreground">

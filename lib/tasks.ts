@@ -42,7 +42,7 @@ export type TaskRecord = {
   deals?: TaskDeal[]
 }
 
-export type TaskDeal = { itemId: string; name: string; price: number; dealPrice: number }
+export type TaskDeal = { itemId: string; name: string; price: number; dealPrice: number; uses: number }
 
 export const DAILY_PICKS = 5
 export const WEEKLY_PICKS = 4
@@ -246,7 +246,7 @@ export const TASK_DEALS_KEY = 'tasks:market-deals'
 async function taskDeals(): Promise<Map<number, TaskDeal[]>> {
   const { sharedRead } = await import('@/lib/shared-read')
   const found = await sharedRead(TASK_DEALS_KEY, 60_000, () =>
-    rows<{ id: string; name: string; price: number; deal_task_id: number; deal_price: number }>(sql`SELECT id, name, price, deal_task_id, deal_price
+    rows<{ id: string; name: string; price: number; deal_task_id: number; deal_price: number; deal_uses?: number }>(sql`SELECT *
       FROM market_items WHERE active AND deal_task_id IS NOT NULL AND deal_price > 0 AND deal_price < price ORDER BY deal_price, name`)
       // A site whose market has never been opened has no such table yet: no task carries a discount then.
       .catch(() => []),
@@ -254,7 +254,7 @@ async function taskDeals(): Promise<Map<number, TaskDeal[]>> {
   const out = new Map<number, TaskDeal[]>()
   for (const row of found) {
     const taskId = Number(row.deal_task_id)
-    out.set(taskId, [...(out.get(taskId) ?? []), { itemId: String(row.id), name: String(row.name), price: Number(row.price), dealPrice: Number(row.deal_price) }])
+    out.set(taskId, [...(out.get(taskId) ?? []), { itemId: String(row.id), name: String(row.name), price: Number(row.price), dealPrice: Number(row.deal_price), uses: Math.max(1, Math.floor(Number(row.deal_uses) || 1)) }])
   }
   return out
 }
@@ -451,6 +451,19 @@ export async function completedTaskIds(userId: string): Promise<number[]> {
     if (Number.isInteger(Number(id)) && isCurrentKey(key)) ids.push(Number(id))
   }
   return ids
+}
+
+/** The same completions by task, each with the record it was written under: what a market task price is spent against. */
+export async function completedTaskRefs(userId: string): Promise<Map<number, string>> {
+  await ensureTasks()
+  await ensureKp()
+  const found = await rows<{ ref: string }>(sql`SELECT ref FROM kp_events WHERE user_id = ${userId} AND source = 'gorev' AND ref IS NOT NULL`)
+  const out = new Map<number, string>()
+  for (const { ref } of found) {
+    const [id, key = ''] = String(ref).split(':')
+    if (Number.isInteger(Number(id)) && isCurrentKey(key)) out.set(Number(id), String(ref))
+  }
+  return out
 }
 
 export async function taskClaimMap(userId: string): Promise<Record<number, ClaimStatus>> {

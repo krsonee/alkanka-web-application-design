@@ -34,7 +34,7 @@ export type PublicTask = {
   badge?: string | null
   cap?: number
   /** Market products that get cheaper for a member who finishes this task. */
-  deals?: { itemId: string; name: string; price: number; dealPrice: number }[]
+  deals?: { itemId: string; name: string; price: number; dealPrice: number; uses: number }[]
   /** A super task's own conditions with where the member stands on each. */
   parts?: { label: string; progress: number; target: number; done: boolean }[]
 }
@@ -65,7 +65,7 @@ function TaskDeals({ task, done, small }: { task: Pick<PublicTask, 'deals' | 'pe
             <Tag className="size-3.5 shrink-0 text-gold" aria-hidden="true" />
             <span className="min-w-0 flex-1 text-pretty">
               <span className="text-gold">{done ? DEAL_LASTS[task.period] : 'Market indirimi'}</span>
-              {`: ${deal.name}`}
+              {`: ${deal.name} · ${deal.uses} adet`}
             </span>
             <span className="shrink-0 tabular-nums">
               <s className="font-normal text-muted-foreground">{formatAC(deal.price)}</s> {formatAC(deal.dealPrice)} KC

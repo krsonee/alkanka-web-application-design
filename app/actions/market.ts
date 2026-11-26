@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { getBalance, getMember } from '@/lib/member'
-import { doneDealTasks, linkedSponsorAccounts, myRequests, requestProduct, type Delivered, type LinkedSponsorAccount, type MarketRequest } from '@/lib/market'
+import { dealRights, linkedSponsorAccounts, myRequests, requestProduct, type DealRights, type Delivered, type LinkedSponsorAccount, type MarketRequest } from '@/lib/market'
 import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
 import { shownError } from '@/lib/shown-error'
 
@@ -44,11 +44,11 @@ export async function requestMarketItem(itemId: string, siteUsername: string | n
   }
 }
 
-/** The tasks tied to a product price that this member has finished. */
-export async function getMyMarketDeals(): Promise<number[]> {
+/** The tasks tied to a product price that this member has finished, and how many discounted units each still buys. */
+export async function getMyMarketDeals(): Promise<DealRights> {
   const member = await getMember()
-  if (!member) return []
-  return doneDealTasks(member.id).catch(() => [])
+  if (!member) return { done: [], left: {} }
+  return dealRights(member.id).catch(() => ({ done: [], left: {} }))
 }
 
 /** The member's linked sponsor accounts by sponsor slug; a sponsor reward is sent to these, not to a typed name. */

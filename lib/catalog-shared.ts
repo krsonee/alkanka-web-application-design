@@ -61,7 +61,9 @@ export const PREDICTION_PAYOUT = { share: 5, max: 200, perDay: 10 }
 export const predictionPayout = (reward: number) => Math.min(PREDICTION_PAYOUT.max, Math.max(0, Math.round(Number(reward) / PREDICTION_PAYOUT.share)))
 
 export const EVENT_KINDS: EventItem['kind'][] = ['Günlük', 'Haftalık', 'Aylık']
-export const BONUS_TYPES: Bonus['type'][] = ['Hoş geldin', 'Yatırım', 'Kayıp', 'Freespin', 'Deneme']
+/** The usual bonus kinds, offered as suggestions; the panel also takes any other name. */
+export const BONUS_TYPES: string[] = ['Hoş geldin', 'Yatırım', 'Kayıp', 'Freespin', 'Deneme']
+export const TYPE_NAME_MAX = 20
 
 const MAX_ITEMS = 40
 
@@ -190,11 +192,12 @@ export function cleanCampaigns(raw: unknown): Campaign[] {
         description: str(c.description, 400),
         ends: endsAt ? endsLabel(hoursLeft) : str(c.ends, 40),
         image: image(c.image),
-        tag: str(c.tag, 20) || 'Kampanya',
+        tag: str(c.tag, TYPE_NAME_MAX) || 'Kampanya',
         hoursLeft,
         ...(startsAt ? { startsAt } : {}),
         ...(endsAt ? { endsAt } : {}),
         ...(link(c.url) ? { url: link(c.url) } : {}),
+        ...(c.logo === true ? { logo: true } : {}),
       }
     }),
   )
@@ -205,7 +208,7 @@ export function cleanBonuses(raw: unknown): Bonus[] {
     list(raw).map((b: Record<string, unknown>, i) => ({
       id: slug(b.id, i, 'bonus'),
       sponsorId: str(b.sponsorId, 40),
-      type: BONUS_TYPES.includes(b.type as Bonus['type']) ? (b.type as Bonus['type']) : 'Hoş geldin',
+      type: str(b.type, TYPE_NAME_MAX) || 'Hoş geldin',
       title: str(b.title, 80) || 'Yeni bonus',
       amount: str(b.amount, 60),
       wager: str(b.wager, 40),

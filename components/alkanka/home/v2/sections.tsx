@@ -1,3 +1,4 @@
+import type { GameCovers } from '@/lib/arena'
 import Image from 'next/image'
 import Link from 'next/link'
 import {
@@ -152,10 +153,13 @@ export function FreeGrid({ tiles }: { tiles: FreeTile[] }) {
 /** Phones: one row that scrolls sideways, bleeding to the screen edges. From tablets up the classes do nothing. */
 const PHONE_RAIL = 'no-scrollbar max-sm:-mx-4 max-sm:flex max-sm:snap-x max-sm:scroll-px-4 max-sm:gap-2.5 max-sm:overflow-x-auto max-sm:px-4'
 
-export function GamesGrid({ games, compact }: { games: string[]; compact?: boolean }) {
+export function GamesGrid({ games, compact, covers = {} }: { games: string[]; compact?: boolean; covers?: GameCovers }) {
   return (
     <ul className={cn('grid grid-cols-2 gap-3 lg:grid-cols-4', PHONE_RAIL)}>
-      {games.map((key) => (
+      {games.map((key) => {
+        // The cover uploaded in the panel replaces the built-in one; a poster has its own lettering, so nothing is printed over it.
+        const cover = covers[key]
+        return (
         <li key={key} className="max-sm:w-[8.5rem] max-sm:shrink-0 max-sm:snap-start">
           <Link
             href={`/oyunlar/${key}`}
@@ -164,9 +168,9 @@ export function GamesGrid({ games, compact }: { games: string[]; compact?: boole
               compact ? 'aspect-[4/3]' : 'aspect-[16/12]',
             )}
           >
-            <Image src={`/images/games/${key}.png`} alt="" fill sizes="(min-width: 1024px) 280px, 50vw" className="-z-10 object-cover transition-transform duration-500 group-hover:scale-105" />
-            <span aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-background/90 via-transparent to-transparent" />
-            <span className="flex items-center justify-between gap-2 p-3.5 max-sm:p-2.5">
+            <Image src={cover?.src || `/images/games/${key}.png`} alt="" fill sizes="(min-width: 1024px) 280px, 50vw" className="-z-10 object-cover transition-transform duration-500 group-hover:scale-105" />
+            {!cover?.poster && <span aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-t from-background/90 via-transparent to-transparent" />}
+            <span className={cn('flex items-center justify-between gap-2 p-3.5 max-sm:p-2.5', cover?.poster && 'sr-only')}>
               <span className="font-display text-lg font-bold text-foreground max-sm:text-base">{HOME_GAME_LABEL[key] ?? key}</span>
               <span className="flex size-7 items-center justify-center rounded-full bg-background/70 text-foreground backdrop-blur transition-colors group-hover:bg-primary group-hover:text-primary-foreground max-sm:hidden">
                 <ArrowRight className="size-4" aria-hidden="true" />
@@ -174,7 +178,8 @@ export function GamesGrid({ games, compact }: { games: string[]; compact?: boole
             </span>
           </Link>
         </li>
-      ))}
+        )
+      })}
     </ul>
   )
 }

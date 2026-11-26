@@ -3,10 +3,11 @@
 import Image from 'next/image'
 import useSWR from 'swr'
 import { cn } from '@/lib/utils'
+import { ART_FRAMES, frameLabel, isArtFrame, type ArtFrame, type AvatarFrame } from '@/lib/frames-shared'
 
 export const AVATAR_MAP_KEY = '/api/avatars'
 
-export type AvatarFrame = 'altin' | 'elmas' | 'efsane' | 'ozel'
+export type { AvatarFrame } from '@/lib/frames-shared'
 type Looks = { map: Record<string, string>; frames: Record<string, AvatarFrame> }
 
 const NONE: Looks = { map: {}, frames: {} }
@@ -43,36 +44,51 @@ const SIZES = {
 
 const PX = { xs: 20, sm: 24, md: 36, lg: 48, xl: 112 } as const
 
-const TIER_RING: Record<Exclude<AvatarFrame, 'ozel'>, string> = {
-  altin: 'ring-gold',
-  elmas: 'ring-accent',
-  efsane: 'ring-ruby',
-}
-
-const FRAME_NAMES: Record<AvatarFrame, string> = {
-  altin: 'Altın rozet çerçevesi',
-  elmas: 'Elmas rozet çerçevesi',
-  efsane: 'Efsane rozet çerçevesi',
-  ozel: 'Özel profil çerçevesi',
-}
-
-export const frameName = (frame: AvatarFrame) => FRAME_NAMES[frame]
+export const frameName = frameLabel
 
 /**
- * The frame drawn over an avatar. It sits inside the avatar's own rounded shell, so it needs no extra room and
- * works in every place an avatar already is. `weight` follows the avatar's size.
+ * A drawn frame laid over an avatar. It is sized in avatar diameters and centred on the avatar, so it has to
+ * sit in a `relative` box exactly as large as the avatar that does not clip what reaches past its edge.
+ * `ring` is for small avatars; `crest` and `show` reach much further out and need room around the avatar.
  */
-export function FrameRing({ frame, weight = 'md' }: { frame?: AvatarFrame | null; weight?: 'sm' | 'md' | 'lg' }) {
+export function FrameArt({ frame, cut = 'ring' }: { frame: ArtFrame; cut?: 'ring' | 'crest' | 'show' }) {
+  const art = ART_FRAMES[frame][cut]
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- already cut to size and saved as WebP; the image optimiser would only re-encode it
+    <img
+      src={art.src}
+      alt=""
+      aria-hidden="true"
+      draggable={false}
+      decoding="async"
+      data-frame={frame}
+      className={cn(
+        'pointer-events-none absolute left-1/2 top-1/2 z-[1] max-w-none -translate-x-1/2 -translate-y-1/2 select-none',
+        cut !== 'ring' && 'avatar-frame-art-live',
+      )}
+      style={{ width: `${art.w * 100}%`, height: `${art.h * 100}%` }}
+    />
+  )
+}
+
+/**
+ * The frame around an avatar. `outside` draws it around the picture instead of over its edge, so a small
+ * avatar keeps every pixel of its picture and the frame is still thick enough to be seen; the default sits
+ * inside an avatar shell that clips its own edge. `weight` follows the avatar's size. A drawn frame is always
+ * laid around the picture.
+ */
+export function FrameRing({ frame, weight = 'md', outside }: { frame?: AvatarFrame | null; weight?: 'sm' | 'md' | 'lg'; outside?: boolean }) {
   if (!frame) return null
+  if (isArtFrame(frame)) return <FrameArt frame={frame} />
   return (
     <span
       aria-hidden="true"
       data-weight={weight}
+      data-frame={frame}
       className={cn(
-        'pointer-events-none absolute inset-0 z-[1] rounded-[inherit]',
-        frame === 'ozel'
-          ? 'avatar-frame-gold'
-          : cn('ring-inset', weight === 'sm' ? 'ring-1' : weight === 'lg' ? 'ring-4' : 'ring-2', TIER_RING[frame]),
+        'avatar-frame pointer-events-none absolute z-[1]',
+        outside ? 'avatar-frame-out rounded-full' : 'inset-0 rounded-[inherit]',
+        frame === 'ozel' ? 'avatar-frame-gold' : 'avatar-frame-tier',
       )}
     />
   )
@@ -95,19 +111,15 @@ export function AvatarFace({
   const frames = useFrameMap()
   const frame = userId ? frames[userId] : null
   return (
-    <span
-      className={cn(
-        'relative flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary font-display font-bold text-primary-foreground',
-        SIZES[size],
-        className,
-      )}
-    >
-      {src ? (
-        <Image src={src} alt="" width={PX[size] * 2} height={PX[size] * 2} className="size-full object-cover" />
-      ) : (
-        <span aria-hidden="true">{name.slice(0, 1).toUpperCase() || '?'}</span>
-      )}
-      <FrameRing frame={frame} weight={size === 'xs' || size === 'sm' ? 'sm' : size === 'xl' ? 'lg' : 'md'} />
+    <span className={cn('relative flex shrink-0 rounded-full', SIZES[size], className)}>
+      <span className="flex size-full items-center justify-center overflow-hidden rounded-full bg-primary font-display font-bold text-primary-foreground">
+        {src ? (
+          <Image src={src} alt="" width={PX[size] * 2} height={PX[size] * 2} className="size-full object-cover" />
+        ) : (
+          <span aria-hidden="true">{name.slice(0, 1).toUpperCase() || '?'}</span>
+        )}
+      </span>
+      <FrameRing frame={frame} weight={size === 'xs' || size === 'sm' ? 'sm' : size === 'xl' ? 'lg' : 'md'} outside />
     </span>
   )
 }

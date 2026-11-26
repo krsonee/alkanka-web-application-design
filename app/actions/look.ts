@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { getBalance, getMember } from '@/lib/member'
 import { COVERS, avatarOf, buyAvatar, chooseAvatar, getLookState, listCatalog, setCover, setTeam, type AvatarCard, type CoverDef, type LookState } from '@/lib/avatars'
 import { getKpStatus } from '@/lib/kanka-puan'
+import { wearFrame } from '@/lib/badge-value'
+import { TIER_FRAME_CHOICE } from '@/lib/frames-shared'
 import { hitRateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rate-limit'
 
 type Result = { ok: true; balance: number; reward: number; message: string; state: LookState } | { ok: false; error: string }
@@ -47,6 +49,13 @@ export async function setTeamAction(teamId: string | null) {
   return run('team', async (uid) => {
     await setTeam(uid, teamId ? String(teamId) : null)
     return { message: teamId ? 'Favori takımın kaydedildi.' : 'Favori takım kaldırıldı.' }
+  })
+}
+
+export async function wearFrameAction(choice: string) {
+  return run('frame', async (uid) => {
+    const name = await wearFrame(uid, String(choice))
+    return { message: choice === TIER_FRAME_CHOICE ? 'Rozet çerçevene dönüldü.' : `${name} avatarına takıldı.` }
   })
 }
 

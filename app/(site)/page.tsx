@@ -23,6 +23,7 @@ import { getSocialLinks, type SocialLinks } from '@/lib/social'
 import { completedTaskIds, listPublicTasks } from '@/lib/tasks'
 import { getCemberStatus, myCemberStatus } from '@/lib/cember'
 import { listProducts, type MarketProduct } from '@/lib/market'
+import { gameCovers, mergeArena, type ArenaSettings } from '@/lib/arena'
 import { getHomeV2 } from '@/lib/home-v2'
 import { getTelegramAddresses } from '@/lib/telegram-channels'
 import { MemberHomeV2 } from '@/components/alkanka/home/member-home-v2'
@@ -135,6 +136,7 @@ export default async function HomePage() {
     ])
     const weekly = weeklyRaw.map((r) => ({ userId: r.userId, name: r.name, points: r.kp }))
     const weeklyIndex = member ? weekly.findIndex((r) => r.userId === member.id) : -1
+    const covers = gameCovers(mergeArena(content['arena:settings'] as Partial<ArenaSettings> | null))
     const heroSlides = toHeroSlides(live.filter((s) => s.inNewDesign).slice(0, MAX_HOME_SLIDES))
     return (
       <>
@@ -156,9 +158,10 @@ export default async function HomePage() {
             streak={{ days: hub.streak, checkedToday: hub.checkedToday }}
             match={hub.match}
             tournaments={tournaments}
+            covers={covers}
           />
         ) : (
-          <GuestHomeV2 config={v2} slides={heroSlides} products={allProducts.filter((p) => p.active)} weekly={weekly} bonus={bonus} tournaments={tournaments} />
+          <GuestHomeV2 config={v2} slides={heroSlides} products={allProducts.filter((p) => p.active)} weekly={weekly} bonus={bonus} tournaments={tournaments} covers={covers} />
         )}
       </>
     )

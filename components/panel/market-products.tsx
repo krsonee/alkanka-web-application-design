@@ -21,7 +21,7 @@ import { useUrlTab } from '@/components/panel/use-url-tab'
 const EMPTY: ProductInput = {
   id: null, kind: 'sponsor', sponsorId: null, sponsorName: null, type: 'SPONSOR BONUSU', name: '', description: '', delivery: '',
   rules: [], image: '', price: 1000, stock: 10, total: 10, perUser: 1, needsUsername: true, active: true, sort: 0,
-  deliveryMode: 'manual', reward: null, featured: false, dealTaskId: null, dealPrice: 0,
+  deliveryMode: 'manual', reward: null, featured: false, dealTaskId: null, dealPrice: 0, dealUses: 1,
 }
 
 type KindFilter = 'hepsi' | 'sponsor' | 'alkanka'
@@ -143,7 +143,7 @@ export function MarketProducts({
           title={p.dealTask?.title ?? undefined}
           className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold', p.dealTask ? 'bg-accent text-accent-foreground' : 'bg-destructive/15 text-destructive')}
         >
-          {p.dealTask ? `Görevle ${p.dealPrice.toLocaleString('tr-TR')} KC${p.dealTask.live ? '' : ' · görev yayında değil'}` : 'Bağlı görev silinmiş'}
+          {p.dealTask ? `Görevle ${p.dealPrice.toLocaleString('tr-TR')} KC · görev başına ${p.dealUses} adet${p.dealTask.live ? '' : ' · görev yayında değil'}` : 'Bağlı görev silinmiş'}
         </span>
       )}
     </>
