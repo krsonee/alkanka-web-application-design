@@ -174,9 +174,30 @@ export type HistoryInput = {
   delta: number
   score?: number | null
   tableId?: string | null
+  /** The player walked away, gave up or timed out before the game was over: the coins are still booked, but it is not a game played. */
+  quit?: boolean
+}
+
+let quitColumn: Promise<boolean> | null = null
+
+/** The column is added the first time a walked-away game is written; a failed attempt is tried again on the next one. */
+function hasQuitColumn() {
+  quitColumn ??= rows(sql`ALTER TABLE game_history ADD COLUMN IF NOT EXISTS quit boolean NOT NULL DEFAULT false`).then(
+    () => true,
+    () => {
+      quitColumn = null
+      return false
+    },
+  )
+  return quitColumn
 }
 
 export async function recordHistory(h: HistoryInput) {
+  if (h.quit && (await hasQuitColumn())) {
+    await rows(sql`INSERT INTO game_history (user_id, user_name, game, mode, opponent, stake, result, delta, score, table_id, quit)
+      VALUES (${h.userId}, ${h.userName}, ${h.game}, ${h.mode}, ${h.opponent}, ${h.stake}, ${h.result}, ${h.delta}, ${h.score ?? null}, ${h.tableId ?? null}, true)`)
+    return
+  }
   await rows(sql`INSERT INTO game_history (user_id, user_name, game, mode, opponent, stake, result, delta, score, table_id)
     VALUES (${h.userId}, ${h.userName}, ${h.game}, ${h.mode}, ${h.opponent}, ${h.stake}, ${h.result}, ${h.delta}, ${h.score ?? null}, ${h.tableId ?? null})`)
 }

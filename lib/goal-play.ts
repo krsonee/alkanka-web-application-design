@@ -106,6 +106,7 @@ export async function ruleDoneFor(userIds: string[], rules: GoalRule[], day: str
       await rows(sql`SELECT user_id, count(*) AS n FROM game_history
         WHERE user_id IN (SELECT jsonb_array_elements_text(${list}::jsonb)) AND created_at >= ${start} AND created_at < ${end}
           AND mode NOT IN ('odul', 'harcama', 'admin') AND game <> 'turnuva' AND result <> 'refund'
+          AND to_jsonb(game_history) ->> 'quit' IS DISTINCT FROM 'true'
           AND (${rule.kind === 'win'}::boolean IS FALSE OR result = 'win') AND (${rule.game} = '' OR game = ${rule.game})
         GROUP BY user_id`),
       index,

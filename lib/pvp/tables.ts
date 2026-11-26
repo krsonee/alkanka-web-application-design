@@ -526,7 +526,8 @@ export async function actOnTable(m: Member, id: string, version: number, action:
   await saveState(t, version, state)
   await touchPlayer(t.id, m.id)
   // The board's own "Pes et" arrives as an action; a tournament match closed that way says so, like one left from the header.
-  if (outcome) await finishTable({ ...t, state, version: version + 1 }, outcome, t.tournamentId && action.type === 'resign' ? { how: 'pes' } : {})
+  const gaveUp = action.type === 'resign'
+  if (outcome) await finishTable({ ...t, state, version: version + 1 }, outcome, { ...(t.tournamentId && gaveUp ? { how: 'pes' as const } : {}), ...(gaveUp ? { quit: [m.id] } : {}) })
 }
 
 async function touchPlayer(tableId: string, userId: string) {
@@ -556,7 +557,7 @@ export async function leaveTable(m: Pick<Member, 'id'>, id: string, reason: 'lea
     }
     // Nobody takes over a seat in a duel: giving up hands the match to the rival.
     const rival = humans(t).find((p) => p.id !== me.id)
-    if (t.status === 'oynaniyor' && rival) await finishTable(t, { winnerSeat: rival.seat }, { how: 'pes' })
+    if (t.status === 'oynaniyor' && rival) await finishTable(t, { winnerSeat: rival.seat }, { how: 'pes', quit: [me.id] })
     return
   }
 
@@ -583,7 +584,7 @@ export async function leaveTable(m: Pick<Member, 'id'>, id: string, reason: 'lea
   // A practice table staked nothing, so walking away from it leaves no trace.
   const recordLoss = async () => {
     if (t.stake === 0) return
-    await recordHistory({ userId: me.id, userName: me.name, game: t.game, mode: historyMode(t), opponent: soloOkey(t) ? 'Alkanka Bot' : rivalName(t, me.id), stake: t.stake, result: 'loss', delta: -t.stake, tableId: t.id })
+    await recordHistory({ userId: me.id, userName: me.name, game: t.game, mode: historyMode(t), opponent: soloOkey(t) ? 'Alkanka Bot' : rivalName(t, me.id), stake: t.stake, result: 'loss', delta: -t.stake, tableId: t.id, quit: true })
   }
   const others = humans(t).filter((p) => p.id !== me.id)
 
@@ -602,7 +603,7 @@ export async function leaveTable(m: Pick<Member, 'id'>, id: string, reason: 'lea
 
   if (!handsToBot) {
     await saveState(t, t.version, state)
-    if (outcome) await finishTable({ ...t, state, version: t.version + 1 }, outcome)
+    if (outcome) await finishTable({ ...t, state, version: t.version + 1 }, outcome, { quit: [me.id] })
     return
   }
 
@@ -788,11 +789,13 @@ export async function claimTimeout(m: Member, id: string) {
     if (outcome) await finishTable({ ...t, state, version: t.version + 1 }, outcome)
     return
   }
-  await finishTable(t, { winnerSeat: seat }, end)
+  // The rival never moved before the clock ran out: the claimer played the match, the rival did not finish it.
+  await finishTable(t, { winnerSeat: seat }, { ...end, quit: humans(t).filter((p) => p.seat !== seat).map((p) => p.id) })
 }
 
 /** `how` and `noShow` say why a tournament table closed without being played to the end, and who never sat down at it. */
-type TableEnd = { how?: MatchEnd; noShow?: string[] }
+/** `quit` names the players who walked away, gave up or timed out: their loss is booked, but it is not a game they played. */
+type TableEnd = { how?: MatchEnd; noShow?: string[]; quit?: string[] }
 
 const tourOpponent = (t: TableRow, userId: string, how?: MatchEnd) => (how ? `${rivalName(t, userId)} (${MATCH_END_LABEL[how]})` : rivalName(t, userId))
 
@@ -943,7 +946,7 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>, end: Tabl
     // A match one side never sat down to was not played, so it adds no game to anybody's history or counters.
     if (end.how !== 'gelmedi') {
       for (const p of humans(t)) {
-        await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: matchHistoryMode(end.how), opponent: tourOpponent(t, p.id, end.how), stake: 0, result: p.id === champ.id ? 'win' : 'loss', delta: 0, tableId: t.id })
+        await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: matchHistoryMode(end.how), opponent: tourOpponent(t, p.id, end.how), stake: 0, result: p.id === champ.id ? 'win' : 'loss', delta: 0, tableId: t.id, quit: p.id !== champ.id && Boolean(end.quit?.includes(p.id)) })
       }
     }
     const { advanceTournament } = await import('@/lib/tournaments')
@@ -995,7 +998,7 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>, end: Tabl
       }
       const payout = await capPayout(p.id, t.stake, gross)
       if (payout) await credit(p.id, payout, `Masa ödemesi (${t.game})`)
-      await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'bot', opponent: 'Alkanka Bot', stake: t.stake, result: won ? 'win' : 'loss', delta: payout - t.stake, tableId: t.id })
+      await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'bot', opponent: 'Alkanka Bot', stake: t.stake, result: won ? 'win' : 'loss', delta: payout - t.stake, tableId: t.id, quit: !won && Boolean(end.quit?.includes(p.id)) })
       // The table is already closed above, so a gate that cannot be had must not cost the player the payout.
     }, 'run')
     return
@@ -1050,7 +1053,7 @@ async function finishTable(t: TableRow, outcome: NonNullable<Outcome>, end: Tabl
     for (const p of people) {
       const won = paid.has(p.id)
       const bonus = extra.get(p.id) ?? 0
-      await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'pvp', opponent: rivalName(t, p.id), stake: t.stake, result: won ? 'win' : 'loss', delta: (won ? (paid.get(p.id) ?? 0) - t.stake : -t.stake) + bonus, tableId: t.id })
+      await recordHistory({ userId: p.id, userName: p.name, game: t.game, mode: 'pvp', opponent: rivalName(t, p.id), stake: t.stake, result: won ? 'win' : 'loss', delta: (won ? (paid.get(p.id) ?? 0) - t.stake : -t.stake) + bonus, tableId: t.id, quit: !won && Boolean(end.quit?.includes(p.id)) })
     }
   }, 'run')
 }

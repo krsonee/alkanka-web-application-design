@@ -117,7 +117,8 @@ export async function cancelBotGame(sessionId: string) {
   }
 }
 
-export async function finishBotGame(sessionId: string, result: 'win' | 'loss' | 'draw', score?: { for: number; against: number }) {
+/** `left` says the player got up from the table instead of playing the match out. */
+export async function finishBotGame(sessionId: string, result: 'win' | 'loss' | 'draw', score?: { for: number; against: number }, left = false) {
   try {
     const m = await member()
     // The session is closed inside the gate too: when the gate cannot be had, the session stays open and the
@@ -160,6 +161,8 @@ export async function finishBotGame(sessionId: string, result: 'win' | 'loss' | 
       }
       const payout = await capPayout(m.id, stake, gross)
       if (payout) await credit(m.id, payout, 'Bota karşı oyun ödemesi')
+      // A match the player got up from, or one over sooner than a real match can be, is booked but is not a game played.
+      const quit = final !== 'win' && (left === true || Number(row.secs) < (MIN_WIN_SECONDS[game] ?? 30) / 2)
       await recordHistory({
         userId: m.id,
         userName: m.name,
@@ -170,6 +173,7 @@ export async function finishBotGame(sessionId: string, result: 'win' | 'loss' | 
         result: final,
         delta: payout - stake,
         score: score ? score.for : null,
+        quit,
       })
       return { ok: true as const, result: final, payout, note, balance: await getBalance(m.id) }
     })
