@@ -294,8 +294,26 @@
   }
 }
 
+/* A drawn frame shown large: its light breathes slowly. Small ones stay still, there can be dozens on a page. */
+.avatar-frame-art-live {
+  animation: avatar-frame-breathe 3.4s ease-in-out infinite alternate;
+}
+.avatar-frame-art-live[data-frame='defne'] {
+  animation-duration: 4.6s;
+}
+
+@keyframes avatar-frame-breathe {
+  from {
+    filter: brightness(0.96) saturate(1);
+  }
+  to {
+    filter: brightness(1.14) saturate(1.18);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .avatar-frame-gold {
+  .avatar-frame-gold,
+  .avatar-frame-art-live {
     animation: none;
   }
 }

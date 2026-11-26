@@ -38,9 +38,10 @@ import { listInbox, type InboxMessage } from '@/lib/inbox'
 import { InboxList } from '@/components/alkanka/profile/inbox-list'
 import { coverById, getLookState, teamById, type LookState } from '@/lib/avatars'
 import { LookStudio } from '@/components/alkanka/profile/look-studio'
-import { Download, Gift, Pencil } from 'lucide-react'
+import { Download, Gift } from 'lucide-react'
 import { badgeRarity, frameMap, getPins, MAX_PINS, rarityLabel } from '@/lib/badge-value'
-import { FrameRing } from '@/components/alkanka/member-avatar'
+import { ProfileAvatar } from '@/components/alkanka/profile/profile-avatar'
+import type { AvatarFrame } from '@/lib/frames-shared'
 import { PinPicker } from '@/components/alkanka/kp/pin-picker'
 import { PushPrefsCard } from '@/components/alkanka/profile/push-prefs'
 import { getPushPrefs, PUSH_TOPICS } from '@/lib/mobile'
@@ -49,13 +50,6 @@ export const metadata: Metadata = { title: 'Profilim', robots: { index: false } 
 export const dynamic = 'force-dynamic'
 
 const TIER_NAMES: Record<string, string> = { bronz: 'Bronz', altin: 'Altın', elmas: 'Elmas', efsane: 'Efsane' }
-const FRAME_RING: Record<string, string> = {
-  bronz: 'border-bronze',
-  altin: 'border-gold ring-4 ring-gold/30',
-  elmas: 'border-accent ring-4 ring-accent/40',
-  efsane: 'border-ruby ring-4 ring-ruby/40 shadow-lg shadow-ruby/30',
-  ozel: 'border-background ring-4 ring-gold/30',
-}
 const TIER_BAR: Record<string, string> = { bronz: 'bg-bronze', altin: 'bg-gold', elmas: 'bg-accent', efsane: 'bg-ruby' }
 const fmt = (n: number) => n.toLocaleString('tr-TR')
 
@@ -103,9 +97,11 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
     historySummary(member.id),
     listInbox(member.id).catch((error) => (console.error('[inbox] okunamadı', error), [] as InboxMessage[])),
     getLookState(member.id).catch((error) => (console.error('[avatar] görünüm okunamadı', error), null as LookState | null)),
-    frameMap().catch(() => ({}) as Record<string, string>),
+    frameMap().catch(() => ({}) as Record<string, AvatarFrame>),
   ])
-  const frame = frames[member.id] as string | undefined
+  // The member's own frame is read fresh with their look, so a frame just put on shows at once; the shared
+  // map is the fallback when the look could not be read.
+  const frame = look ? look.frames.worn : (frames[member.id] ?? null)
   const avatar = look?.avatars.find((a) => a.id === look.avatarId) ?? null
   const cover = coverById(look?.coverId)
   const team = teamById(look?.team)
@@ -140,28 +136,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
 
         <div className="relative flex flex-col gap-5 px-5 pb-5 max-sm:gap-3.5 max-sm:px-4 max-sm:pb-4 md:flex-row md:items-end md:px-6">
           <div className="-mt-16 flex shrink-0 items-end gap-3 max-sm:-mt-14 md:-mt-20">
-            <Link
-              href="/profil?sekme=gorunum"
-              scroll={false}
-              className={cn(
-                'group relative block size-28 overflow-hidden rounded-full border-4 bg-background max-sm:size-24 md:size-32',
-                frame ? FRAME_RING[frame] : 'border-gold',
-              )}
-              title={frame === 'ozel' ? 'Özel profil çerçevesi' : frame ? `${TIER_NAMES[frame]} rozet çerçevesi` : undefined}
-              aria-label={avatar ? `Avatarın: ${avatar.name}. Değiştir` : 'Avatar seç'}
-            >
-              {frame === 'ozel' && <FrameRing frame="ozel" weight="lg" />}
-              {avatar ? (
-                <Image src={avatar.src} alt="" fill sizes="128px" className="object-cover" />
-              ) : (
-                <span className="flex size-full items-center justify-center bg-primary font-display text-4xl font-bold text-primary-foreground">
-                  {member.name.slice(0, 1).toUpperCase()}
-                </span>
-              )}
-              <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-background/80 pb-2.5 pt-1 text-[10px] font-bold text-foreground opacity-90 transition-opacity group-hover:opacity-100">
-                <Pencil className="size-3" aria-hidden /> {avatar ? 'Değiştir' : 'Seç'}
-              </span>
-            </Link>
+            <ProfileAvatar frame={frame} avatar={avatar} name={member.name} />
             <div className="mb-1 rounded-2xl bg-background/80 p-1.5 backdrop-blur">
               <LevelEmblem level={lv} size="md" />
             </div>

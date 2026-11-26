@@ -3,10 +3,11 @@
 import Image from 'next/image'
 import useSWR from 'swr'
 import { cn } from '@/lib/utils'
+import { ART_FRAMES, frameLabel, isArtFrame, type ArtFrame, type AvatarFrame } from '@/lib/frames-shared'
 
 export const AVATAR_MAP_KEY = '/api/avatars'
 
-export type AvatarFrame = 'altin' | 'elmas' | 'efsane' | 'ozel'
+export type { AvatarFrame } from '@/lib/frames-shared'
 type Looks = { map: Record<string, string>; frames: Record<string, AvatarFrame> }
 
 const NONE: Looks = { map: {}, frames: {} }
@@ -43,22 +44,42 @@ const SIZES = {
 
 const PX = { xs: 20, sm: 24, md: 36, lg: 48, xl: 112 } as const
 
-const FRAME_NAMES: Record<AvatarFrame, string> = {
-  altin: 'Altın rozet çerçevesi',
-  elmas: 'Elmas rozet çerçevesi',
-  efsane: 'Efsane rozet çerçevesi',
-  ozel: 'Özel profil çerçevesi',
-}
+export const frameName = frameLabel
 
-export const frameName = (frame: AvatarFrame) => FRAME_NAMES[frame]
+/**
+ * A drawn frame laid over an avatar. It is sized in avatar diameters and centred on the avatar, so it has to
+ * sit in a `relative` box exactly as large as the avatar that does not clip what reaches past its edge.
+ * `ring` is for small avatars; `crest` and `show` reach much further out and need room around the avatar.
+ */
+export function FrameArt({ frame, cut = 'ring' }: { frame: ArtFrame; cut?: 'ring' | 'crest' | 'show' }) {
+  const art = ART_FRAMES[frame][cut]
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- already cut to size and saved as WebP; the image optimiser would only re-encode it
+    <img
+      src={art.src}
+      alt=""
+      aria-hidden="true"
+      draggable={false}
+      decoding="async"
+      data-frame={frame}
+      className={cn(
+        'pointer-events-none absolute left-1/2 top-1/2 z-[1] max-w-none -translate-x-1/2 -translate-y-1/2 select-none',
+        cut !== 'ring' && 'avatar-frame-art-live',
+      )}
+      style={{ width: `${art.w * 100}%`, height: `${art.h * 100}%` }}
+    />
+  )
+}
 
 /**
  * The frame around an avatar. `outside` draws it around the picture instead of over its edge, so a small
  * avatar keeps every pixel of its picture and the frame is still thick enough to be seen; the default sits
- * inside an avatar shell that clips its own edge. `weight` follows the avatar's size.
+ * inside an avatar shell that clips its own edge. `weight` follows the avatar's size. A drawn frame is always
+ * laid around the picture.
  */
 export function FrameRing({ frame, weight = 'md', outside }: { frame?: AvatarFrame | null; weight?: 'sm' | 'md' | 'lg'; outside?: boolean }) {
   if (!frame) return null
+  if (isArtFrame(frame)) return <FrameArt frame={frame} />
   return (
     <span
       aria-hidden="true"

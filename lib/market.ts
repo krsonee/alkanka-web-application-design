@@ -9,7 +9,18 @@ import { noteCoins } from '@/lib/wallet-ledger'
 import { stockWarning } from '@/lib/market-stock'
 import type { SponsorReminder } from '@/lib/sponsor-reminders'
 import { isAllowedImage } from '@/lib/site-registry'
+import { boughtFrameOf } from '@/lib/frames-shared'
 import { afterPct, bestSale, dealWins, isRewardKind, rewardMeta, type DeliveryMode, type Reward } from '@/lib/market-shared'
+
+/**
+ * Frame products the team created in the panel on the live site, by the id the panel gave them, and the frame
+ * each one stands for. On any other database these rows do not exist and nothing is touched.
+ */
+const PANEL_FRAME_PRODUCTS: Record<string, string> = {
+  'ak-mwwwum04': 'cerceve-defne',
+  'ak-mwwww0ct': 'cerceve-mavi-alev',
+  'ak-mwwwwbus': 'cerceve-ejder',
+}
 
 export type MarketKind = 'alkanka' | 'sponsor'
 export type RequestStatus = 'beklemede' | 'onaylandi' | 'reddedildi'
@@ -144,6 +155,16 @@ function ensure() {
           WHEN 'altin-rozet' THEN 'Avatarına altın çerçeve, sohbette ve sıralamada adının yanında Altın Kanka rozeti, markette Alkanka ürünlerinde kalıcı %10 indirim.'
           ELSE 'Avatarının etrafında ışığı dönen altın çerçeve. Profilinde, sohbette, sıralamada ve menüde görünür.' END
       WHERE id IN ('altin-rozet', 'profil-cercevesi') AND delivery_mode = 'manual' AND (reward_kind IS NULL OR reward_kind = 'none')`)
+    // The three frames the team added from the panel were hand-delivered products with nothing to deliver.
+    // Each now hands over its own frame. Same rule as above: a row whose reward was set in the panel is left alone.
+    // Only the published site does this: a development server that happens to be pointed at the live database
+    // must not start selling the frames before the code that draws them is out.
+    for (const [id, badge] of process.env.VERCEL_ENV === 'production' ? Object.entries(PANEL_FRAME_PRODUCTS) : []) {
+      await rows(sql`UPDATE market_items SET
+          delivery_mode = 'auto', reward_kind = 'rozet', reward_amount = 1, reward_ref = ${badge},
+          delivery = CASE WHEN COALESCE(delivery, '') = '' THEN 'Satın alır almaz avatarına takılır.' ELSE delivery END
+        WHERE id = ${id} AND kind = 'alkanka' AND delivery_mode = 'manual' AND (reward_kind IS NULL OR reward_kind = 'none')`)
+    }
   })().catch((e) => {
     ready = null
     throw e
@@ -465,7 +486,9 @@ async function requestProductLocked(member: Member, itemId: string, siteUsername
   const { roleBlocks, badgeCount } = await import('@/lib/kanka-puan')
   if (await roleBlocks(member.id, 'market')) throw new Error('Bu rolle marketten alışveriş yapılamıyor.')
   const reward = item.deliveryMode === 'auto' ? item.reward : null
-  if (reward?.kind === 'rozet' && reward.ref && (await badgeCount(member.id, reward.ref)) > 0) throw new Error('Bu rozet zaten sende.')
+  if (reward?.kind === 'rozet' && reward.ref && (await badgeCount(member.id, reward.ref)) > 0) {
+    throw new Error(boughtFrameOf(reward.ref) ? 'Bu çerçeve zaten sende. Profilinde Görünüm sekmesinden takabilirsin.' : 'Bu rozet zaten sende.')
+  }
 
   const reserved = await rows(sql`UPDATE market_items SET stock = stock - 1 WHERE id = ${item.id} AND stock > 0 RETURNING stock`)
   if (!reserved.length) throw new Error('Stok tükendi.')

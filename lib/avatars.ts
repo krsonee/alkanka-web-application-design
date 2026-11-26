@@ -4,6 +4,8 @@ import { wholeInRange } from '@/lib/drift'
 import { credit, debit, getBalance } from '@/lib/member'
 import { levelMap } from '@/lib/kanka-puan'
 import { isFlagged } from '@/lib/growth'
+import { frameState } from '@/lib/badge-value'
+import { NO_FRAMES } from '@/lib/frames-shared'
 import {
   COVERS,
   DEFAULT_AVATARS,
@@ -94,12 +96,14 @@ function canUse(av: AvatarDef, level: number, owned: Set<string>) {
 
 export async function getLookState(userId: string): Promise<LookState> {
   await ensureAvatars()
-  const [catalog, look, ownedRows, level, balance] = await Promise.all([
+  const [catalog, look, ownedRows, level, balance, frames] = await Promise.all([
     listCatalog(),
     readLook(userId),
     rows<{ avatar_id: string }>(sql`SELECT avatar_id FROM avatar_owned WHERE user_id = ${userId}`),
     memberLevel(userId),
     getBalance(userId),
+    // The avatar and cover pickers still work when the frames cannot be read.
+    frameState(userId).catch((error) => (console.error('[frames] çerçeveler okunamadı', error), NO_FRAMES)),
   ])
   const owned = new Set(ownedRows.map((r) => r.avatar_id))
   const avatars: AvatarCard[] = catalog.map((av) => ({
@@ -124,6 +128,7 @@ export async function getLookState(userId: string): Promise<LookState> {
     balance,
     rewardPending: !look.reward_claimed,
     reward: FIRST_AVATAR_REWARD,
+    frames,
   }
 }
 

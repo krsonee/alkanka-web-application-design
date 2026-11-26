@@ -4,26 +4,32 @@ import { useState, useTransition } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { mutate } from 'swr'
-import { Check, Coins, Download, Gift, ImageIcon, Lock, Send, Shirt, Sparkles, UserRound } from 'lucide-react'
-import { buyAvatarAction, chooseAvatarAction, setCoverAction, setTeamAction } from '@/app/actions/look'
+import { Check, Coins, Download, Frame, Gift, ImageIcon, Lock, Send, Shirt, Sparkles, UserRound } from 'lucide-react'
+import { buyAvatarAction, chooseAvatarAction, setCoverAction, setTeamAction, wearFrameAction } from '@/app/actions/look'
 import { AVATAR_GROUPS, TEAMS, unlockLabel, type AvatarCard, type AvatarGroup, type LookState } from '@/lib/avatars-shared'
 import { AVATAR_MAP_KEY } from '@/components/alkanka/member-avatar'
 import { usePoints } from '@/components/alkanka/points-context'
+import { useAddressChoice } from '@/components/alkanka/use-address-choice'
+import { FramePicker } from '@/components/alkanka/profile/frame-picker'
 import { cn } from '@/lib/utils'
 
-type Section = 'avatar' | 'kapak' | 'takim'
+type Section = 'avatar' | 'cerceve' | 'kapak' | 'takim'
 
 const SECTIONS: { id: Section; label: string; icon: typeof UserRound }[] = [
   { id: 'avatar', label: 'Avatar', icon: UserRound },
+  { id: 'cerceve', label: 'Çerçeve', icon: Frame },
   { id: 'kapak', label: 'Kapak', icon: ImageIcon },
   { id: 'takim', label: 'Takımım', icon: Shirt },
 ]
+
+/** The section is kept in the address (`?sekme=gorunum&bolum=cerceve`), so the market can send a buyer straight to their frames. */
+const SECTION_WORD: Record<Section, string> = { avatar: 'avatar', cerceve: 'cerceve', kapak: 'kapak', takim: 'takim' }
 
 const canDownload = (a: AvatarCard) => a.status === 'selected' || a.status === 'owned' || a.status === 'unlocked'
 
 export function LookStudio({ initial }: { initial: LookState }) {
   const [state, setState] = useState(initial)
-  const [section, setSection] = useState<Section>('avatar')
+  const [section, setSection] = useAddressChoice('bolum', SECTION_WORD, 'avatar')
   const [focus, setFocus] = useState<string | null>(initial.avatarId ?? initial.avatars[0]?.id ?? null)
   const [notice, setNotice] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null)
   const [pending, start] = useTransition()
@@ -59,7 +65,7 @@ export function LookStudio({ initial }: { initial: LookState }) {
       <div className="flex flex-col gap-1">
         <h2 id="gorunum" className="font-display text-lg font-bold text-foreground">Görünümün</h2>
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Avatarın sohbette, liderlikte ve canlı akışta adının yanında görünür. Sahip olduklarını indirip Telegram profilinde de kullanabilirsin.
+          Avatarın ve çerçeven sohbette, liderlikte ve canlı akışta adının yanında görünür. Sahip olduğun avatarları indirip Telegram profilinde de kullanabilirsin.
         </p>
       </div>
 
@@ -85,7 +91,7 @@ export function LookStudio({ initial }: { initial: LookState }) {
               section === s.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
             )}
           >
-            <s.icon className="size-4" aria-hidden />
+            <s.icon className="size-4 max-sm:hidden" aria-hidden />
             {s.label}
           </button>
         ))}
@@ -209,6 +215,16 @@ export function LookStudio({ initial }: { initial: LookState }) {
             </aside>
           )}
         </div>
+      )}
+
+      {section === 'cerceve' && (
+        <FramePicker
+          key={state.frames.choice}
+          frames={state.frames}
+          avatarSrc={state.avatars.find((a) => a.id === state.avatarId)?.src ?? null}
+          pending={pending}
+          onWear={(id) => act(() => wearFrameAction(id))}
+        />
       )}
 
       {section === 'kapak' && (
