@@ -34,9 +34,10 @@ export const numberFromSeed = (seed: string) => parseInt(seed.slice(0, 8), 16) %
 
 export const roundNumber = (roundId: number) => numberFromSeed(roundSeed(roundId))
 
+/** A round is over only once the ball has come to rest: while the wheel is still spinning nothing is paid, listed or revealed. */
 function resolvedRound(now = Date.now()) {
   const c = clock(now)
-  return c.phase === 'bet' ? c.roundId - 1 : c.roundId
+  return c.phase === 'result' ? c.roundId : c.roundId - 1
 }
 
 type StoredBet = Pick<RouletteBet, 'kind' | 'value' | 'amount'>
@@ -175,7 +176,7 @@ export async function liveState(member: Member | null) {
   await settleRounds()
   const c = clock()
   const showNumber = c.phase !== 'bet'
-  const lastId = c.phase === 'bet' ? c.roundId - 1 : c.roundId
+  const lastId = resolvedRound(c.now)
   const history = Array.from({ length: 14 }, (_, i) => roundNumber(lastId - i))
   const players = await pool.query(
     `SELECT user_id, user_name, total, bets, settled, returned FROM roulette_bets WHERE round_id = $1 AND total > 0 ORDER BY total DESC LIMIT 40`,
