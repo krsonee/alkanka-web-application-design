@@ -320,6 +320,11 @@ function Creator({
   const [autoPick, setAutoPick] = useState(true)
   const [running, setRunning] = useState(0)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const clearNotes = () => {
+    setError('')
+    setNotice('')
+  }
   const [results, setResults] = useState<StudioJob[]>([])
   const [revising, setRevising] = useState<StudioJob | null>(null)
   const [revision, setRevision] = useState('')
@@ -403,6 +408,7 @@ function Creator({
       const data = await res.json().catch(() => ({ error: 'Sunucu zaman aşımına uğradı, tekrar dene.' }))
       if (!res.ok) throw new Error(data.error ?? 'Üretim başarısız oldu.')
       setResults((r) => [data.job, ...r])
+      if (typeof data.note === 'string' && data.note) setNotice(data.note)
       return data.job
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Üretim başarısız oldu.')
@@ -432,7 +438,7 @@ function Creator({
   }
 
   async function start() {
-    setError('')
+    clearNotes()
     const problem = briefProblem(brief)
     if (problem) return setError(problem)
     if (!runs.length) return setError('En az bir format seç.')
@@ -448,7 +454,7 @@ function Creator({
 
   async function runAnimation(mode: 'gif' | 'aigif' | 'video') {
     if (!animTarget) return
-    setError('')
+    clearNotes()
     const source = animating ? { jobId: animating.id } : { assetId: animTarget.id, brandId: brandId === '' ? null : brandId }
     closeAnimation()
     await animate(source, motionOptions(mode))
@@ -467,7 +473,7 @@ function Creator({
 
   async function revise() {
     if (!revising || (revision.trim().length < 5 && !retextOnly)) return
-    setError('')
+    clearNotes()
     const parent = revising
     setRevising(null)
     await generate({
@@ -729,6 +735,11 @@ function Creator({
             {error}
           </p>
         ) : null}
+        {notice ? (
+          <p role="status" className="rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm font-semibold leading-relaxed text-foreground">
+            {notice}
+          </p>
+        ) : null}
         {revising ? (
           <div ref={revisePanel} className={card}>
             <div className="flex items-center gap-2">
@@ -869,7 +880,7 @@ function Creator({
               onDeleted={() => setGone((ids) => [...ids, job.id])}
               motionOff={overCap(STICKER_MOTION_COST)}
               onTelegram={async (mode) => {
-                setError('')
+                clearNotes()
                 await animate({ jobId: job.id }, motionOptions(mode))
                 router.refresh()
               }}
