@@ -36,6 +36,8 @@ type Props = {
   /** The Linkler tab; a sponsor in the report opens it narrowed to that sponsor. Null when the tab is not there. */
   linksHref: string | null
   affLinks: AffLinkView[]
+  /** Short link domain from Linkler (e.g. alkanka.xyz); empty when none is set. */
+  shortDomain?: string
   affSites: AffSiteOption[]
 }
 
@@ -436,7 +438,7 @@ export function GrowthManager(props: Props) {
   return (
     <div className="flex flex-col gap-6">
       <GrowthGuide />
-      <AffLinksManager links={props.affLinks} sites={props.affSites} siteUrl={props.siteUrl} />
+      <AffLinksManager links={props.affLinks} sites={props.affSites} siteUrl={props.siteUrl} shortDomain={props.shortDomain ?? ''} />
       <div className="grid gap-6 lg:grid-cols-2">
         {props.campaignsHref ? (
           <section className={card}>

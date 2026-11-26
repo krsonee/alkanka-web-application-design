@@ -8,9 +8,20 @@ import { checkAffLinkAction, deleteAffLinkAction, saveAffLinkAction, toggleAffLi
 import type { AffLinkView, AffMode } from '@/lib/aff-links'
 import { cn } from '@/lib/utils'
 import { Flash } from '@/components/panel/flash'
+import { shortUrl } from '@/lib/links-shared'
 
 export type AffSiteOption = { id: number; name: string; slug: string; active: boolean }
-type Props = { links: AffLinkView[]; sites: AffSiteOption[]; siteUrl: string }
+type Props = { links: AffLinkView[]; sites: AffSiteOption[]; siteUrl: string; shortDomain: string }
+
+function affShort(code: string, sponsored: boolean, siteUrl: string, shortDomain: string) {
+  return shortUrl({ kind: sponsored ? 'sponsor' : 'dis', code, path: `/r/${code}`, clash: false }, siteUrl, shortDomain)
+}
+
+/** What sits before the code box: alkanka.xyz/ on the short domain, alkanka.com/r/ without one. */
+function codePrefix(code: string, siteUrl: string, shortDomain: string) {
+  const full = affShort(code || 'kod', true, siteUrl, shortDomain).replace(/^https?:\/\//, '')
+  return full.slice(0, full.length - (code || 'kod').length)
+}
 type Msg = { ok: boolean; message: string } | null
 type Draft = { id?: number; code: string; siteId: string; label: string; affUrl: string; mode: AffMode; primary: boolean; active: boolean }
 
@@ -66,7 +77,7 @@ function Spark({ data }: { data: number[] }) {
   )
 }
 
-function Editor({ draft, sites, siteUrl, onClose }: { draft: Draft; sites: AffSiteOption[]; siteUrl: string; onClose?: () => void }) {
+function Editor({ draft, sites, siteUrl, shortDomain, onClose }: { draft: Draft; sites: AffSiteOption[]; siteUrl: string; shortDomain: string; onClose?: () => void }) {
   const [d, setD] = useState<Draft>(draft)
   const [codeTouched, setCodeTouched] = useState(Boolean(draft.id))
   const [pending, start] = useTransition()
@@ -140,7 +151,7 @@ function Editor({ draft, sites, siteUrl, onClose }: { draft: Draft; sites: AffSi
       <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
         Kısa link
         <div className="flex items-stretch overflow-hidden rounded-lg border border-input bg-background focus-within:border-primary">
-          <span className="flex items-center bg-secondary px-3 font-mono text-xs text-muted-foreground">{siteUrl.replace(/^https?:\/\//, '')}/r/</span>
+          <span className="flex items-center bg-secondary px-3 font-mono text-xs text-muted-foreground">{codePrefix(d.code, siteUrl, shortDomain)}</span>
           <input
             className="min-w-0 flex-1 bg-transparent px-3 py-2 font-mono text-sm text-foreground focus:outline-none"
             value={d.code}
@@ -204,11 +215,11 @@ function Editor({ draft, sites, siteUrl, onClose }: { draft: Draft; sites: AffSi
   )
 }
 
-function LinkRow({ link, sites, siteUrl }: { link: AffLinkView; sites: AffSiteOption[]; siteUrl: string }) {
+function LinkRow({ link, sites, siteUrl, shortDomain }: { link: AffLinkView; sites: AffSiteOption[]; siteUrl: string; shortDomain: string }) {
   const [editing, setEditing] = useState(false)
   const [pending, start] = useTransition()
   const [msg, setMsg] = useState<Msg>(null)
-  const short = `${siteUrl}/r/${link.code}`
+  const short = affShort(link.code, link.siteId !== null, siteUrl, shortDomain)
   const run = (fn: () => Promise<{ ok: boolean; message: string }>) => start(async () => setMsg(await fn()))
 
   if (editing) {
@@ -217,6 +228,7 @@ function LinkRow({ link, sites, siteUrl }: { link: AffLinkView; sites: AffSiteOp
         <Editor
           sites={sites}
           siteUrl={siteUrl}
+          shortDomain={shortDomain}
           onClose={() => setEditing(false)}
           draft={{
             id: link.id,
@@ -327,7 +339,7 @@ function LinkRow({ link, sites, siteUrl }: { link: AffLinkView; sites: AffSiteOp
   )
 }
 
-export function AffLinksManager({ links, sites, siteUrl }: Props) {
+export function AffLinksManager({ links, sites, siteUrl, shortDomain }: Props) {
   const total = links.reduce((n, l) => n + l.stats.week, 0)
   return (
     <section className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5">
@@ -348,7 +360,7 @@ export function AffLinksManager({ links, sites, siteUrl }: Props) {
 
       <div className="rounded-xl border border-dashed border-border p-4">
         <h3 className="mb-3 text-sm font-semibold text-foreground">Yeni link ekle</h3>
-        <Editor draft={EMPTY} sites={sites} siteUrl={siteUrl} />
+        <Editor draft={EMPTY} sites={sites} siteUrl={siteUrl} shortDomain={shortDomain} />
       </div>
 
       {links.length === 0 ? (
@@ -356,7 +368,7 @@ export function AffLinksManager({ links, sites, siteUrl }: Props) {
       ) : (
         <ul className="flex flex-col rounded-xl border border-border">
           {links.map((link) => (
-            <LinkRow key={`${link.id}-${link.updatedAt}`} link={link} sites={sites} siteUrl={siteUrl} />
+            <LinkRow key={`${link.id}-${link.updatedAt}`} link={link} sites={sites} siteUrl={siteUrl} shortDomain={shortDomain} />
           ))}
         </ul>
       )}

@@ -101,7 +101,7 @@ import { getTracking, listCampaigns, listEarnings } from '@/lib/marketing'
 import { SocialManager } from '@/components/panel/social-manager'
 import { adminEntries, adminSocialAccounts, getSocialLinks, listSocialEvents, type SocialLinks } from '@/lib/social'
 import { affLinkViews } from '@/lib/aff-links'
-import { linkChoices, linkReport } from '@/lib/links'
+import { getShortDomain, linkChoices, linkReport } from '@/lib/links'
 import { earningsBySite, type LinkReport, type SiteEarning } from '@/lib/links-shared'
 import { LinksTable } from '@/components/panel/links-table'
 import { adminSponsorAccounts, currentPeriod, flaggedMembers, followerCounts, getSiteLinks, trafficReport } from '@/lib/growth'
@@ -812,7 +812,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     )),
     section(ctx, 'growth', 'Büyüme', async () => {
       const focusSite = /^[1-9]\d{0,8}$/.test(params.sponsor ?? '') ? Number(params.sponsor) : null
-      const [ambient, options, allSites, links, followers, report, flagged, accounts, affLinks, allLinks, siteEarnings] = await Promise.all([
+      const [ambient, options, allSites, links, followers, report, flagged, accounts, affLinks, allLinks, siteEarnings, shortDomain] = await Promise.all([
         tabHome('ambient', can) === 'growth' ? getAmbientSettings() : null,
         siteOptions(),
         listSites().catch(miss([])),
@@ -824,6 +824,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
         affLinkViews().catch(miss([])),
         linkReport({ campaigns: can('marketing'), siteId: focusSite }).catch(miss<LinkReport | null>(null)),
         can('marketing') ? listEarnings().then(earningsBySite).catch(miss<SiteEarning[]>([])) : ([] as SiteEarning[]),
+        getShortDomain().catch(miss('')),
       ])
       const linksHref = allLinks ? '/panel?b=growth&s=links' : null
       const traffic = (
@@ -841,6 +842,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           campaignsHref={can('marketing') ? '/panel?b=marketing&s=campaigns' : null}
           linksHref={linksHref}
           affLinks={affLinks}
+          shortDomain={shortDomain}
           affSites={allSites.map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active }))}
         />
       )
