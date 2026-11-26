@@ -20,7 +20,7 @@ import {
 } from '@/lib/telegram-mirror'
 import { MAX_SENT_BUTTONS, parseReplacements, rewritePlain } from '@/lib/text-replace'
 import { readOddsPost, type OddsImage, type OddsReading } from '@/lib/odds-parse'
-import { carriedPost, isBareNote, namesMatch, oddsPost, resultNotice, type OddsPostText, type SettledOdd } from '@/lib/odds-post'
+import { carriedPost, isBareNote, looksLikePromo, namesMatch, oddsPost, resultNotice, statedOdds, type OddsPostText, type SettledOdd } from '@/lib/odds-post'
 import { assertPublicUrl } from '@/lib/public-address'
 import type { ParsedOdd } from '@/lib/deal-types'
 import { decodeEntities } from '@/lib/html-entities'
@@ -870,6 +870,10 @@ async function targetRows(source: OddsSource, incoming: Incoming, where: 'open' 
     const coupon = post.length > 1 && post.every((c) => Number(c.new_odd) === Number(post[0].new_odd))
     return coupon ? post : named.filter((c) => c.source_msg === named[0].source_msg)
   }
+  // "10 Oranlık özel oranımız kazandı": no team is named, so the value has to point at one post of this source and no other.
+  const values = looksLikePromo(incoming.text) ? [] : statedOdds(incoming.text)
+  const byValue = new Set(candidates.filter((c) => values.includes(Number(c.new_odd))).map((c) => c.source_msg))
+  if (byValue.size === 1) return candidates.filter((c) => byValue.has(c.source_msg))
   if (!candidates.length || !isBareNote(incoming.text)) return []
   const latest = candidates[0].source_msg
   return candidates.filter((c) => c.source_msg === latest)

@@ -49,7 +49,7 @@ export function matchOfLine(line: string) {
   return home && away ? `${home} - ${away}` : null
 }
 
-const hasMatchLine = (text: string) => text.split('\n').some((line) => matchOfLine(line.trim()))
+export const hasMatchLine = (text: string) => text.split('\n').some((line) => matchOfLine(line.trim()))
 
 const NUM = String.raw`\d{1,4}(?:[.,]\d{1,3})?`
 // "14,59x yerine tam 20,00x", "1.85 → 2.50", "4,48x yerine tam 1,500x"
@@ -161,6 +161,15 @@ export function isBareNote(text: string) {
   if (note.length > 120 || looksLikePromo(note) || hasMatchLine(note)) return false
   const words = note.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w))
   return words.length <= 3 || /oran|kupon/iu.test(note)
+}
+
+const STATED_BEFORE = /(\d{1,5}(?:[.,]\d{1,2})?)\s*(?:oran|katı)/giu
+const STATED_AFTER = /oran\p{L}*\s*[:=]\s*(\d{1,5}(?:[.,]\d{1,2})?)/giu
+
+/** The odds a post names by their value ("10 Oranlık özel oranımız kazandı", "15 Katı"), for a result that names no team. */
+export function statedOdds(text: string): number[] {
+  const found = [...text.matchAll(STATED_BEFORE), ...text.matchAll(STATED_AFTER)].map((m) => Number(m[1].replace(',', '.')))
+  return [...new Set(found.filter((n) => Number.isFinite(n) && n > 1))]
 }
 
 // --- Layout ------------------------------------------------------------------

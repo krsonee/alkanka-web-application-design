@@ -1,7 +1,7 @@
 import 'server-only'
 import { generateText } from 'ai'
 import type { ParsedOdd } from '@/lib/deal-types'
-import { declaresOdd, groundedOdds, localNote, localOdds } from '@/lib/odds-post'
+import { declaresOdd, groundedOdds, hasMatchLine, localNote, localOdds, looksLikePromo, namesMatch } from '@/lib/odds-post'
 
 const PARSE_MODEL = 'google/gemini-3.5-flash'
 const ANSWER_LIMIT_MS = 20_000
@@ -66,7 +66,7 @@ Sadece şu biçimde tek bir JSON nesnesi döndür, açıklama yazma:
 Alanlar:
 - match: "Ev Sahibi - Deplasman". ${withPicture ? 'Yazıda yoksa görselden oku.' : 'Sadece yazıda geçen takımları yaz, tahmin etme.'}
 - league: lig adı, yoksa "". market: bahis türü (ör. "Maç Sonucu 1", "Karşılıklı Gol - Evet").
-- oldOdd: eski/normal oran, yoksa null. newOdd: özel/yeni oran. Para tutarlarını (₺, TL) oran sanma.
+- oldOdd: eski/normal oran, yoksa null. newOdd: özel/yeni oran. Para tutarlarını (₺, TL) oran sanma.${withPicture ? '\n  Oran yazıda rakamla yazmıyorsa (emojiyle yazılmışsa ya da hiç yoksa) görseldeki oranı oku.' : ''}
 - kickoff: tarih-saat metni, yoksa "". limit: en yüksek bahis tutarı (ör. "1.000₺"), yoksa "".
 - coupon: maçlar tek bir birleşik kuponsa ve tek bir toplam oran veriliyorsa true; her maçın kendi oranı varsa false.
   Birleşik kuponda her maça aynı toplam oranı yaz.
@@ -147,7 +147,9 @@ export async function readOddsPost(text: string, picture?: () => Promise<OddsIma
     coupon: null,
     note: '',
   }
-  if (!picture || read.kind === 'sonuc' || !declaresOdd(text)) return none
+  // Many sources write the odd in premium emoji, so the text names the match but carries no number: the card has it.
+  const onCard = read.kind === 'oran' ? !looksLikePromo(text) || hasMatchLine(text) : declaresOdd(text)
+  if (!picture || read.kind === 'sonuc' || !onCard) return none
 
   const image = await picture().catch(() => null)
   if (!image) return none
@@ -155,5 +157,7 @@ export async function readOddsPost(text: string, picture?: () => Promise<OddsIma
     { type: 'file', data: image.data, mediaType: image.mediaType },
     { type: 'text', text: task(text, true) },
   ])
-  return seen?.odds.length ? { ...seen, failed: false, claimed: false } : { ...none, claimed: none.claimed || seen?.kind === 'oran' }
+  // When the text names its matches, the card has to be about one of them.
+  const agreed = (seen?.odds ?? []).filter((o) => !hasMatchLine(text) || namesMatch(text, o.match))
+  return seen && agreed.length ? { ...seen, odds: agreed, failed: false, claimed: false } : { ...none, claimed: none.claimed || seen?.kind === 'oran' }
 }
