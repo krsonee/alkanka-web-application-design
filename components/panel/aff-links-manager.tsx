@@ -9,8 +9,10 @@ import type { AffLinkView, AffMode } from '@/lib/aff-links'
 import { cn } from '@/lib/utils'
 import { Flash } from '@/components/panel/flash'
 import { shortUrl } from '@/lib/links-shared'
+import { followFault, sameSite } from '@/lib/aff-target'
 
-export type AffSiteOption = { id: number; name: string; slug: string; active: boolean }
+/** `host` is the sponsor's current address; empty when none is saved. */
+export type AffSiteOption = { id: number; name: string; slug: string; active: boolean; host: string }
 type Props = { links: AffLinkView[]; sites: AffSiteOption[]; siteUrl: string; shortDomain: string }
 
 function affShort(code: string, sponsored: boolean, siteUrl: string, shortDomain: string) {
@@ -83,8 +85,24 @@ function Editor({ draft, sites, siteUrl, shortDomain, onClose }: { draft: Draft;
   const [pending, start] = useTransition()
   const [msg, setMsg] = useState<Msg>(null)
   const set = (patch: Partial<Draft>) => setD((prev) => ({ ...prev, ...patch }))
+  const [modeTouched, setModeTouched] = useState(Boolean(draft.id))
   const site = sites.find((s) => String(s.id) === d.siteId)
   const affHost = hostOf(d.affUrl)
+  const fits = site?.host && affHost ? sameSite(affHost, site.host) : null
+  const mode: AffMode = modeTouched || fits === null ? d.mode : fits ? 'follow' : 'fixed'
+  const unchanged = Boolean(d.id) && draft.mode === 'follow' && d.affUrl.trim() === draft.affUrl && d.siteId === draft.siteId
+  const note =
+    !site || mode !== 'follow' || !affHost
+      ? null
+      : !unchanged
+        ? followFault(d.affUrl, site.host || null)
+        : fits === false
+          ? `Bu link ${affHost} adresinde kayıtlı, şu an ${site.host} üzerinden açılıyor. Sponsor adres değiştirdiyse doğru; link sponsorun takip adresindeyse açılmaz, “Linki aynen kullan” seç.`
+          : null
+  const pickMode = (next: AffMode) => {
+    setModeTouched(true)
+    set({ mode: next })
+  }
 
   return (
     <form
@@ -98,16 +116,17 @@ function Editor({ draft, sites, siteUrl, shortDomain, onClose }: { draft: Draft;
             siteId: d.siteId ? Number(d.siteId) : null,
             label: d.label,
             affUrl: d.affUrl,
-            mode: d.siteId ? d.mode : 'fixed',
+            mode: d.siteId ? mode : 'fixed',
             primary: Boolean(d.siteId) && d.primary,
             active: d.active,
           })
-          setMsg(r)
+          setMsg(r.warn ? { ok: false, message: r.message } : r)
           if (r.ok && !d.id) {
             setD(EMPTY)
             setCodeTouched(false)
+            setModeTouched(false)
           }
-          if (r.ok && onClose) onClose()
+          if (r.ok && !r.warn && onClose) onClose()
         })
       }}
     >
@@ -171,24 +190,30 @@ function Editor({ draft, sites, siteUrl, shortDomain, onClose }: { draft: Draft;
         <fieldset className="flex flex-col gap-2 rounded-xl border border-border p-3">
           <legend className="px-1 text-xs font-semibold text-muted-foreground">Yönlendirme</legend>
           <label className="flex items-start gap-2 text-sm text-foreground">
-            <input type="radio" name={`mode-${d.id ?? 'new'}`} className="mt-1 size-4 accent-primary" checked={d.mode === 'follow'} onChange={() => set({ mode: 'follow' })} />
+            <input type="radio" name={`mode-${d.id ?? 'new'}`} className="mt-1 size-4 accent-primary" checked={mode === 'follow'} onChange={() => pickMode('follow')} />
             <span className="flex flex-col">
               <b>Güncel adrese aff koduyla yönlendir</b>
               <span className="text-xs leading-relaxed text-muted-foreground">
-                Linkteki yol ve aff kodun korunur, alan adı sponsorun güncel adresiyle değişir. Site adres değiştirince linkini yenilemen gerekmez.
-                {site ? ` Şu an: ${affHost || '...'} → güncel adres kullanılır.` : ''}
+                Sadece sponsorun kendi sitesindeki linkler için. Linkteki yol ve aff kodun korunur, alan adı sponsorun güncel adresiyle değişir. Site adres değiştirince linkini yenilemen gerekmez.
+                {site ? ` Şu an: ${affHost || '...'} → ${site.host || 'güncel adres girilmemiş'}.` : ''}
               </span>
             </span>
           </label>
           <label className="flex items-start gap-2 text-sm text-foreground">
-            <input type="radio" name={`mode-${d.id ?? 'new'}`} className="mt-1 size-4 accent-primary" checked={d.mode === 'fixed'} onChange={() => set({ mode: 'fixed' })} />
+            <input type="radio" name={`mode-${d.id ?? 'new'}`} className="mt-1 size-4 accent-primary" checked={mode === 'fixed'} onChange={() => pickMode('fixed')} />
             <span className="flex flex-col">
               <b>Linki aynen kullan</b>
               <span className="text-xs leading-relaxed text-muted-foreground">
                 Sponsorun linki kendi takip alan adındaysa (ör. track.sponsor.com, go.aff...) bunu seç. Link hiç değiştirilmeden açılır.
+                {fits === false ? ` Bu link sponsorun adresinde (${site?.host}) değil, o yüzden doğru seçenek bu.` : ''}
               </span>
             </span>
           </label>
+          {note ? (
+            <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive">
+              {note}
+            </p>
+          ) : null}
           <label className="mt-1 flex items-start gap-2 border-t border-border pt-2 text-sm text-foreground">
             <input type="checkbox" className="mt-1 size-4 accent-primary" checked={d.primary} onChange={(e) => set({ primary: e.target.checked })} />
             <span className="flex flex-col">
@@ -221,6 +246,8 @@ function LinkRow({ link, sites, siteUrl, shortDomain }: { link: AffLinkView; sit
   const [msg, setMsg] = useState<Msg>(null)
   const short = affShort(link.code, link.siteId !== null, siteUrl, shortDomain)
   const run = (fn: () => Promise<{ ok: boolean; message: string }>) => start(async () => setMsg(await fn()))
+  const affHost = hostOf(link.affUrl)
+  const swapped = link.mode === 'follow' && link.currentHost && affHost && !sameSite(affHost, link.currentHost) ? affHost : null
 
   if (editing) {
     return (
@@ -297,6 +324,11 @@ function LinkRow({ link, sites, siteUrl, shortDomain }: { link: AffLinkView; sit
           <b className="text-foreground">Şu an gidilen adres:</b> {link.target ?? 'Hesaplanamadı'}
           {link.mode === 'follow' && !link.currentHost ? ' (sponsorun güncel adresi girilmemiş, link aynen kullanılıyor)' : ''}
         </span>
+        {swapped ? (
+          <span role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 leading-relaxed text-destructive">
+            Alan adı değiştiriliyor: {swapped} → {link.currentHost}. Link sponsorun takip adresindeyse böyle açılmaz. “Hedefi kontrol et” ile dene; hata dönerse “Düzenle” → “Linki aynen kullan”.
+          </span>
+        ) : null}
         {link.prevUrl ? <span className="break-all">Önceki link: {link.prevUrl}</span> : null}
         {link.stats.sources.length ? (
           <span className="flex flex-wrap items-center gap-1.5 pt-1">

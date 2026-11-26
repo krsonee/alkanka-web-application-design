@@ -43,7 +43,7 @@ const STEPS: GuideStep[] = [
           <b>Güncel adrese aff koduyla yönlendir:</b> linkin yolu ve aff kodu korunur, sadece alan adı sponsorun güncel adresiyle değişir. Güncel adres “Giriş adresleri” bölümünden (yoksa Sponsorlar sekmesindeki giriş adresinden) gelir. Site kapanıp yeni adrese geçince sadece giriş adresini güncellemen yeter.
         </li>
         <li>
-          Link sponsorun takip alan adındaysa (ör. <span className={code}>track.sponsor.com</span>) <b>Linki aynen kullan</b> seç. Sponsor yeni link verirse <b>Düzenle / linki yenile</b> ile değiştir; kısa linkin aynı kalır, eski link kayıtta durur.
+          Link sponsorun takip alan adındaysa (ör. <span className={code}>track.sponsor.com</span>) <b>Linki aynen kullan</b> seç. Form bunu kendisi işaretler: linkin alan adı sponsorun adresiyle aynı değilse “Linki aynen kullan” seçili gelir ve böyle bir link “güncel adrese yönlendir” ile kaydedilmez. Kaydedince link bir kez denenir; “bulunamadı” dönerse kırmızı uyarı çıkar. Sponsor yeni link verirse <b>Düzenle / linki yenile</b> ile değiştir; kısa linkin aynı kalır, eski link kayıtta durur.
         </li>
         <li>
           <b>Git butonu</b> işaretli link, sitedeki o sponsorun tüm “Git” butonlarında kullanılır. Her satırda bugün, 7 gün, toplam, tekil kişi ve kaynak dağılımı görünür. <b>Hedefi kontrol et</b> linkin açılıp açılmadığını test eder.

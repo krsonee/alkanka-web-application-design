@@ -11,7 +11,7 @@ import { shortUrl } from '@/lib/links-shared'
 import { setContent } from '@/lib/content'
 import { cleanWagerBox, WAGER_BOX_KEY, type WagerBox } from '@/lib/wager-box'
 
-type Result = { ok: boolean; message: string }
+type Result = { ok: boolean; message: string; warn?: boolean }
 const denied: Result = { ok: false, message: 'Oturum süresi doldu, tekrar giriş yap.' }
 const fail = (error: unknown): Result => ({ ok: false, message: error instanceof Error ? error.message : 'İşlem tamamlanamadı.' })
 
@@ -44,6 +44,11 @@ export async function saveAffLinkAction(input: AffInput): Promise<Result> {
     await logPanel('growth', input.id ? 'Affiliate link güncellendi' : 'Affiliate link eklendi', r.code)
     const host = await getShortDomain().catch(() => '')
     const url = shortUrl({ kind: input.siteId === null ? 'dis' : 'sponsor', code: r.code, path: `/r/${r.code}`, clash: false }, siteBase(), host)
+    // Sponsors often block server addresses, so only a plain "not found" counts as a broken link.
+    const probe = await checkAffTarget(r.id).catch(() => null)
+    if (probe && (probe.status === 404 || probe.status === 410)) {
+      return { ok: true, warn: true, message: `Kaydedildi ama link açılmıyor: ${probe.target} adresi “bulunamadı” (${probe.status}) döndü. Linki ve yönlendirme seçeneğini kontrol et.` }
+    }
     return { ok: true, message: `Kaydedildi. Kısa link: ${url}` }
   } catch (error) {
     return fail(error)
