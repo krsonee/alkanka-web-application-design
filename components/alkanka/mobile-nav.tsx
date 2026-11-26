@@ -82,7 +82,7 @@ export function MobileNav() {
                 <span className={cn(pillClass, active && 'bg-primary/15')}>
                   <Icon className="size-5" aria-hidden="true" />
                   {item.tasks && openTasks > 0 && (
-                    <span className="absolute -top-1 right-0 flex min-w-[1.125rem] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold leading-[1.125rem] text-primary-foreground ring-2 ring-surface">
+                    <span className="absolute -right-2.5 -top-1.5 flex min-w-[1.125rem] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold leading-[1.125rem] text-primary-foreground ring-2 ring-surface">
                       {openTasks > 9 ? '9+' : openTasks}
                       <span className="sr-only"> açık görev</span>
                     </span>

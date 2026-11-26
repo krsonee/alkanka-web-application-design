@@ -8,8 +8,8 @@ export async function WeeklyWatchers() {
 
   return (
     <section aria-labelledby="tv-weekly-title" className="mx-auto mt-6 flex w-full max-w-3xl flex-col gap-3 rounded-xl border border-border bg-card p-4">
-      <div className="flex items-center justify-between gap-2">
-        <h2 id="tv-weekly-title" className="flex items-center gap-2 text-base font-bold text-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+        <h2 id="tv-weekly-title" className="flex items-center gap-2 whitespace-nowrap text-base font-bold text-foreground">
           <Trophy className="size-4 text-primary" aria-hidden="true" />
           Haftanın İzleyicisi
         </h2>

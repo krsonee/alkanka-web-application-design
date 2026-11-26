@@ -147,6 +147,12 @@ function GameCard({ game, settings }: { game: ArenaGame; settings: ArenaGameSett
         )}
         <PayoutExample game={game} stake={exampleStake(bets)} multiplier={Math.max(1, num(multiplier, settings.multiplier))} commission={Math.min(MAX_COMMISSION, Math.max(0, Math.round(num(commission, settings.commission))))} />
         <ImageField name={`${game}:image`} label="Kapak görseli (boş bırakırsan varsayılan görsel kullanılır)" defaultValue={settings.image ?? ''} uploadId={`arena-${game}`} compact />
+        <label className="flex items-start gap-2.5 text-xs leading-relaxed text-muted-foreground">
+          <input type="checkbox" name={`${game}:imageBare`} defaultChecked={settings.imageBare === true} className="mt-0.5 size-4 shrink-0 accent-primary" />
+          <span>
+            <span className="font-semibold text-foreground">Yüklediğim görselde yazı yok.</span> İşaretlersen oyun adını site görselin üstüne yazar. İşaretlemezsen görsel hazır afiş sayılır: kesilmeden gösterilir, üstüne yazı basılmaz.
+          </span>
+        </label>
         <p className="text-xs leading-relaxed text-muted-foreground">Oyuncu sayısı: {meta.players}</p>
       </div>
     </fieldset>

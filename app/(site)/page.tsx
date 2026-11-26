@@ -5,16 +5,16 @@ import { TopThree } from '@/components/alkanka/top-three'
 import { MembersOnly } from '@/components/alkanka/members-only'
 import { getSponsorAccess } from '@/lib/sponsor-access'
 import { GuestHero, MarketShowcase, MemberHub, type HubData } from '@/components/alkanka/home/home-hub'
-import { SLIDES, TELEGRAM_URL } from '@/components/alkanka/data'
-import { CUSTOM_SLIDES_KEY, readCustomSlides, readSlideOrder, SLIDE_ORDER_KEY, sortByOrder } from '@/lib/custom-slides'
-import { isScheduledLive } from '@/lib/schedule'
+import { TELEGRAM_URL } from '@/components/alkanka/data'
+import { liveSlides, MAX_HOME_SLIDES } from '@/lib/custom-slides'
+import { toHeroSlides } from '@/components/alkanka/home/v2/hero-slides'
 import type { Metadata } from 'next'
 import { jsonLd, pageMeta, SITE_NAME, SITE_URL } from '@/lib/seo'
 import { resolvedHomeSeo } from '@/lib/site-seo'
 import { getShare } from '@/lib/share'
-import { getAllContent, withoutEmpty, type SlideOverride } from '@/lib/content'
+import { getAllContent } from '@/lib/content'
 import { listPublicSponsors, pickFeatured } from '@/lib/sites'
-import { HIDDEN_KEY, readHidden, withoutHidden } from '@/lib/hidden-shared'
+import { HIDDEN_KEY, readHidden } from '@/lib/hidden-shared'
 import { getKpConfig, levelFor, readLeaderboard } from '@/lib/kanka-puan'
 import { getBalance, getMember, historySummary, SIGNUP_BONUS, type Member } from '@/lib/member'
 import { getSignupBonus } from '@/lib/site-texts'
@@ -53,8 +53,6 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 }
 export const dynamic = 'force-dynamic'
-
-const MAX_SLIDES = 3
 
 function SiteJsonLd({ telegram }: { telegram: string }) {
   const data = [
@@ -120,13 +118,9 @@ export default async function HomePage() {
   const access = await getSponsorAccess(member)
   const featured = pickFeatured(sponsors)
   const hidden = readHidden(content[HIDDEN_KEY])
-  const merged = withoutHidden(SLIDES, hidden, 'slide')
-    .map((s) => ({ ...s, ...withoutEmpty(content[`slide:${s.id}`] as SlideOverride | undefined) }))
-    .concat(withoutHidden(readCustomSlides(content[CUSTOM_SLIDES_KEY]), hidden, 'slide'))
-  const slides = sortByOrder(merged, readSlideOrder(content[SLIDE_ORDER_KEY]))
-    .filter((s) => isScheduledLive(s))
-    .slice(0, MAX_SLIDES)
-    .map((s) => (s.href === TELEGRAM_URL ? { ...s, href: telegramUrl } : s))
+  // One list, the panel's, feeds the slider in both designs.
+  const live = liveSlides(content, hidden.slide).map((s) => (s.href === TELEGRAM_URL ? { ...s, href: telegramUrl } : s))
+  const slides = live.slice(0, MAX_HOME_SLIDES)
 
   const myIndex = member ? ranking.findIndex((r) => r.userId === member.id) : -1
   const me = member && myIndex >= 0 ? { rank: myIndex + 1, points: ranking[myIndex].kp } : null
@@ -141,6 +135,7 @@ export default async function HomePage() {
     ])
     const weekly = weeklyRaw.map((r) => ({ userId: r.userId, name: r.name, points: r.kp }))
     const weeklyIndex = member ? weekly.findIndex((r) => r.userId === member.id) : -1
+    const heroSlides = toHeroSlides(live.filter((s) => s.inNewDesign).slice(0, MAX_HOME_SLIDES))
     return (
       <>
         <SiteJsonLd telegram={telegramUrl} />
@@ -148,6 +143,7 @@ export default async function HomePage() {
         {member && hub ? (
           <MemberHomeV2Page
             config={v2}
+            slides={heroSlides}
             name={hub.name}
             firstTime={hub.played === 0}
             balance={hub.balance}
@@ -162,7 +158,7 @@ export default async function HomePage() {
             tournaments={tournaments}
           />
         ) : (
-          <GuestHomeV2 config={v2} products={allProducts.filter((p) => p.active)} weekly={weekly} bonus={bonus} tournaments={tournaments} />
+          <GuestHomeV2 config={v2} slides={heroSlides} products={allProducts.filter((p) => p.active)} weekly={weekly} bonus={bonus} tournaments={tournaments} />
         )}
       </>
     )

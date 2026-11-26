@@ -5,6 +5,7 @@ import type { MiniGame, MiniStatus } from '@/app/actions/wallet'
 import type { HomeTournament } from '@/lib/home-events'
 import type { LeagueMatch } from '@/lib/predictions'
 import { HeroSlider } from './hero-slider'
+import type { HeroSlide } from './hero-slides'
 import { MarketTabs } from './market-tabs'
 import { StreakStrip } from './streak-strip'
 import { UpNext } from './up-next'
@@ -30,12 +31,14 @@ const MINI_BY_HREF: Record<string, MiniGame> = {
 
 export function GuestHomeV2({
   config,
+  slides,
   products,
   weekly,
   bonus,
   tournaments = [],
 }: {
   config: HomeV2Config
+  slides: HeroSlide[]
   products: MarketProduct[]
   weekly: Row[]
   bonus: number
@@ -45,7 +48,7 @@ export function GuestHomeV2({
   return (
     <div className="flex flex-col gap-10 max-sm:gap-8">
       <HeroSlider
-        slides={config.slides}
+        slides={slides}
         eyebrow={config.guestEyebrow}
         title={config.guestTitle}
         highlight={config.guestHighlight}
@@ -94,6 +97,7 @@ export function GuestHomeV2({
 
 export function MemberHomeV2Page({
   config,
+  slides,
   name,
   firstTime = false,
   balance,
@@ -108,6 +112,7 @@ export function MemberHomeV2Page({
   tournaments = [],
 }: {
   config: HomeV2Config
+  slides: HeroSlide[]
   name: string
   firstTime?: boolean
   balance: number
@@ -138,31 +143,43 @@ export function MemberHomeV2Page({
   const goal = byPrice.find((p) => p.price > balance) ?? null
   const picks = byPrice.filter((p) => p.price <= balance).slice(-3).reverse()
   const lastKey = config.primaryHref.match(/^\/oyunlar\/([\w-]+)/)?.[1] ?? null
+  const resume: MemberSlide[] = config.showResume
+    ? [
+        {
+          kind: 'text',
+          id: 'last',
+          label: lastKey ? (HOME_GAME_LABEL[lastKey] ?? 'Kaldığın yer') : 'Kaldığın yer',
+          thumb: lastKey ? `/images/games/${lastKey}.png` : config.heroImage,
+          image: config.heroImage,
+          eyebrow: config.eyebrow.replace('{ad}', name),
+          title: firstTime ? 'İlk masan seni bekliyor' : config.title,
+          pills: firstTime ? [] : config.pills,
+          primary: { label: firstTime ? 'İlk masanı aç' : config.primaryCta, href: config.primaryHref, play: true },
+          secondary: { label: config.secondaryCta, href: config.secondaryHref },
+        },
+      ]
+    : []
   const heroSlides: MemberSlide[] = [
-    {
-      id: 'last',
-      label: lastKey ? (HOME_GAME_LABEL[lastKey] ?? 'Kaldığın yer') : 'Kaldığın yer',
-      thumb: lastKey ? `/images/games/${lastKey}.png` : config.heroImage,
-      image: config.heroImage,
-      eyebrow: config.eyebrow.replace('{ad}', name),
-      title: firstTime ? 'İlk masan seni bekliyor' : config.title,
-      pills: firstTime ? [] : config.pills,
-      primary: firstTime ? { label: 'İlk masanı aç', href: config.primaryHref } : { label: config.primaryCta, href: config.primaryHref },
-      secondary: { label: config.secondaryCta, href: config.secondaryHref },
-    },
-    ...config.slides
-      .filter((key) => key !== lastKey)
-      .map((key) => ({
-        id: key,
-        label: HOME_GAME_LABEL[key] ?? key,
-        thumb: `/images/games/${key}.png`,
-        image: `/images/slides/${key}.png`,
-        eyebrow: 'Masalar açık',
-        title: `${HOME_GAME_LABEL[key] ?? key} masasına otur, KP topla`,
-        pills: [],
-        primary: { label: 'Masa aç', href: `/oyunlar/${key}?masa-ac=1` },
-        secondary: { label: 'Oyuna göz at', href: `/oyunlar/${key}` },
-      })),
+    ...resume,
+    ...slides
+      // The game the member is sent back to already leads the slider.
+      .filter((s) => !(resume.length && s.look === 'cover' && s.game === lastKey))
+      .map((s): MemberSlide => {
+        const shared = { id: s.id, label: s.label, thumb: s.thumb, image: s.image, mobileImage: s.mobileImage }
+        if (s.look === 'plain') return { ...shared, kind: 'banner', href: s.href, name: s.name }
+        if (s.look === 'cover' && s.game) {
+          return {
+            ...shared,
+            kind: 'text',
+            eyebrow: 'Masalar açık',
+            title: `${s.label} masasına otur, KP topla`,
+            pills: [],
+            primary: { label: 'Masa aç', href: `/oyunlar/${s.game}?masa-ac=1`, play: true },
+            secondary: { label: 'Oyuna göz at', href: `/oyunlar/${s.game}` },
+          }
+        }
+        return { ...shared, kind: 'text', eyebrow: s.eyebrow, title: s.title, description: s.description, pills: [], primary: { label: s.cta, href: s.href }, tracked: true }
+      }),
   ]
   const top = weekly.slice(0, 3)
   const me = weeklyRank && kp !== null ? { rank: weeklyRank, points: weekly.find((r) => r.userId === meId)?.points ?? 0 } : null

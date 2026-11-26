@@ -142,8 +142,19 @@ export type ArenaGameSettings = {
   multiplier: number
   commission: number
   image?: string
+  /** The uploaded cover is a plain picture with no lettering of its own, so the site prints the game name on it. */
+  imageBare?: boolean
 }
 export type ArenaSettings = Record<ArenaGame, ArenaGameSettings>
+
+/**
+ * A cover uploaded from the panel is treated as a finished poster: it usually carries its own logo, title and
+ * button, so it is shown whole and the site prints nothing on top of it. Returns that poster, or null when the
+ * game uses the built-in cover or the upload is marked as a plain picture.
+ */
+export function posterCover(settings: ArenaGameSettings): string | null {
+  return settings.image && !settings.imageBare ? settings.image : null
+}
 
 const base = { enabled: true, pvpEnabled: true, bets: [10, 25, 50, 100, 250, 500, 1000, 2500], commission: 10 }
 
@@ -293,6 +304,7 @@ export function mergeArena(saved: Partial<Record<string, Partial<ArenaGameSettin
       multiplier: typeof s.multiplier === 'number' && s.multiplier >= 1 ? s.multiplier : d.multiplier,
       commission: typeof s.commission === 'number' && s.commission >= 0 && s.commission <= 50 ? s.commission : d.commission,
       ...(typeof s.image === 'string' && /^(https:\/\/|\/)/.test(s.image) ? { image: s.image } : {}),
+      ...(s.imageBare === true ? { imageBare: true } : {}),
     }
   }
   return out

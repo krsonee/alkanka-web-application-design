@@ -95,7 +95,7 @@ export default async function BadgesPage() {
         image="/images/badges/hero-jako-rozet.png"
       />
 
-      <nav aria-label="Rozet bölümleri" className="sticky top-[calc(4rem+var(--tg-strip-h,0px))] z-20 -mx-4 -my-4 flex gap-2 overflow-x-auto bg-background/90 px-4 py-2 backdrop-blur no-scrollbar sm:mx-0 sm:rounded-full sm:border sm:border-border sm:px-2">
+      <nav aria-label="Rozet bölümleri" className="sticky top-[calc(3.5rem+var(--safe-top)+var(--tg-strip-h,0px))] z-20 -mx-4 -my-4 flex gap-2 overflow-x-auto bg-background px-4 py-2 no-scrollbar max-sm:flex-wrap max-sm:gap-1.5 max-sm:overflow-visible lg:top-[calc(0.5rem+var(--tg-strip-h,0px))] sm:mx-0 sm:rounded-full sm:border sm:border-border sm:px-2">
         {[
           { href: '#kazan', label: 'KP kazan' },
           ...groups.map((g) => ({ href: `#lig-${g.tier}`, label: TIER_NAMES[g.tier] })),
@@ -104,7 +104,7 @@ export default async function BadgesPage() {
           { href: '#gizli', label: 'Gizli' },
           { href: '#akis', label: 'Akış' },
         ].map((l) => (
-          <a key={l.href} href={l.href} className="shrink-0 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-bold text-foreground transition-colors hover:border-gold/50 hover:text-gold">
+          <a key={l.href} href={l.href} className="shrink-0 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-bold text-foreground transition-colors hover:border-gold/50 hover:text-gold max-sm:px-2.5 max-sm:py-1">
             {l.label}
           </a>
         ))}
@@ -181,14 +181,14 @@ export default async function BadgesPage() {
                   <SpecialEmblem icon={b.icon} tier={tier} size="lg" className="hidden sm:flex" />
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:gap-1">
                     <span className={cn('text-[10px] font-bold uppercase tracking-widest', TIER_TEXT[tier])}>{role?.label ?? TIER_NAMES[b.tier]}</span>
-                    <span className="truncate font-display text-sm font-bold leading-tight text-foreground sm:whitespace-normal sm:text-base">{b.name}</span>
+                    <span className="font-display text-sm font-bold leading-tight text-foreground text-pretty sm:text-base">{b.name}</span>
                     {b.bonus > 0 && <span className="font-display text-xs font-bold text-gold max-sm:hidden sm:text-sm">+{fmt(b.bonus)} KP</span>}
                   </div>
                   {b.bonus > 0 && (
                     <span className="shrink-0 self-start rounded-full bg-gold/15 px-2 py-0.5 font-display text-xs font-bold tabular-nums text-gold sm:hidden">+{fmt(b.bonus)} KP</span>
                   )}
                 </div>
-                <p className="line-clamp-2 text-pretty text-xs leading-relaxed text-muted-foreground sm:line-clamp-none">{b.description}</p>
+                <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{b.description}</p>
                 <div className="flex flex-wrap gap-1.5 text-[10px] font-bold">
                   <span className="rounded-full bg-background/70 px-2 py-0.5 text-foreground">{rarityLabel(rarity[b.id])}</span>
                   {(b.perkPct ?? 0) > 0 && <span className="rounded-full bg-gold/15 px-2 py-0.5 text-gold">Markette %{b.perkPct} indirim</span>}
@@ -200,7 +200,7 @@ export default async function BadgesPage() {
                 </div>
                 {b.auto && <p className="hidden text-[11px] text-muted-foreground sm:block">{AUTO_LABELS[b.auto]}</p>}
                 {showcase?.leaders[b.id] && (
-                  <p className="rounded-lg bg-background/70 px-2 py-1.5 text-[11px] leading-snug text-foreground max-sm:truncate">
+                  <p className="rounded-lg bg-background/70 px-2 py-1.5 text-[11px] leading-snug text-foreground text-pretty">
                     <span className="font-bold text-gold">Şu an önde:</span> {showcase.leaders[b.id].name} · {showcase.leaders[b.id].detail}
                   </p>
                 )}

@@ -7,10 +7,12 @@ export function Marquee({
   itemClassName,
   duration = 40,
   repeat = 2,
+  className,
 }: {
   children: React.ReactNode
   label: string
   itemClassName: string
+  className?: string
   duration?: number
   repeat?: number
 }) {
@@ -37,7 +39,7 @@ export function Marquee({
   )
 
   return (
-    <div className="group/marquee relative overflow-hidden py-1 [mask-image:linear-gradient(to_right,transparent,black_5%,black_95%,transparent)] motion-reduce:overflow-x-auto motion-reduce:no-scrollbar">
+    <div className={cn('group/marquee relative overflow-hidden py-1 [mask-image:linear-gradient(to_right,transparent,black_5%,black_95%,transparent)] motion-reduce:overflow-x-auto motion-reduce:no-scrollbar', className)}>
       <div
         className="flex w-max motion-safe:animate-[marquee_var(--marquee-duration)_linear_infinite] group-hover/marquee:[animation-play-state:paused] group-focus-within/marquee:[animation-play-state:paused]"
         style={{ '--marquee-duration': `${duration}s` } as React.CSSProperties}

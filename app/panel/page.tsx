@@ -16,7 +16,7 @@ import { getAmbientSettings } from '@/lib/ambient-tables'
 import { LEGAL_KEY, mergeLegal, type LegalOverrides } from '@/lib/legal-shared'
 import { HERO_PAGES, IMAGE_LIBRARY } from '@/lib/site-registry'
 import { SLIDES, TELEGRAM_URL } from '@/components/alkanka/data'
-import { CUSTOM_SLIDES_KEY, readCustomSlides, readSlideOrder, SLIDE_ORDER_KEY, sortByOrder } from '@/lib/custom-slides'
+import { listSlides } from '@/lib/custom-slides'
 import { readPromoTotals } from '@/lib/promo-stats'
 import { LoginForm, LogoutButton } from '@/components/panel/login-form'
 import { ContentEditor } from '@/components/panel/content-editor'
@@ -693,34 +693,26 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
     section(ctx, 'slide', 'Slider', async () => {
       const stats = await readPromoTotals('slide')
       const design = homeV2.home
-      const slides = sortByOrder(
-        SLIDES.map((s) => ({
+      // The same list, in the same order and with the same look, that the home page reads.
+      const slides = listSlides(content).map((s) => {
+        const ready = SLIDES.find((x) => x.id === s.id)
+        const text = { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image, href: s.href }
+        return {
           kind: 'slide' as const,
           id: s.id,
-          label: s.eyebrow,
+          label: (ready ? ready.eyebrow : s.eyebrow || s.title) || 'Adsız afiş',
           path: '/',
-          defaults: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image },
-          saved: (content[`slide:${s.id}`] as SlideOverride | undefined) ?? null,
-        })).concat(
-          readCustomSlides(content[CUSTOM_SLIDES_KEY]).map((s) => ({
-            kind: 'slide' as const,
-            id: s.id,
-            label: s.eyebrow || s.title,
-            path: '/',
-            custom: true,
-            defaults: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image, href: s.href },
-            saved: { eyebrow: s.eyebrow, title: s.title, description: s.description, cta: s.cta, image: s.image, mobileImage: s.mobileImage, href: s.href, startAt: s.startAt, endAt: s.endAt },
-          })),
-        ),
-        readSlideOrder(content[SLIDE_ORDER_KEY]),
-      ).map((s) => ({ ...s, hidden: isHidden(hiddenMap, 'slide', s.id), stats: stats[s.id] ?? { views: 0, clicks: 0 } }))
-      const manager = (
-        <SlideManager
-          slides={slides}
-          library={IMAGE_LIBRARY}
-          audience={{ members: !(design.fullPage && design.enabled), guests: !(design.fullPage && design.guestEnabled) }}
-        />
-      )
+          custom: s.custom,
+          plain: s.look === 'plain',
+          game: !!s.game,
+          inNewDesign: s.inNewDesign,
+          defaults: ready ? { eyebrow: ready.eyebrow, title: ready.title, description: ready.description, cta: ready.cta, image: ready.image, href: ready.href } : text,
+          saved: ready ? ((content[`slide:${s.id}`] as SlideOverride | undefined) ?? null) : { ...text, mobileImage: s.mobileImage, startAt: s.startAt, endAt: s.endAt },
+          hidden: isHidden(hiddenMap, 'slide', s.id),
+          stats: stats[s.id] ?? { views: 0, clicks: 0 },
+        }
+      })
+      const manager = <SlideManager slides={slides} library={IMAGE_LIBRARY} newDesign={design.fullPage && (design.enabled || design.guestEnabled)} />
       if (!can('logo')) return manager
       return <TelegramTabs label="Ana sayfa" legend={false} tabs={[{ id: 'slider', label: `Slider (${slides.length})`, content: manager }, ...homeTabs()]} />
     }),

@@ -6,7 +6,6 @@ export type PromoCard = { title: string; text: string; cta: string; href: string
 export type RailLink = { label: string; href: string; icon: string }
 
 export const HOME_GAME_KEYS = ['okey', 'okey101', 'tavla', 'batak', 'pisti', 'papaz', 'bilardo', 'monopoly'] as const
-export const SLIDE_GAME_KEYS = ['okey', 'tavla', 'batak', 'pisti', 'okey101', 'bilardo'] as const
 export const HOME_GAME_LABEL: Record<string, string> = {
   okey: 'Okey',
   okey101: '101 Okey',
@@ -29,7 +28,6 @@ export type HomeV2Config = {
   rail: RailLink[]
   guestText: string
   guestHighlight: string
-  slides: string[]
   showNewbie: boolean
   newbieTitle: string
   newbieText: string
@@ -47,6 +45,8 @@ export type HomeV2Config = {
   promos: PromoCard[]
   lbTitle: string
   lbNote: string
+  /** The member slider's own first slide, which sends the member back to a table. The rest come from the slider list. */
+  showResume: boolean
   eyebrow: string
   title: string
   heroImage: string
@@ -135,7 +135,6 @@ export const DEFAULT_HOME_V2: HomeV2Settings = {
     ],
     guestText: "Okey, tavla, batak, pişti ve daha fazlası. Her oyunda Kanka Coin topla, Market'te rozete, ekstra haklara ve sponsor bonuslarına çevir.",
     guestHighlight: 'kankalarınla',
-    slides: [...SLIDE_GAME_KEYS],
     showNewbie: true,
     newbieTitle: 'Siteye yeni misin?',
     newbieText: 'Kısa tur, sitenin her bölümünü adım adım gösterir. Üst bardaki pusula butonundan da açabilirsin.',
@@ -163,6 +162,7 @@ export const DEFAULT_HOME_V2: HomeV2Settings = {
     ],
     lbTitle: 'Haftalık sıralama',
     lbNote: 'Pazartesi sıfırlanır',
+    showResume: true,
     eyebrow: 'Hoş geldin, {ad}',
     title: 'Okey masan seni bekliyor',
     heroImage: '/images/slides/okey.png',
@@ -243,6 +243,8 @@ export function mergeHomeV2(saved: unknown): HomeV2Settings {
         .filter((r) => r.label)
     : d.home.rail
   const marketCount = typeof h.marketCount === 'number' ? Math.min(12, Math.max(2, Math.round(h.marketCount))) : d.home.marketCount
+  const eyebrow = str(h.eyebrow, d.home.eyebrow, 60)
+  const title = str(h.title, d.home.title, 90)
   return {
     home: {
       enabled: bool(h.enabled, d.home.enabled),
@@ -251,7 +253,6 @@ export function mergeHomeV2(saved: unknown): HomeV2Settings {
       rail,
       guestText: str(h.guestText, d.home.guestText, 300),
       guestHighlight: str(h.guestHighlight, d.home.guestHighlight, 40),
-      slides: keys(h.slides, SLIDE_GAME_KEYS, d.home.slides),
       showNewbie: bool(h.showNewbie, d.home.showNewbie),
       newbieTitle: str(h.newbieTitle, d.home.newbieTitle, 60),
       newbieText: str(h.newbieText, d.home.newbieText, 200),
@@ -269,9 +270,11 @@ export function mergeHomeV2(saved: unknown): HomeV2Settings {
       promos,
       lbTitle: str(h.lbTitle, d.home.lbTitle, 40),
       lbNote: str(h.lbNote, d.home.lbNote, 40),
-      eyebrow: str(h.eyebrow, d.home.eyebrow, 60),
-      title: str(h.title, d.home.title, 90),
-      heroImage: str(h.heroImage, d.home.heroImage, 500),
+      // Saved before this switch existed: a slide whose heading was emptied on purpose was meant to be off.
+      showResume: bool(h.showResume, Boolean(eyebrow.trim() || title.trim())),
+      eyebrow,
+      title,
+      heroImage: str(h.heroImage, d.home.heroImage, 500) || d.home.heroImage,
       primaryCta: str(h.primaryCta, d.home.primaryCta, 30),
       primaryHref: str(h.primaryHref, d.home.primaryHref, 200),
       secondaryCta: str(h.secondaryCta, d.home.secondaryCta, 30),

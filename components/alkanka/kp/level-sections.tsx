@@ -103,7 +103,7 @@ function TierBlock({
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
           aria-controls={panelId}
-          className={cn('relative flex w-full items-center overflow-hidden text-left transition-[height]', expanded ? 'h-20 sm:h-28 md:h-32' : 'h-16 sm:h-20')}
+          className={cn('relative flex w-full items-center overflow-hidden text-left transition-[height]', expanded ? 'h-20 max-sm:h-auto max-sm:min-h-20 max-sm:py-2.5 sm:h-28 md:h-32' : 'h-16 max-sm:h-auto max-sm:min-h-16 max-sm:py-2.5 sm:h-20')}
         >
           <Image src={`/images/badges/tier-${g.tier}.png`} alt="" fill sizes="(min-width: 1024px) 900px, 100vw" className={cn('object-cover object-right', upcoming && 'grayscale-[60%]')} />
           <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-background via-background/80 to-transparent" />
@@ -116,7 +116,7 @@ function TierBlock({
                 </span>
               )}
             </span>
-            <span className="truncate text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground max-sm:leading-snug max-sm:text-pretty sm:truncate">
               {upcoming ? (
                 <>
                   <Lock className="mr-1 inline size-3 align-[-2px]" aria-hidden />
@@ -172,7 +172,8 @@ function TierBlock({
                   <LevelEmblem level={i + 1} size="lg" locked={locked && !isNext} className="hidden lg:flex" />
                 </span>
                 <span className="flex w-full min-w-0 flex-col">
-                  <span className={cn('truncate text-xs font-bold sm:text-sm', locked && !isNext ? 'text-muted-foreground' : 'text-foreground')}>{l.name}</span>
+                  {/* Phones: five badges share a row, so a two-word name breaks onto a second line instead of ending in dots. */}
+                  <span className={cn('text-xs font-bold max-sm:flex max-sm:min-h-[1.75rem] max-sm:items-center max-sm:justify-center max-sm:text-[11px] max-sm:leading-[0.875rem] max-sm:text-balance sm:truncate sm:text-sm', locked && !isNext ? 'text-muted-foreground' : 'text-foreground')}>{l.name}</span>
                   <span className="hidden truncate text-[11px] text-muted-foreground sm:block">{l.badge}</span>
                 </span>
                 {isNext ? (

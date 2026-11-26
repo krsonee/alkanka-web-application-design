@@ -56,7 +56,7 @@ function StatusBadge({ match }: { match: Match }) {
   }
   if (match.state === 'post') {
     return (
-      <span className="block truncate rounded-md bg-muted px-2 py-1 text-center text-xs font-bold text-muted-foreground">
+      <span className="block rounded-md bg-muted px-2 py-1 text-center text-xs font-bold text-muted-foreground max-sm:px-1 max-sm:text-[10px] max-sm:leading-tight max-sm:[overflow-wrap:anywhere] sm:truncate">
         {!match.status || /^sonu/i.test(match.status) ? 'MS' : match.status}
       </span>
     )
@@ -188,7 +188,7 @@ function MatchRow({ match, sport }: { match: Match; sport: SportSlug }) {
               homeWin ? 'font-bold' : 'font-medium',
             )}
           >
-            <span className="truncate text-right text-foreground max-sm:text-left">{match.home.name}</span>
+            <span className="min-w-0 text-right text-foreground max-sm:text-left max-sm:leading-snug max-sm:[overflow-wrap:anywhere] sm:truncate">{match.home.name}</span>
             <TeamCrest src={match.home.logo} />
           </span>
           <span
@@ -202,7 +202,7 @@ function MatchRow({ match, sport }: { match: Match; sport: SportSlug }) {
           </span>
           <span className={cn('flex min-w-0 items-center gap-2 text-sm max-sm:col-start-1 max-sm:row-start-2', awayWin ? 'font-bold' : 'font-medium')}>
             <TeamCrest src={match.away.logo} />
-            <span className="truncate text-foreground">{match.away.name}</span>
+            <span className="min-w-0 text-foreground max-sm:leading-snug max-sm:[overflow-wrap:anywhere] sm:truncate">{match.away.name}</span>
           </span>
         </span>
         <ChevronDown
@@ -850,7 +850,7 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
               aria-selected={tab === key}
               onClick={() => setTab(key)}
               className={cn(
-                'flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border-2 px-4 text-sm font-bold transition-colors md:flex-none',
+                'flex h-12 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl border-2 px-4 text-sm font-bold transition-colors max-sm:gap-1.5 max-sm:px-2 md:flex-none',
                 tab === key
                   ? 'border-primary bg-primary text-primary-foreground shadow-md'
                   : 'tab-attention border-primary/60 bg-card text-foreground hover:bg-muted',
@@ -858,7 +858,7 @@ export function KankaTvBoard({ initialBoard, initialChannels }: { initialBoard: 
             >
               <TabIcon className="size-4 shrink-0" aria-hidden="true" />
               {label}
-              {tab !== key && <ChevronRight className="size-4 shrink-0 text-primary" aria-hidden="true" />}
+              {tab !== key && <ChevronRight className="size-4 shrink-0 text-primary max-sm:hidden" aria-hidden="true" />}
             </button>
           ))}
         </div>

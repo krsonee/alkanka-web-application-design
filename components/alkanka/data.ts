@@ -102,6 +102,8 @@ export type Slide = {
   image: string
   /** Shown instead of `image` below the `sm` breakpoint, where the slide is taller than it is wide. */
   mobileImage?: string
+  /** A banner that carries its own words: shown whole and clean, nothing is written or shaded over it. */
+  plain?: boolean
   chips?: string[]
   startAt?: string
   endAt?: string

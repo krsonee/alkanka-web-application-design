@@ -106,6 +106,7 @@ export async function saveArenaSettings(_: ActionState, form: FormData): Promise
         multiplier: Math.round(multiplier * 100) / 100,
         commission,
         ...(image ? { image } : {}),
+        ...(image && form.get(`${g}:imageBare`) === 'on' ? { imageBare: true } : {}),
       }
     }
     const winRate = Math.round(Number(form.get('house:winRate') ?? 40))

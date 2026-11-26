@@ -127,7 +127,7 @@ export function PageHero({
             <span aria-hidden="true" className={cn('h-1 w-14 rounded-full max-sm:hidden', t.bar)} />
             <p
               className={cn(
-                'max-w-xl text-sm leading-relaxed text-pretty [text-shadow:0_1px_8px_oklch(0_0_0/0.85)] max-sm:max-w-[34ch] max-sm:line-clamp-3 max-sm:text-foreground/80 sm:pt-1 sm:font-medium sm:text-foreground/90',
+                'max-w-xl text-sm leading-relaxed text-pretty [text-shadow:0_1px_8px_oklch(0_0_0/0.85)] max-sm:max-w-[36ch] max-sm:text-foreground/80 sm:pt-1 sm:font-medium sm:text-foreground/90',
                 compact ? 'sm:line-clamp-2' : 'sm:text-base',
               )}
             >

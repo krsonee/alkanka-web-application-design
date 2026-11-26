@@ -2,15 +2,14 @@
 
 import { useId, useState, useTransition, type FormEvent, type ReactNode } from 'react'
 import Image from 'next/image'
-import { CalendarClock, Copy, ExternalLink, Eye, Loader2, MousePointerClick, Pencil, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
+import { CalendarClock, Copy, ExternalLink, Eye, ImageIcon, Loader2, MousePointerClick, Pencil, Plus, RotateCcw, Save, Trash2, Type } from 'lucide-react'
 import { createSlide, duplicateSlide, reorderSlides, resetHero, resetSlide, saveHero, saveSlide, type ActionState } from '@/app/panel/actions'
 import { askConfirm, notify } from '@/components/panel/confirm-dialog'
 import { HideButton } from '@/components/panel/hide-button'
 import { ImageField } from '@/components/panel/image-field'
 import { SideSheet } from '@/components/panel/side-sheet'
 import { SortableList, useOrder } from '@/components/panel/sortable-list'
-import { useSiblingTabs } from '@/components/panel/telegram-tabs'
-import { MAX_CUSTOM_SLIDES } from '@/lib/custom-slides'
+import { MAX_CUSTOM_SLIDES, MAX_HOME_SLIDES } from '@/lib/custom-slides'
 import { formatLocal, scheduleState } from '@/lib/schedule'
 import { JAKO_POSES } from '@/lib/site-registry'
 import { cn } from '@/lib/utils'
@@ -38,10 +37,14 @@ export type EditorItem = {
   saved: Fields | null
   hidden?: boolean
   custom?: boolean
+  /** The slide shows its picture alone: nothing is written or shaded over it. */
+  plain?: boolean
+  /** A ready-made game slide; with no words of its own it takes the page's cover copy. */
+  game?: boolean
+  /** False for a ready-made promo slide that has never been saved: the new home design leaves it out. */
+  inNewDesign?: boolean
   stats?: { views: number; clicks: number }
 }
-
-export type SlideAudience = { members: boolean; guests: boolean }
 
 const LIMITS = { eyebrow: 40, title: 90, description: 280, cta: 30, speech: 160 } as const
 const SPEECH_FITS = 80
@@ -74,14 +77,16 @@ const NEW_SLIDE: EditorItem = {
   label: 'Yeni slayt',
   path: '/',
   custom: true,
-  defaults: { image: '/images/banner-wheel.png', cta: 'İncele' },
+  plain: true,
+  inNewDesign: true,
+  defaults: { cta: 'İncele', href: '/' },
   saved: null,
 }
 
 const rowButton = 'flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-40'
 const input = 'w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary'
 
-const titleOf = (item: EditorItem) => item.saved?.title || item.defaults.title || item.label
+const titleOf = (item: EditorItem) => item.saved?.title || item.defaults.title || item.label || 'Adsız afiş'
 const imageOf = (item: EditorItem) => item.saved?.image || item.defaults.image || '/placeholder.svg'
 
 function Thumb({ src }: { src: string }) {
@@ -93,9 +98,10 @@ function Thumb({ src }: { src: string }) {
   )
 }
 
-function Chip({ tone = 'muted', children }: { tone?: 'muted' | 'primary' | 'danger'; children: ReactNode }) {
+function Chip({ tone = 'muted', title, children }: { tone?: 'muted' | 'primary' | 'danger'; title?: string; children: ReactNode }) {
   return (
     <span
+      title={title}
       className={cn(
         'flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold',
         tone === 'primary' ? 'bg-primary/15 text-primary' : tone === 'danger' ? 'bg-destructive/15 text-destructive' : 'bg-secondary text-muted-foreground',
@@ -118,23 +124,18 @@ function ScheduleChip({ startAt, endAt }: { startAt?: string; endAt?: string }) 
   )
 }
 
-function audienceText({ members, guests }: SlideAudience) {
-  if (members && guests) return null
-  if (!members && !guests) return 'Yeni ana sayfa tasarımı açık: bu slaytlar şu an sitede görünmüyor.'
-  return `Yeni ana sayfa tasarımı ${members ? 'misafirlere' : 'üyelere'} açık: bu slaytları şu an sadece ${members ? 'üyeler' : 'misafirler'} görüyor.`
-}
+const OFF_IN_NEW_DESIGN = 'Bu hazır slayt yeni ana sayfa tasarımında dönmüyor. Açıp Kaydet\'e basınca dönmeye başlar.'
 
-export function SlideManager({ slides, library, audience }: { slides: EditorItem[]; library: string[]; audience: SlideAudience }) {
+/** `newDesign`: the new home design is on for members or guests, so the ready-made promo slides need saving once to join it. */
+export function SlideManager({ slides, library, newDesign }: { slides: EditorItem[]; library: string[]; newDesign: boolean }) {
   const order = useOrder(slides, (slide) => slide.id)
   const [sorting, startSort] = useTransition()
   const [busy, startBusy] = useTransition()
   const [editing, setEditing] = useState<string | null>(null)
-  const tabs = useSiblingTabs()
   const customCount = slides.filter((slide) => slide.custom).length
   const full = customCount >= MAX_CUSTOM_SLIDES
   const open = editing === '' ? NEW_SLIDE : slides.find((slide) => slide.id === editing)
-  const note = audienceText(audience)
-  const layoutTab = tabs?.tabs.some((tab) => tab.id === 'layout')
+  const off = (slide: EditorItem) => newDesign && slide.inNewDesign === false
 
   function move(ids: string[]) {
     order.set(ids)
@@ -168,7 +169,9 @@ export function SlideManager({ slides, library, audience }: { slides: EditorItem
           <h2 className="text-sm font-semibold text-foreground">
             Slaytlar <span className="font-normal text-muted-foreground">{`· ${slides.length}`}</span>
           </h2>
-          <p className="text-xs leading-relaxed text-muted-foreground text-pretty">Sırayı tutamaçtan sürükleyerek değiştir; bıraktığın an kaydedilir.</p>
+          <p className="text-xs leading-relaxed text-muted-foreground text-pretty">
+            Ana sayfanın en üstündeki slider bu listeyi sırayla döndürür. Kendi afişini eklemek için &quot;Yeni slayt&quot;a bas. Sırayı tutamaçtan sürükle; bıraktığın an kaydedilir.
+          </p>
         </div>
         <button
           type="button"
@@ -181,20 +184,10 @@ export function SlideManager({ slides, library, audience }: { slides: EditorItem
           Yeni slayt
         </button>
       </div>
-      {note && (
+      {slides.length > MAX_HOME_SLIDES && (
         <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
           <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
-          <span className="min-w-0">
-            {note}
-            {layoutTab && (
-              <>
-                {' '}
-                <button type="button" onClick={() => tabs?.open('layout')} className="font-semibold text-primary hover:underline">
-                  Ana sayfa düzenini aç
-                </button>
-              </>
-            )}
-          </span>
+          {`Sitede en fazla ${MAX_HOME_SLIDES} slayt döner: gizli olmayan ilk ${MAX_HOME_SLIDES} slayt. Fazlasını göstermek için üsttekilerden birini gizle.`}
         </p>
       )}
       <SortableList
@@ -208,7 +201,8 @@ export function SlideManager({ slides, library, audience }: { slides: EditorItem
       >
         {(slide, handle, i) => {
           const ctr = slide.stats && slide.stats.views > 0 ? (slide.stats.clicks / slide.stats.views) * 100 : null
-          const sub = [slide.saved?.eyebrow || slide.defaults.eyebrow, slide.custom ? slide.saved?.href : null].filter(Boolean).join(' · ')
+          const link = slide.saved?.href || (slide.custom ? null : slide.defaults.href)
+          const sub = [slide.plain ? null : slide.saved?.eyebrow || slide.defaults.eyebrow, slide.custom || slide.plain ? link : null].filter(Boolean).join(' · ')
           return (
             <div data-find={`slide-${slide.id}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 p-1.5 pr-2.5">
               {handle}
@@ -217,7 +211,7 @@ export function SlideManager({ slides, library, audience }: { slides: EditorItem
                 type="button"
                 onClick={() => setEditing(slide.id)}
                 aria-label={`${titleOf(slide)} slaytını düzenle`}
-                className={cn('flex min-w-0 flex-1 basis-56 items-center gap-3 rounded-md p-1 text-left hover:bg-secondary/60', slide.hidden && 'opacity-60')}
+                className={cn('flex min-w-0 flex-1 basis-56 items-center gap-3 rounded-md p-1 text-left hover:bg-secondary/60', (slide.hidden || off(slide)) && 'opacity-60')}
               >
                 <Thumb src={imageOf(slide)} />
                 <span className="flex min-w-0 flex-1 flex-col">
@@ -226,6 +220,13 @@ export function SlideManager({ slides, library, audience }: { slides: EditorItem
                 </span>
               </button>
               <div className="flex flex-wrap items-center gap-1.5">
+                {slide.plain && (
+                  <Chip tone="primary" title="Görselin üstüne yazı yazılmaz, karartılmaz.">
+                    <ImageIcon className="size-3" aria-hidden="true" />
+                    Sadece görsel
+                  </Chip>
+                )}
+                {off(slide) && <Chip title={OFF_IN_NEW_DESIGN}>Yeni tasarımda kapalı</Chip>}
                 {slide.hidden && <Chip>Gizli</Chip>}
                 <ScheduleChip startAt={slide.saved?.startAt} endAt={slide.saved?.endAt} />
               </div>
@@ -271,7 +272,7 @@ export function SlideManager({ slides, library, audience }: { slides: EditorItem
           )
         }}
       </SortableList>
-      {open && <ItemEditor key={open.id || 'new'} item={open} library={library} onDone={() => setEditing(null)} />}
+      {open && <ItemEditor key={open.id || 'new'} item={open} library={library} off={off(open)} onDone={() => setEditing(null)} />}
     </div>
   )
 }
@@ -322,7 +323,7 @@ export function HeroManager({ heroes, library }: { heroes: EditorItem[]; library
   )
 }
 
-type Draft = Required<Fields>
+type Draft = Required<Fields> & { plain: boolean }
 
 function draftOf(item: EditorItem): Draft {
   const saved = item.saved ?? {}
@@ -338,31 +339,117 @@ function draftOf(item: EditorItem): Draft {
     href: saved.href ?? (item.custom ? '/' : ''),
     startAt: saved.startAt ?? '',
     endAt: saved.endAt ?? '',
+    plain: item.plain === true,
   }
 }
 
-function ItemEditor({ item, library, onDone }: { item: EditorItem; library: string[]; onDone: () => void }) {
+const MODES = [
+  {
+    plain: true,
+    icon: ImageIcon,
+    label: 'Sadece görsel',
+    text: 'Yazısı ve düğmesi içinde olan hazır afişler için. Üstüne hiçbir şey yazılmaz, karartılmaz; görselin tamamı tıklanır.',
+  },
+  {
+    plain: false,
+    icon: Type,
+    label: 'Görsel + yazı',
+    text: 'Düz bir fotoğraf için. Başlığı, açıklamayı ve düğmeyi site görselin soluna kendisi yazar.',
+  },
+] as const
+
+type Shown = { eyebrow: string; title: string; description: string; cta: string }
+
+/**
+ * What the slide will look like on the home page, on a wide screen and on a phone. A banner is drawn the way
+ * the site draws it: whole, with the leftover edge filled by a soft copy of itself. The small boxes mark where
+ * the slider's own buttons sit, so the banner's words can be kept clear of them.
+ */
+function SlidePreview({ plain, image, mobileImage, shown }: { plain: boolean; image: string; mobileImage: string; shown: Shown }) {
+  const frame = (src: string, phone: boolean) => (
+    <div className={cn('relative overflow-hidden rounded-xl border border-border bg-secondary', phone ? 'aspect-[5/4]' : 'aspect-[12/5]')}>
+      {src ? (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element -- preview of an image from any https host set in the panel */}
+          {plain && <img src={src} alt="" aria-hidden="true" className="absolute inset-0 size-full scale-125 object-cover opacity-45 blur-xl" />}
+          {/* eslint-disable-next-line @next/next/no-img-element -- preview of an image from any https host set in the panel */}
+          <img src={src} alt="" className={cn('absolute inset-0 size-full', plain ? cn('object-contain', phone && mobileImage ? 'object-center' : 'object-top') : 'object-cover')} />
+        </>
+      ) : (
+        <span className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
+          <ImageIcon className="size-5" aria-hidden="true" />
+          {!phone && 'Görsel ekleyince burada görünür'}
+        </span>
+      )}
+      {!plain && (
+        <>
+          <div className={cn('absolute inset-0', phone ? 'bg-gradient-to-t from-background via-background/40 to-transparent' : 'bg-gradient-to-r from-background/95 via-background/60 to-transparent')} />
+          <div className={cn('absolute inset-y-0 left-0 flex flex-col justify-end gap-1', phone ? 'w-full p-2' : 'w-2/3 p-4 pb-8')}>
+            {shown.eyebrow && <span className={cn('truncate font-bold uppercase tracking-wider text-primary', phone ? 'text-[9px]' : 'text-xs')}>{shown.eyebrow}</span>}
+            <span className={cn('line-clamp-2 shrink-0 text-balance font-display font-bold leading-tight text-foreground', phone ? 'text-xs' : 'text-lg')}>{shown.title || 'Başlık burada görünür'}</span>
+            {!phone && shown.description && <span className="line-clamp-2 shrink-0 text-xs leading-relaxed text-foreground/80">{shown.description}</span>}
+            {!phone && shown.cta && <span className="mt-1 w-fit rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground">{shown.cta}</span>}
+          </div>
+        </>
+      )}
+      {!phone && src && (
+        <span aria-hidden="true" className="absolute bottom-2 left-3 flex gap-1">
+          {[0, 1, 2].map((n) => (
+            <span key={n} className={cn('h-2.5 w-9 rounded border bg-background/70', n === 0 ? 'border-primary/70' : 'border-border')} />
+          ))}
+        </span>
+      )}
+    </div>
+  )
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-end gap-3">
+        <figure className="flex min-w-0 flex-1 flex-col gap-1.5">
+          {frame(image, false)}
+          <figcaption className="text-xs text-muted-foreground">Masaüstü</figcaption>
+        </figure>
+        <figure className="flex w-28 shrink-0 flex-col gap-1.5 sm:w-36">
+          {frame(mobileImage || image, true)}
+          <figcaption className="text-xs text-muted-foreground">{plain ? 'Dar kutu, telefon' : 'Telefon'}</figcaption>
+        </figure>
+      </div>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        {plain
+          ? 'Sitede böyle görünür: görsel kesilmez, tamamı gösterilir. Sol alttaki küçük kutular slayt düğmelerinin yeridir.'
+          : 'Sitede böyle görünür: görsel kutuyu dolduracak kadar büyütülür, kenarları kesilebilir; solu yazı için karartılır.'}
+      </p>
+    </div>
+  )
+}
+
+function ItemEditor({ item, library, off = false, onDone }: { item: EditorItem; library: string[]; off?: boolean; onDone: () => void }) {
   const isSlide = item.kind === 'slide'
   const isNew = isSlide && !item.id
   const formId = useId()
   const [v, setV] = useState<Draft>(() => draftOf(item))
+  const [opened] = useState(() => JSON.stringify(draftOf(item)))
   const [error, setError] = useState('')
   const [pending, start] = useTransition()
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setV((prev) => ({ ...prev, [key]: value }))
   const shown = (key: 'eyebrow' | 'title' | 'description' | 'cta' | 'speech') => v[key] || item.defaults[key] || ''
-  const preview = v.image || item.defaults.image || '/placeholder.svg'
+  const image = v.image || item.defaults.image || ''
   const changed = !!item.saved && Object.values(item.saved).some(Boolean)
+  const plain = isSlide && v.plain
+  const dirty = JSON.stringify(v) !== opened
+  const typed = Boolean(v.eyebrow || v.title || v.description || v.cta)
 
   function payload() {
     const form = new FormData()
     form.set(isSlide ? 'id' : 'slug', item.id)
-    for (const [key, value] of Object.entries(v)) form.set(key, value)
+    for (const [key, value] of Object.entries(v)) form.set(key, typeof value === 'boolean' ? (value ? '1' : '0') : value)
     return form
   }
 
   function submit(event: FormEvent) {
     event.preventDefault()
     setError('')
+    if (isSlide && plain && !image) return setError('Önce görseli ekle: "Sadece görsel" slaytında sitede görünen tek şey görseldir.')
+    if (isSlide && !plain && item.custom && !v.title.trim()) return setError('Başlığı yaz ya da üstten "Sadece görsel"i seç.')
     start(async () => {
       const result = await (isNew ? createSlide : isSlide ? saveSlide : saveHero)({}, payload())
       if (!result.ok) {
@@ -390,7 +477,6 @@ function ItemEditor({ item, library, onDone }: { item: EditorItem; library: stri
   }
 
   async function fill(preset: (typeof SLIDE_PRESETS)[number]) {
-    const typed = v.eyebrow || v.title || v.description || v.cta
     if (typed && !(await askConfirm(`"${preset.label}" yazıları mevcut metnin yerine geçsin mi?`))) return
     setV((prev) => ({ ...prev, eyebrow: preset.eyebrow, title: preset.title, description: preset.description, cta: preset.cta }))
   }
@@ -407,6 +493,12 @@ function ItemEditor({ item, library, onDone }: { item: EditorItem; library: stri
             {pending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
             {isNew ? 'Slaytı ekle' : 'Kaydet'}
           </button>
+          {dirty && !pending && (
+            <span role="status" className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+              <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
+              {isNew ? 'Henüz eklenmedi' : 'Kaydedilmedi'}
+            </span>
+          )}
           {!isNew && (item.custom || changed) && (
             <button
               type="button"
@@ -435,21 +527,94 @@ function ItemEditor({ item, library, onDone }: { item: EditorItem; library: stri
         </>
       }
     >
-      <form id={formId} data-no-guard onSubmit={submit} className="flex flex-col gap-4">
-        <div className="relative aspect-video overflow-hidden rounded-xl border border-border bg-secondary sm:aspect-[16/6]">
-          <Image src={preview} alt="" fill sizes="720px" className="object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/50 to-transparent" />
-          <div className="absolute inset-y-0 left-0 flex w-3/4 flex-col justify-end gap-1 p-4">
-            {shown('eyebrow') && <span className="truncate text-xs font-bold uppercase tracking-wider text-primary">{shown('eyebrow')}</span>}
-            <span className="line-clamp-2 shrink-0 text-balance font-display text-lg font-bold leading-tight text-foreground">{shown('title') || 'Başlık burada görünür'}</span>
-            {shown('description') && <span className="line-clamp-2 shrink-0 text-xs leading-relaxed text-foreground/80">{shown('description')}</span>}
-            {isSlide && shown('cta') && <span className="mt-1 w-fit rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground">{shown('cta')}</span>}
-            {!isSlide && shown('speech') && <span className="mt-1 w-fit max-w-full truncate rounded-lg bg-card/90 px-2.5 py-1 text-xs text-foreground">{`Jako: ${shown('speech')}`}</span>}
+      <form id={formId} data-no-guard noValidate onSubmit={submit} className="flex flex-col gap-4">
+        {isSlide ? (
+          <>
+            {off && <p className="rounded-lg border border-border bg-background p-3 text-xs leading-relaxed text-muted-foreground">{OFF_IN_NEW_DESIGN}</p>}
+            <fieldset className="flex flex-col gap-2">
+              <legend className="pb-1.5 text-xs font-semibold text-foreground">Bu slaytta ne görünsün?</legend>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {MODES.map((mode) => (
+                  <label
+                    key={mode.label}
+                    className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background p-3 has-[:checked]:border-primary has-[:checked]:bg-primary/10 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
+                  >
+                    <input type="radio" name="mode" value={mode.plain ? 'plain' : 'text'} checked={v.plain === mode.plain} onChange={() => set('plain', mode.plain)} className="sr-only" />
+                    <mode.icon className={cn('mt-0.5 size-4 shrink-0', v.plain === mode.plain ? 'text-primary' : 'text-muted-foreground')} aria-hidden="true" />
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className="text-sm font-semibold text-foreground">{mode.label}</span>
+                      <span className="text-xs leading-relaxed text-muted-foreground">{mode.text}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <SlidePreview
+              plain={plain}
+              image={image}
+              mobileImage={v.mobileImage}
+              shown={{ eyebrow: shown('eyebrow'), title: shown('title'), description: shown('description'), cta: shown('cta') }}
+            />
+          </>
+        ) : (
+          <div className="relative aspect-video overflow-hidden rounded-xl border border-border bg-secondary sm:aspect-[16/6]">
+            <Image src={image || '/placeholder.svg'} alt="" fill sizes="720px" className="object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/50 to-transparent" />
+            <div className="absolute inset-y-0 left-0 flex w-3/4 flex-col justify-end gap-1 p-4">
+              {shown('eyebrow') && <span className="truncate text-xs font-bold uppercase tracking-wider text-primary">{shown('eyebrow')}</span>}
+              <span className="line-clamp-2 shrink-0 text-balance font-display text-lg font-bold leading-tight text-foreground">{shown('title') || 'Başlık burada görünür'}</span>
+              {shown('description') && <span className="line-clamp-2 shrink-0 text-xs leading-relaxed text-foreground/80">{shown('description')}</span>}
+              {shown('speech') && <span className="mt-1 w-fit max-w-full truncate rounded-lg bg-card/90 px-2.5 py-1 text-xs text-foreground">{`Jako: ${shown('speech')}`}</span>}
+            </div>
+            <span className="absolute right-2 top-2 rounded bg-background/80 px-1.5 py-0.5 text-xs text-muted-foreground backdrop-blur">Önizleme</span>
           </div>
-          <span className="absolute right-2 top-2 rounded bg-background/80 px-1.5 py-0.5 text-xs text-muted-foreground backdrop-blur">Önizleme</span>
-        </div>
+        )}
+
+        <ImageField
+          label="Görsel"
+          value={v.image}
+          onChange={(next) => set('image', next)}
+          library={library}
+          uploadId={isSlide ? 'slide' : 'hero'}
+          placeholder={item.defaults.image ? 'Hazır görsel kullanılıyor' : 'https://… veya /images/…'}
+          hint={
+            !isSlide
+              ? 'Bilgisayardan yükle, galeriden seç ya da link yapıştır. Önerilen boyut 1600×500.'
+              : plain
+                ? 'Bilgisayardan yükle, galeriden seç ya da link yapıştır. Önerilen ölçü 1600×680 (yatay). Başka ölçü de olur: görsel kesilmez. Yükledikten sonra alttaki düğmeyle kaydetmeyi unutma.'
+                : 'Bilgisayardan yükle, galeriden seç ya da link yapıştır. Önerilen ölçü 1600×680. Yazı sol tarafa geleceği için görselin önemli kısmı sağda olsun.'
+          }
+        />
 
         {isSlide && (
+          <ImageField
+            label={plain ? 'Dar kutu ve telefon görseli (isteğe bağlı)' : 'Telefon görseli (isteğe bağlı)'}
+            value={v.mobileImage}
+            onChange={(mobileImage) => set('mobileImage', mobileImage)}
+            library={library}
+            uploadId="slide-mobile"
+            placeholder="Boşsa telefonda da üstteki görsel kullanılır"
+            previewClassName="aspect-[5/4] w-40"
+            hint={
+              plain
+                ? 'Telefonda ve masaüstünde sohbet paneli açıkken slayt kutusu kareye yakındır; bu görsel o kutuda kullanılır. Önerilen ölçü 1000×800. Boş bırakırsan geniş afiş o kutuda küçülerek tam gösterilir, altı ve üstü boş kalır.'
+                : 'Telefonda slayt kutusu kareye yakındır; geniş görselin sağı ve solu kesilir. Önerilen ölçü 1000×800.'
+            }
+          />
+        )}
+
+        {plain && (
+          <Text
+            label="Afişin adı (isteğe bağlı)"
+            value={v.title}
+            onChange={(title) => set('title', title)}
+            max={LIMITS.title}
+            placeholder={item.defaults.title || 'Örnek: Market kampanyası'}
+            hint="Görselin üstüne yazılmaz. Slayt düğmesinde ve ekran okuyucularda bu ad okunur."
+          />
+        )}
+
+        {isSlide && !plain && (
           <div className="flex flex-col gap-2">
             <span className="text-xs font-semibold text-muted-foreground">Hazır metin şablonları</span>
             <div className="flex flex-wrap gap-1.5">
@@ -467,43 +632,33 @@ function ItemEditor({ item, library, onDone }: { item: EditorItem; library: stri
           </div>
         )}
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Text label="Üst etiket" value={v.eyebrow} onChange={(eyebrow) => set('eyebrow', eyebrow)} max={LIMITS.eyebrow} placeholder={item.defaults.eyebrow || 'Boş bırakılırsa gösterilmez'} />
-          {isSlide && <Text label="Buton yazısı" value={v.cta} onChange={(cta) => set('cta', cta)} max={LIMITS.cta} placeholder={item.defaults.cta} />}
-          <div className="sm:col-span-2">
-            <Text label="Başlık" value={v.title} onChange={(title) => set('title', title)} max={LIMITS.title} placeholder={item.defaults.title} required={!!item.custom} />
-          </div>
-          <div className="sm:col-span-2">
-            <Text label="Açıklama" value={v.description} onChange={(description) => set('description', description)} max={LIMITS.description} placeholder={item.defaults.description} multiline />
-          </div>
-          {item.custom && (
+        {!plain && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Text label="Üst etiket" value={v.eyebrow} onChange={(eyebrow) => set('eyebrow', eyebrow)} max={LIMITS.eyebrow} placeholder={item.defaults.eyebrow || 'Boş bırakılırsa gösterilmez'} />
+            {isSlide && <Text label="Buton yazısı" value={v.cta} onChange={(cta) => set('cta', cta)} max={LIMITS.cta} placeholder={item.defaults.cta} />}
             <div className="sm:col-span-2">
-              <Text label="Butonun gideceği link" value={v.href} onChange={(href) => set('href', href)} max={300} placeholder="/oyunlar/tavla veya https://…" />
+              <Text label="Başlık" value={v.title} onChange={(title) => set('title', title)} max={LIMITS.title} placeholder={item.defaults.title} />
             </div>
-          )}
-        </div>
-
-        <ImageField
-          label="Görsel"
-          value={v.image}
-          onChange={(image) => set('image', image)}
-          library={library}
-          uploadId={isSlide ? 'slide' : 'hero'}
-          placeholder="Hazır görsel kullanılıyor"
-          hint={`Bilgisayardan yükle, galeriden seç ya da link yapıştır. Önerilen boyut ${isSlide ? '1600×600' : '1600×500'}.`}
-        />
+            <div className="sm:col-span-2">
+              <Text label="Açıklama" value={v.description} onChange={(description) => set('description', description)} max={LIMITS.description} placeholder={item.defaults.description} multiline />
+            </div>
+            {item.game && !typed && (
+              <p className="text-xs leading-relaxed text-muted-foreground sm:col-span-2">
+                Yazı alanlarını boş bırakırsan bu oyun slaytı yeni ana sayfada sitenin hazır kapak yazısıyla görünür. Bir şey yazarsan senin yazdığın görünür.
+              </p>
+            )}
+          </div>
+        )}
 
         {isSlide ? (
           <>
-            <ImageField
-              label="Telefon görseli (isteğe bağlı)"
-              value={v.mobileImage}
-              onChange={(mobileImage) => set('mobileImage', mobileImage)}
-              library={library}
-              uploadId="slide-mobile"
-              placeholder="Boşsa telefonda da üstteki görsel kullanılır"
-              previewClassName="aspect-[5/4] w-40"
-              hint="Telefonda slayt kutusu kareye yakındır; geniş görselin sağı ve solu kesilir. Önerilen boyut 1000×800."
+            <Text
+              label={plain ? 'Görsele tıklayınca gidilecek link' : 'Butonun gideceği link'}
+              value={v.href}
+              onChange={(href) => set('href', href)}
+              max={300}
+              placeholder={item.defaults.href || '/oyunlar/tavla veya https://…'}
+              hint={item.custom ? 'Site içi sayfa için / ile başlat (örnek: /market), başka site için https:// ile.' : 'Boş bırakırsan hazır linke gider. Site içi sayfa için / ile başlat (örnek: /market), başka site için https:// ile.'}
             />
             <fieldset className="flex flex-col gap-2">
               <legend className="pb-1.5 text-xs font-semibold text-foreground">Yayın zamanı (isteğe bağlı)</legend>
@@ -566,7 +721,7 @@ function Text({
   max,
   placeholder,
   multiline,
-  required,
+  hint,
   warnAt,
   warning,
 }: {
@@ -576,7 +731,7 @@ function Text({
   max: number
   placeholder?: string
   multiline?: boolean
-  required?: boolean
+  hint?: string
   warnAt?: number
   warning?: string
 }) {
@@ -591,8 +746,9 @@ function Text({
       {multiline ? (
         <textarea value={value} onChange={(event) => onChange(event.target.value)} maxLength={max} placeholder={placeholder} rows={3} className={cn(input, 'resize-y font-normal leading-relaxed')} />
       ) : (
-        <input value={value} onChange={(event) => onChange(event.target.value)} maxLength={max} placeholder={placeholder} required={required} className={cn(input, 'font-normal')} />
+        <input value={value} onChange={(event) => onChange(event.target.value)} maxLength={max} placeholder={placeholder} className={cn(input, 'font-normal')} />
       )}
+      {hint && <span className="font-normal leading-relaxed text-muted-foreground">{hint}</span>}
       {over && warning && <span className="font-normal text-destructive">{warning}</span>}
     </label>
   )

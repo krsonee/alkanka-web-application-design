@@ -180,7 +180,7 @@ export function LookStudio({ initial }: { initial: LookState }) {
           </div>
 
           {focused && (
-            <aside aria-label="Seçili avatar" className="flex flex-col items-center gap-4 rounded-2xl border border-border bg-card p-5 lg:sticky lg:top-32 lg:self-start">
+            <aside aria-label="Seçili avatar" className="flex flex-col items-center gap-4 rounded-2xl border border-border bg-card p-5 lg:sticky lg:top-[calc(4rem+var(--tg-strip-h,0px))] lg:self-start">
               <div className="relative size-40 overflow-hidden rounded-full border-4 border-gold bg-secondary">
                 <Image src={focused.src} alt={focused.name} fill sizes="160px" className={cn('object-cover', focused.status === 'locked' && 'opacity-40 grayscale')} />
               </div>

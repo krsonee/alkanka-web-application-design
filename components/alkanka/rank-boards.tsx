@@ -355,8 +355,23 @@ function PrizeShowcase({ prizes, periodNoun }: { prizes: Prize[]; periodNoun: st
       <h2 id="odul-baslik" className="flex items-center gap-1.5 px-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">
         <Gift className="size-3.5 text-primary" aria-hidden /> {periodNoun} ödülleri
       </h2>
+      {prizes.length > 0 && (
+        <ul className="grid grid-cols-2 gap-2 sm:hidden">
+          {prizes.map((p) => (
+            <li key={p.id} className="flex items-start gap-2 rounded-xl border border-border bg-card p-2">
+              <SpecialEmblem icon={p.icon} tier={p.tier} size="sm" />
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-xs font-semibold leading-tight text-foreground text-pretty">{p.name}</span>
+                <span className="text-[11px] leading-snug text-muted-foreground text-pretty">{p.label}</span>
+                {p.bonus > 0 && <span className="text-[11px] font-bold text-primary tabular-nums">+{fmt(p.bonus)} KP</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
       {prizes.length ? (
         <Marquee
+          className="max-sm:hidden"
           label={`${periodNoun} ödülleri`}
           duration={Math.max(30, prizes.length * 9)}
           repeat={Math.max(2, Math.ceil(6 / prizes.length))}
@@ -616,7 +631,8 @@ function BoardRow({ row, unit, isMe, tip, sticky, move }: { row: Row; unit: stri
               {isMe && <span className="text-primary"> (sen)</span>}
             </span>
             <Pins pins={row.pins} />
-            {row.level ? <RankChip level={row.level} /> : tip ? <MemberRank userId={row.userId} /> : null}
+            {/* Phones: the emblem on the left already shows the level, so the chip gives its room to the name. */}
+            <span className="flex shrink-0 items-center max-sm:hidden">{row.level ? <RankChip level={row.level} /> : tip ? <MemberRank userId={row.userId} /> : null}</span>
             <MoveMark move={move} />
           </span>
           <span className="truncate text-[11px] text-muted-foreground">{row.detail}</span>

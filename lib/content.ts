@@ -86,6 +86,8 @@ export type SlideOverride = {
   cta?: string
   image?: string
   mobileImage?: string
+  href?: string
+  plain?: boolean
   startAt?: string
   endAt?: string
 }

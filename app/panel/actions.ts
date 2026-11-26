@@ -6,7 +6,7 @@ import { canPanel } from '@/lib/admin-auth'
 import type { PanelModule } from '@/lib/panel-modules'
 import { panelLogout } from '@/app/panel/auth-actions'
 import { deleteContent, getContent, setContent, type HeroOverride, type SlideOverride } from '@/lib/content'
-import { CUSTOM_SLIDES_KEY, MAX_CUSTOM_SLIDES, readCustomSlides, isSafeHref, readSlideOrder, SLIDE_ORDER_KEY, sortByOrder } from '@/lib/custom-slides'
+import { CUSTOM_SLIDES_KEY, MAX_CUSTOM_SLIDES, readCustomSlides, isSafeHref, readSlideOrder, resolveSlide, SLIDE_ORDER_KEY, sortByOrder, type SlideSaved } from '@/lib/custom-slides'
 import { cleanLocal, parseLocal } from '@/lib/schedule'
 import { HERO_PAGES, JAKO_POSES, isAllowedImage } from '@/lib/site-registry'
 import { SLIDES } from '@/components/alkanka/data'
@@ -30,6 +30,13 @@ function imageField(form: FormData, name = 'image', label = 'Görsel') {
   if (!value) return ''
   if (value.length > 500) throw new Error(`${label} adresi en fazla 500 karakter olabilir.`)
   if (!isAllowedImage(value)) throw new Error(`${label} /images/ ile ya da https:// ile başlamalı.`)
+  return value
+}
+
+/** Where a slide leads. Empty means "leave it as it is"; anything typed has to be a site path or an https address. */
+function slideHref(form: FormData) {
+  const value = String(form.get('href') ?? '').trim().slice(0, 300)
+  if (value && !isSafeHref(value)) throw new Error('Link / ile ya da https:// ile başlamalı.')
   return value
 }
 
@@ -173,15 +180,19 @@ export async function saveSlide(_: ActionState, form: FormData): Promise<ActionS
   try {
     await requireAdmin('slide')
     const id = String(form.get('id'))
+    // "Sadece görsel": a banner with its words in the picture. Nothing is written or shaded over it on the site.
+    const plain = form.get('plain') === '1'
     const value: SlideOverride = {
       eyebrow: field(form, 'eyebrow'),
       title: field(form, 'title'),
       description: field(form, 'description'),
       cta: field(form, 'cta'),
       image: imageField(form),
+      plain,
     }
     const mobileImage = imageField(form, 'mobileImage', 'Telefon görseli')
     if (mobileImage) value.mobileImage = mobileImage
+    const href = slideHref(form)
     const startAt = cleanLocal(form.get('startAt'))
     const endAt = cleanLocal(form.get('endAt'))
     if (startAt && endAt && parseLocal(endAt) <= parseLocal(startAt)) return { message: 'Bitiş tarihi başlangıçtan sonra olmalı.' }
@@ -191,9 +202,7 @@ export async function saveSlide(_: ActionState, form: FormData): Promise<ActionS
       const list = readCustomSlides(await getContent(CUSTOM_SLIDES_KEY))
       const current = list.find((s) => s.id === id)
       if (!current) return { message: 'Slayt bulunamadı.' }
-      const href = String(form.get('href') ?? '').trim().slice(0, 300) || '/'
-      if (!isSafeHref(href)) return { message: 'Link / ile ya da https:// ile başlamalı.' }
-      if (!value.title) return { message: 'Başlık boş olamaz.' }
+      if (!plain && !value.title) return { message: 'Görselin üstüne yazı seçiliyken başlık boş olamaz. Yazı istemiyorsan "Sadece görsel"i seç.' }
       const next = list.map((s) =>
         s.id === id
           ? {
@@ -204,7 +213,8 @@ export async function saveSlide(_: ActionState, form: FormData): Promise<ActionS
               cta: value.cta || 'İncele',
               image: value.image || s.image,
               mobileImage: mobileImage || undefined,
-              href,
+              plain,
+              href: href || '/',
               startAt: startAt || undefined,
               endAt: endAt || undefined,
             }
@@ -214,13 +224,16 @@ export async function saveSlide(_: ActionState, form: FormData): Promise<ActionS
       revalidatePath('/')
       revalidatePath('/panel')
       await logPanel('slide', 'Slayt kaydedildi', value.title || id)
-      return { ok: true, message: 'Kaydedildi.' }
+      return { ok: true, message: 'Kaydedildi. Ana sayfada görünür.' }
     }
-    if (!SLIDES.some((s) => s.id === id)) return { message: 'Slayt bulunamadı.' }
+    const ready = SLIDES.find((s) => s.id === id)
+    if (!ready) return { message: 'Slayt bulunamadı.' }
+    if (href && href !== ready.href) value.href = href
     await setContent(`slide:${id}`, value)
     revalidatePath('/')
+    revalidatePath('/panel')
     await logPanel('slide', 'Slayt kaydedildi', value.title || id)
-    return { ok: true, message: 'Kaydedildi.' }
+    return { ok: true, message: 'Kaydedildi. Ana sayfada görünür.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Kaydedilemedi.' }
   }
@@ -232,10 +245,12 @@ export async function createSlide(_: ActionState, form: FormData): Promise<Actio
     await requireAdmin('slide')
     const list = readCustomSlides(await getContent(CUSTOM_SLIDES_KEY))
     if (list.length >= MAX_CUSTOM_SLIDES) return { message: `En fazla ${MAX_CUSTOM_SLIDES} yeni slayt eklenebilir.` }
+    const plain = form.get('plain') === '1'
     const title = field(form, 'title')
-    if (!title) return { message: 'Başlık boş olamaz.' }
-    const href = String(form.get('href') ?? '').trim().slice(0, 300) || '/'
-    if (!isSafeHref(href)) return { message: 'Link / ile ya da https:// ile başlamalı.' }
+    const image = imageField(form)
+    if (plain && !image) return { message: 'Önce görseli ekle: "Sadece görsel" slaytında sitede görünen tek şey görseldir.' }
+    if (!plain && !title) return { message: 'Görselin üstüne yazı seçiliyken başlık boş olamaz. Yazı istemiyorsan "Sadece görsel"i seç.' }
+    const href = slideHref(form) || '/'
     const startAt = cleanLocal(form.get('startAt'))
     const endAt = cleanLocal(form.get('endAt'))
     if (startAt && endAt && parseLocal(endAt) <= parseLocal(startAt)) return { message: 'Bitiş tarihi başlangıçtan sonra olmalı.' }
@@ -250,7 +265,8 @@ export async function createSlide(_: ActionState, form: FormData): Promise<Actio
         description: field(form, 'description'),
         cta: field(form, 'cta') || 'İncele',
         href,
-        image: imageField(form) || '/images/banner-wheel.png',
+        image: image || '/images/banner-wheel.png',
+        plain,
         ...(mobileImage ? { mobileImage } : {}),
         ...(startAt ? { startAt } : {}),
         ...(endAt ? { endAt } : {}),
@@ -258,8 +274,8 @@ export async function createSlide(_: ActionState, form: FormData): Promise<Actio
     ])
     revalidatePath('/')
     revalidatePath('/panel')
-    await logPanel('slide', 'Slayt eklendi', title)
-    return { ok: true, message: 'Slayt eklendi, listenin sonunda.' }
+    await logPanel('slide', 'Slayt eklendi', title || 'afiş')
+    return { ok: true, message: 'Slayt eklendi, listenin sonunda. Ana sayfada görünür.' }
   } catch (e) {
     return { message: e instanceof Error ? e.message : 'Eklenemedi.' }
   }
@@ -296,18 +312,17 @@ export async function duplicateSlide(_: ActionState, form: FormData): Promise<Ac
     const list = readCustomSlides(await getContent(CUSTOM_SLIDES_KEY))
     if (list.length >= MAX_CUSTOM_SLIDES) return { message: `En fazla ${MAX_CUSTOM_SLIDES} yeni slayt eklenebilir.` }
     const builtIn = SLIDES.find((s) => s.id === id)
-    const source = builtIn
-      ? { ...builtIn, ...Object.fromEntries(Object.entries((await getContent(`slide:${id}`)) ?? {}).filter(([, v]) => v)) }
-      : list.find((s) => s.id === id)
+    const source = builtIn ? resolveSlide(builtIn, (await getContent(`slide:${id}`)) as SlideSaved | null) : list.find((s) => s.id === id)
     if (!source) return { message: 'Slayt bulunamadı.' }
     const copy = {
       id: `c-${Date.now().toString(36)}`,
       eyebrow: String(source.eyebrow ?? ''),
-      title: `${String(source.title ?? '')} (kopya)`.slice(0, 120),
+      title: `${String(source.title ?? '')} (kopya)`.trim().slice(0, 120),
       description: String(source.description ?? ''),
       cta: String(source.cta ?? 'İncele'),
       href: String(source.href ?? '/'),
       image: String(source.image ?? '/images/banner-wheel.png'),
+      plain: source.plain === true,
       ...(typeof source.mobileImage === 'string' && source.mobileImage ? { mobileImage: source.mobileImage } : {}),
     }
     await setContent(CUSTOM_SLIDES_KEY, [...list, copy])

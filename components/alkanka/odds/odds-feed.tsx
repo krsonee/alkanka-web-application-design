@@ -100,8 +100,9 @@ function OddCard({ odd }: { odd: SpecialOdd }) {
       </div>
 
       <div className="flex items-center gap-1.5 md:gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg bg-background px-2.5 py-1 md:flex-none md:gap-2 md:px-3 md:py-2">
-          {odd.market && <span className="truncate text-xs text-muted-foreground md:text-sm">{odd.market}</span>}
+        {/* Phones: the bet name gets its own line above the odds, so it is read whole instead of ending in dots. */}
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg bg-background px-2.5 py-1 max-md:flex-wrap max-md:gap-y-0.5 max-md:py-1.5 md:flex-none md:gap-2 md:px-3 md:py-2">
+          {odd.market && <span className="truncate text-xs text-muted-foreground max-md:basis-full max-md:whitespace-normal max-md:text-pretty md:text-sm">{odd.market}</span>}
           {odd.oldOdd != null && (
             <>
               <span className="text-xs text-muted-foreground line-through tabular-nums md:text-sm">{odd.oldOdd.toFixed(2)}</span>
@@ -260,14 +261,14 @@ export function OddsFeed({ initial, today, channelUrl }: { initial: DayData; tod
             </label>
           )}
         </div>
-        <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 md:mx-0 md:px-0" role="group" aria-label="Duruma göre filtrele">
+        <div className="flex gap-1.5 max-sm:grid max-sm:grid-cols-5 max-sm:gap-1 sm:-mx-4 sm:overflow-x-auto sm:px-4 md:mx-0 md:px-0" role="group" aria-label="Duruma göre filtrele">
           {FILTERS.map((f) => (
             <button
               key={f.id}
               type="button"
               aria-pressed={filter === f.id}
               onClick={() => setFilter(f.id)}
-              className={cn('shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors', filter === f.id ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:text-foreground')}
+              className={cn('shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors max-sm:px-0 max-sm:text-center', filter === f.id ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:text-foreground')}
             >
               {f.label}
             </button>

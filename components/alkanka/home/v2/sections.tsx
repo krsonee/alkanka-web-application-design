@@ -387,7 +387,7 @@ function untilLabel(nextAt: number) {
   const mins = Math.max(1, Math.ceil((nextAt - Date.now()) / 60_000))
   const h = Math.floor(mins / 60)
   const m = mins % 60
-  return h ? `${h} sa${m ? ` ${m} dk` : ''} sonra` : `${m} dk sonra`
+  return h ? `${h} sa${m ? ` ${m} dk` : ''}` : `${m} dk`
 }
 
 export function DailyGrid({ items }: { items: DailyState[] }) {
@@ -419,7 +419,11 @@ export function DailyGrid({ items }: { items: DailyState[] }) {
                   {nextAt !== null ? (
                     <>
                       <Clock className="size-3 text-muted-foreground" aria-hidden="true" />
-                      <span className="tabular-nums text-muted-foreground">{untilLabel(nextAt)}</span>
+                      {/* A third of a phone screen has no room for "sonra": the clock icon already says it. */}
+                      <span className="tabular-nums text-muted-foreground">
+                        {untilLabel(nextAt)}
+                        <span className="max-sm:sr-only"> sonra</span>
+                      </span>
                     </>
                   ) : (
                     <>
