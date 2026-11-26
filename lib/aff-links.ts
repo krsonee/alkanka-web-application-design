@@ -2,6 +2,8 @@ import 'server-only'
 import { rows, sql } from '@/lib/db'
 import { cleanSrc, getSiteLink, hashNetwork } from '@/lib/growth'
 import { listSites } from '@/lib/sites'
+import { followFault } from '@/lib/aff-target'
+import { assertPublicUrl } from '@/lib/public-address'
 
 /**
  * Sponsor-issued affiliate links behind our own short URL (/r/{code}).
@@ -93,6 +95,10 @@ async function currentAddress(siteId: number | null) {
   const site = (await listSites()).find((s) => s.id === siteId)
   if (!site) return null
   const link = site.slug ? await getSiteLink(site.slug).catch(() => null) : null
+  return sponsorAddress(site, link)
+}
+
+export function sponsorAddress(site: { entryUrl?: string | null; url?: string | null }, link: { url: string } | null | undefined) {
   const pick = [link?.url, site.entryUrl, site.url].map((v) => (v ?? '').trim()).find((v) => v && v !== '#')
   if (!pick) return null
   try {
@@ -193,6 +199,16 @@ export async function saveAffLink(input: AffInput) {
     if (!(await listSites()).some((s) => s.id === siteId)) throw new Error('Sponsor bulunamadı.')
   }
   if (mode === 'follow' && siteId === null) throw new Error('"Güncel adrese yönlendir" için bir sponsor seçmelisin.')
+  if (mode === 'follow') {
+    // A link saved while it sat on the sponsor's own domain stays valid after the sponsor moves, so an
+    // unchanged follow link is not checked against today's address again.
+    const before = input.id ? await rows(sql`SELECT aff_url, site_id, mode FROM aff_links WHERE id = ${input.id}`) : []
+    const unchanged = before[0]?.mode === 'follow' && String(before[0].aff_url) === affUrl && Number(before[0].site_id) === siteId
+    if (!unchanged) {
+      const fault = followFault(affUrl, (await currentAddress(siteId))?.host ?? null)
+      if (fault) throw new Error(fault)
+    }
+  }
   const primary = Boolean(input.primary) && siteId !== null
   const label = input.label.trim().slice(0, 80)
 
@@ -265,6 +281,7 @@ export async function checkAffTarget(id: number) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 6000)
   try {
+    await assertPublicUrl(target)
     const res = await fetch(target, { method: 'GET', redirect: 'manual', signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0 AlkankaLinkCheck' } })
     const location = res.headers.get('location')
     return { target, status: res.status, location }

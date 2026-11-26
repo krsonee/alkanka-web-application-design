@@ -100,7 +100,7 @@ import { MarketingGuide } from '@/components/panel/area-guides'
 import { getTracking, listCampaigns, listEarnings } from '@/lib/marketing'
 import { SocialManager } from '@/components/panel/social-manager'
 import { adminEntries, adminSocialAccounts, getSocialLinks, listSocialEvents, type SocialLinks } from '@/lib/social'
-import { affLinkViews } from '@/lib/aff-links'
+import { affLinkViews, sponsorAddress } from '@/lib/aff-links'
 import { getShortDomain, linkChoices, linkReport } from '@/lib/links'
 import { earningsBySite, type LinkReport, type SiteEarning } from '@/lib/links-shared'
 import { LinksTable } from '@/components/panel/links-table'
@@ -835,7 +835,7 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
           linksHref={linksHref}
           affLinks={affLinks}
           shortDomain={shortDomain}
-          affSites={allSites.map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active }))}
+          affSites={allSites.map((s) => ({ id: s.id, name: s.name, slug: s.slug, active: s.active, host: sponsorAddress(s, s.slug ? (links as Record<string, { url: string }>)[s.slug] : null)?.host ?? '' }))}
         />
       )
       const tabs = [
