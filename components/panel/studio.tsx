@@ -327,9 +327,18 @@ function Creator({
   // A banner picked from the list here comes before a picture brought over from the library.
   const animTarget = animating ?? fromLibrary
   const animPanel = useRef<HTMLDivElement>(null)
+  const revisePanel = useRef<HTMLDivElement>(null)
+  const errorNote = useRef<HTMLParagraphElement>(null)
+  // These panels open above the job list, so a button pressed on a card far down the list has to bring them into view.
   useEffect(() => {
-    if (fromLibrary) animPanel.current?.scrollIntoView({ block: 'center' })
-  }, [fromLibrary])
+    if (animTarget) animPanel.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [animTarget])
+  useEffect(() => {
+    if (revising) revisePanel.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [revising])
+  useEffect(() => {
+    if (error) errorNote.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [error])
   const [duration, setDuration] = useState<number>(6)
   const [gifSeconds, setGifSeconds] = useState<number>(GIF_DURATIONS[0])
   const [audio, setAudio] = useState(false)
@@ -710,17 +719,18 @@ function Creator({
           {running + videoRuns > 0 ? `Üretiliyor (${running + videoRuns})...` : `Üret · ~${usd(plannedCost)}`}
         </button>
         {overCap(plannedCost) ? <CapNote cost={plannedCost} left={figures ? left : null} /> : null}
-        {error ? (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        ) : null}
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
       </div>
 
       <div className="flex flex-col gap-4">
         <AreaHead name={areaName} count={Math.max(total.count, mine.length)} cost={total.cost} jobs={mine} kind={kind} onKind={setKind} />
+        {error ? (
+          <p ref={errorNote} role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm font-semibold leading-relaxed text-destructive">
+            {error}
+          </p>
+        ) : null}
         {revising ? (
-          <div className={card}>
+          <div ref={revisePanel} className={card}>
             <div className="flex items-center gap-2">
               <Wand2 className="size-5 text-primary" aria-hidden />
               <h3 className="font-display text-lg font-bold uppercase text-foreground">Revize et</h3>

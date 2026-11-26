@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
         error:
           known ??
           (fault === 'blocked'
-            ? 'Model bu görseli hareketlendirmeyi reddetti. Farklı bir görselle dene.'
+            ? 'Video modeli bu görseli hareketlendirmeyi reddetti (sağlayıcının içerik denetimi). Sebep çoğunlukla görseldeki gerçek kişi ya da ünlü yüzüdür (futbolcu gibi); tekrar denemek sonucu değiştirmez. Aynı görsel için "Işık efektli GIF · ücretsiz" düğmesi model kullanmadan çalışır, "Hareketli banner" sekmesi de bu görselle GIF kurar.'
             : telegram && /sticker|dönüştürücü/i.test(message)
               ? message
               : 'Hareketlendirme başarısız oldu, tekrar dene.'),

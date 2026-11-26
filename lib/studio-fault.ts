@@ -4,7 +4,7 @@
  */
 export type StudioFault = 'funds' | 'blocked' | 'busy' | 'slow' | null
 
-type Link = { message?: unknown; statusCode?: unknown; type?: unknown; cause?: unknown }
+type Link = { message?: unknown; statusCode?: unknown; type?: unknown; name?: unknown; responseBody?: unknown; cause?: unknown }
 
 /** The gateway wraps the provider's answer, so the telling detail is often one or two causes deep. */
 function chain(error: unknown): Link[] {
@@ -19,11 +19,13 @@ function chain(error: unknown): Link[] {
 
 export function studioFault(error: unknown): StudioFault {
   const links = chain(error)
-  const text = links.map((l) => `${String(l.message ?? '')} ${String(l.type ?? '')}`).join(' ')
+  // The provider's own words can sit in the raw answer only ("rejected by provider content moderation").
+  const raw = (l: Link) => (typeof l.responseBody === 'string' ? l.responseBody.slice(0, 600) : '')
+  const text = links.map((l) => `${String(l.message ?? '')} ${String(l.type ?? '')} ${String(l.name ?? '')} ${raw(l)}`).join(' ')
   const codes = links.map((l) => Number(l.statusCode)).filter(Number.isFinite)
 
   if (codes.includes(402) || /insufficient[_ ](funds|balance|credit)|minimum balance|top up your credits/i.test(text)) return 'funds'
-  if (/safety|policy|blocked|refus/i.test(text)) return 'blocked'
+  if (/safety|policy|blocked|refus|moderat|rejected by provider/i.test(text)) return 'blocked'
   if (codes.includes(429) || /rate[_ ]?limit|too many requests|overloaded/i.test(text)) return 'busy'
   // Only the gateway's own answer counts: the converter has timeouts of its own that mean something else.
   if (codes.includes(504) || codes.includes(408) || /gateway time-?out/i.test(text)) return 'slow'

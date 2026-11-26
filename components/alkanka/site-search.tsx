@@ -17,8 +17,22 @@ const GAMES: [string, string][] = [
 
 export type SearchSponsor = { id: string; name: string; welcome: string }
 
+/** Where a menu address is only a redirect, the search goes to the page that really holds the content: tickets live under campaigns. */
+const DIRECT: Record<string, string> = { etkinlikler: '/kampanyalar' }
+
+/** Pages with no row of their own in the side menu. */
+const MORE_PAGES: Result[] = [
+  { id: 'x-profil', label: 'Profil', hint: 'Sayfa', href: '/profil' },
+  { id: 'x-gecmis', label: 'Oyun geçmişi', hint: 'Sayfa', href: '/profil?sekme=gecmis' },
+  { id: 'x-bonuslar', label: 'Bonuslar', hint: 'Sayfa', href: '/bonuslar' },
+  { id: 'x-rehber', label: 'Rehber', hint: 'Sayfa', href: '/rehber' },
+  { id: 'x-sampiyonlar', label: 'Şampiyonlar', hint: 'Sayfa', href: '/sampiyonlar' },
+]
+
+const PAGES: Result[] = [...NAV_ITEMS.map((n) => ({ id: `p-${n.id}`, label: n.label, hint: 'Sayfa', href: DIRECT[n.id] ?? n.href })), ...MORE_PAGES]
+
 const STATIC_INDEX: Result[] = [
-  ...NAV_ITEMS.map((n) => ({ id: `p-${n.id}`, label: n.label, hint: 'Sayfa', href: n.href })),
+  ...PAGES,
   ...GAMES.map(([id, label]) => ({ id: `g-${id}`, label, hint: 'Oyun', href: `/oyunlar/${id}` })),
 ]
 
@@ -28,9 +42,9 @@ const normalize = (v: string) =>
 export function SiteSearch({ sponsors = [] }: { sponsors?: SearchSponsor[] }) {
   const INDEX = useMemo<Result[]>(
     () => [
-      ...STATIC_INDEX.slice(0, NAV_ITEMS.length),
+      ...STATIC_INDEX.slice(0, PAGES.length),
       ...sponsors.map((s) => ({ id: `s-${s.id}`, label: s.name, hint: s.welcome ? `Sponsor · ${s.welcome}` : 'Sponsor', href: `/siteler/${s.id}` })),
-      ...STATIC_INDEX.slice(NAV_ITEMS.length),
+      ...STATIC_INDEX.slice(PAGES.length),
     ],
     [sponsors],
   )
