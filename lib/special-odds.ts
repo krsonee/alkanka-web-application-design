@@ -3,14 +3,13 @@ import { randomBytes, timingSafeEqual } from 'node:crypto'
 import type { SQL } from 'drizzle-orm'
 import { rows, sql } from '@/lib/db'
 import {
-  KEYCAP_DIGIT,
   MediaError,
   botToken,
   callBot,
   checkedRules,
   deliver,
   ensureTables,
-  entitiesToCleanText,
+  entitiesToPostText,
   fetchChannel,
   normalizeChat,
   postButtons,
@@ -989,31 +988,6 @@ async function albumParts(m: MediaMessage): Promise<AlbumPart[]> {
   return r.map((p) => ({ type: p.kind === 'video' || p.kind === 'document' ? p.kind : 'photo', fileId: p.file_id }))
 }
 
-type Entity = { type: string; offset: number; length: number }
-
-/**
- * Blanks out rows of premium emoji (two or more in a row: a word or banner drawn with them). A bot
- * cannot send them, so only stand-in faces would be left. Lengths are kept so the other entities still fit.
- */
-function blankEmojiRuns(text: string, entities: Entity[]) {
-  const emoji = entities.filter((e) => e.type === 'custom_emoji').sort((a, b) => a.offset - b.offset)
-  const chars = [...text.split('')]
-  let run: Entity[] = []
-  // Numbers are written with keycap emoji ("1⃣5⃣"): those rows are text and stay.
-  const isNumber = (e: Entity) => /^\d/.test(text.slice(e.offset, e.offset + e.length))
-  const flush = () => {
-    if (run.length > 1 && !run.some(isNumber)) for (const e of run) chars.fill(' ', e.offset, e.offset + e.length)
-    run = []
-  }
-  for (const e of emoji) {
-    const last = run[run.length - 1]
-    if (last && text.slice(last.offset + last.length, e.offset).trim() !== '') flush()
-    run.push(e)
-  }
-  flush()
-  return chars.join('')
-}
-
 function toIncoming(m: MediaMessage, edited: boolean, album: AlbumPart[]): Incoming {
   const entities = m.entities ?? m.caption_entities ?? []
   const raw = m.text ?? m.caption ?? ''
@@ -1021,11 +995,7 @@ function toIncoming(m: MediaMessage, edited: boolean, album: AlbumPart[]): Incom
     chatId: String(m.chat.id),
     messageId: m.message_id,
     replyTo: m.reply_to_message?.message_id ?? null,
-    text: entitiesToCleanText(blankEmojiRuns(raw, entities), entities)
-      .replace(KEYCAP_DIGIT, '$1')
-      .replace(/[ \t]{2,}/g, ' ')
-      .replace(/[ \t]+\n/g, '\n')
-      .trim(),
+    text: entitiesToPostText(raw, entities),
     photo: m.photo?.length ? m.photo[m.photo.length - 1].file_id : null,
     edited,
     hasMedia: Boolean(m.photo?.length || m.video || m.animation || m.document),

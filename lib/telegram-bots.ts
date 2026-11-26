@@ -1,6 +1,6 @@
 import 'server-only'
 import { rows, sql } from '@/lib/db'
-import { botToken, callBot, dropAutoFed, ensureTables, entitiesToCleanHtml, entitiesToCleanText, normalizeChat, stripTags } from '@/lib/telegram-mirror'
+import { botToken, callBot, dropAutoFed, ensureTables, entitiesToCleanHtml, entitiesToPostText, normalizeChat, stripTags } from '@/lib/telegram-mirror'
 import { FILTER_PRESETS } from '@/lib/telegram-filters'
 import { decodeEntities } from '@/lib/html-entities'
 import type { TgMessage, TgUpdate } from '@/lib/telegram-chat'
@@ -417,7 +417,7 @@ async function sponsorOf(chatId: string) {
  * formatting, and as plain text when even that would need cutting (a cut can break a tag).
  */
 function composeShare(m: TgMessage, body: string, look: ShareLook, limit: number): { text: string; parse_mode?: 'HTML' } {
-  const words = stripTrigger(entitiesToCleanText(m.text ?? m.caption ?? '', m.entities ?? m.caption_entities ?? []), look.trigger)
+  const words = stripTrigger(entitiesToPostText(m.text ?? m.caption ?? '', m.entities ?? m.caption_entities ?? []), look.trigger)
   const post = campaignPost({ siteName: look.sponsor, tagLine: look.sponsor ? 'Sponsorumuz' : '', footer: look.append, body: words })
   if (post.plain.length <= limit) return { text: post.html, parse_mode: 'HTML' }
   const tail = look.append ? `\n\n${escapeHtml(look.append)}` : ''

@@ -237,7 +237,8 @@ export function entitiesToCleanHtml(text: string, entities: { type: string; offs
     out += escapeHtml(text[i])
   }
   return dropDeadLinks(out)
-    .replace(/<(b|i|u|s|code|pre|blockquote|tg-spoiler)>\s*<\/\1>/g, '')
+    // Sources format their blank lines too ("<b>\n\n</b>"): the tag goes, the line breaks stay.
+    .replace(/<(b|i|u|s|code|pre|blockquote|tg-spoiler)>(\s*)<\/\1>/g, '$2')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
@@ -246,6 +247,42 @@ export function entitiesToCleanHtml(text: string, entities: { type: string; offs
 /** Plain-text version of entitiesToCleanHtml for bots that post without formatting. */
 export function entitiesToCleanText(text: string, entities: { type: string; offset: number; length: number }[] = []) {
   return stripTags(entitiesToCleanHtml(text, entities)).trim()
+}
+
+type EmojiEntity = { type: string; offset: number; length: number }
+
+/**
+ * Blanks out rows of premium emoji (two or more in a row: a word or banner drawn with them). A bot
+ * cannot send them, so only stand-in faces would be left. Lengths are kept so the other entities still fit.
+ */
+export function blankEmojiRuns(text: string, entities: EmojiEntity[] = []) {
+  const emoji = entities.filter((e) => e.type === 'custom_emoji').sort((a, b) => a.offset - b.offset)
+  const chars = [...text.split('')]
+  let run: EmojiEntity[] = []
+  // Numbers are written with keycap emoji ("1⃣5⃣"): those rows are text and stay.
+  const isNumber = (e: EmojiEntity) => /^\d/.test(text.slice(e.offset, e.offset + e.length))
+  const flush = () => {
+    if (run.length > 1 && !run.some(isNumber)) for (const e of run) chars.fill(' ', e.offset, e.offset + e.length)
+    run = []
+  }
+  for (const e of emoji) {
+    const last = run[run.length - 1]
+    // A row ends with its line: the sign closing a headline and the bullet opening the next line are not a banner.
+    const between = last ? text.slice(last.offset + last.length, e.offset) : ''
+    if (last && (between.trim() !== '' || between.includes('\n'))) flush()
+    run.push(e)
+  }
+  flush()
+  return chars.join('')
+}
+
+/** The words of a post taken from another channel, ready for our own layout: no premium emoji rows, digits as digits. */
+export function entitiesToPostText(text: string, entities: EmojiEntity[] = []) {
+  return entitiesToCleanText(blankEmojiRuns(text, entities), entities)
+    .replace(KEYCAP_DIGIT, '$1')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .trim()
 }
 
 // Two or more premium emoji in a row: a word or banner drawn with them. Without the premium pack only stand-in faces are left.
