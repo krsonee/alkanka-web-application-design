@@ -727,6 +727,7 @@ async function countProgress(userId: string, task: TaskRecord, since: string, me
       const win = task.kind === 'game_win'
       const arena = await count(sql`SELECT count(*) AS n FROM game_history WHERE user_id = ${userId} AND created_at >= ${since}
         AND mode NOT IN ('odul', 'harcama', 'admin') AND result <> 'refund'
+        AND to_jsonb(game_history) ->> 'quit' IS DISTINCT FROM 'true'
         AND (${win}::boolean IS FALSE OR result = 'win')
         AND (${games}::text IS NULL OR game IN (SELECT jsonb_array_elements_text(${games}::jsonb)))`)
       // Çember / Kara Delik / Survival rounds only reach game_history as prize rows, so count joined rounds directly.
@@ -766,6 +767,7 @@ async function countProgress(userId: string, task: TaskRecord, since: string, me
     case 'games_distinct':
       return count(sql`SELECT count(DISTINCT game) AS n FROM game_history WHERE user_id = ${userId} AND created_at >= ${since}
         AND mode NOT IN ('odul', 'harcama', 'admin') AND result <> 'refund' AND game <> 'cember' AND game <> 'turnuva'
+        AND to_jsonb(game_history) ->> 'quit' IS DISTINCT FROM 'true'
         AND (${games}::text IS NULL OR game IN (SELECT jsonb_array_elements_text(${games}::jsonb)))`)
     case 'invite_active':
       return count(sql`SELECT count(*) AS n FROM referrals r WHERE r.referrer_id = ${userId} AND r.created_at >= ${since}

@@ -5,9 +5,9 @@ import { Headphones, HeadphoneOff, Loader2, Mic, MicOff, PhoneOff, Users } from 
 import { cn } from '@/lib/utils'
 import { usePoints } from '../points-context'
 
-type Peer = { id: string; name: string; canSpeak: boolean; muted: boolean }
+type Peer = { id: string; name: string; canSpeak: boolean; seated?: boolean; muted: boolean }
 type Signal = { from: string; kind: 'offer' | 'answer' | 'bye'; payload: RTCSessionDescriptionInit }
-type Beat = { me: string; canSpeak: boolean; peers: Peer[]; signals: Signal[]; ice?: RTCIceServer[] }
+type Beat = { me: string; canSpeak: boolean; seated?: boolean; peers: Peer[]; signals: Signal[]; ice?: RTCIceServer[] }
 
 const DIRECT_ONLY: RTCConfiguration = {
   iceServers: [{ urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'] }],
@@ -37,12 +37,13 @@ function gathered(pc: RTCPeerConnection) {
 
 /**
  * Peer-to-peer table voice. Audio flows directly between browsers (WebRTC); the server only relays
- * one offer/answer per pair and a presence heartbeat. Seated players speak, spectators only listen.
+ * one offer/answer per pair and a presence heartbeat. Players and spectators both speak.
  */
 export function VoiceChat({ roomId, className }: { roomId: string; className?: string }) {
   const { member, requireLogin } = usePoints()
   const [status, setStatus] = useState<'off' | 'joining' | 'on'>('off')
   const [canSpeak, setCanSpeak] = useState(false)
+  const [seated, setSeated] = useState(false)
   const [muted, setMuted] = useState(true)
   const [deaf, setDeaf] = useState(false)
   const [peers, setPeers] = useState<Peer[]>([])
@@ -266,6 +267,7 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
       } else {
         const data = (await r.json()) as Beat
         me.current = data.me
+        setSeated(Boolean(data.seated))
         if (data.ice?.length) {
           ice.current = { iceServers: data.ice }
           iceAt.current = Date.now()
@@ -350,6 +352,7 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
     iceAt.current = Date.now()
     speakRef.current = data.canSpeak
     setCanSpeak(data.canSpeak)
+    setSeated(Boolean(data.seated))
     if (data.canSpeak) {
       stream.current = await requestMic()
       const t = localTrack()
@@ -440,8 +443,8 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
         onClick={toggleMic}
         disabled={!canSpeak}
         aria-pressed={hasMic && !muted}
-        aria-label={!canSpeak ? 'İzleyiciler sadece dinler' : !hasMic ? 'Mikrofon izni ver' : muted ? 'Mikrofonu aç' : 'Mikrofonu kapat'}
-        title={!canSpeak ? 'İzleyiciler sadece dinler' : !hasMic ? 'Mikrofon izni ver' : muted ? 'Mikrofonu aç' : 'Mikrofonu kapat'}
+        aria-label={!canSpeak ? 'Mikrofon şu an kullanılamıyor' : !hasMic ? 'Mikrofon izni ver' : muted ? 'Mikrofonu aç' : 'Mikrofonu kapat'}
+        title={!canSpeak ? 'Mikrofon şu an kullanılamıyor' : !hasMic ? 'Mikrofon izni ver' : muted ? 'Mikrofonu aç' : 'Mikrofonu kapat'}
         className={cn(
           'flex size-8 items-center justify-center rounded-lg border transition-colors disabled:cursor-not-allowed disabled:opacity-50',
           hasMic && !muted ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-secondary text-muted-foreground',
@@ -494,7 +497,7 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
           {listOpen && (
             <>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                {canSpeak ? 'Oyuncusun, mikrofonunu açıp konuşabilirsin.' : 'İzleyicisin, oyuncuları dinleyebilirsin.'}
+                {seated ? 'Oyuncusun, mikrofonunu açıp konuşabilirsin.' : 'İzleyicisin, sen de mikrofonunu açıp konuşabilirsin.'}
               </p>
               <ul className="flex flex-col gap-1.5 text-sm">
                 <li className="flex items-center gap-2">
@@ -506,7 +509,7 @@ export function VoiceChat({ roomId, className }: { roomId: string; className?: s
                     {p.canSpeak && !p.muted ? <Mic className="size-3.5 text-primary" aria-hidden="true" /> : <MicOff className="size-3.5 text-muted-foreground" aria-hidden="true" />}
                     <span className="truncate">{p.name}</span>
                     <span className="ml-auto text-[11px] text-muted-foreground">
-                      {!p.canSpeak && !canSpeak ? 'izleyici' : linked.has(p.id) ? (p.canSpeak ? 'oyuncu' : 'izleyici') : 'bağlanıyor'}
+                      {linked.has(p.id) ? (p.seated ? 'oyuncu' : 'izleyici') : 'bağlanıyor'}
                     </span>
                   </li>
                 ))}

@@ -9,7 +9,8 @@ import { mintIceServers } from '@/lib/turn'
 export const dynamic = 'force-dynamic'
 
 const BLACKJACK_ROOM = /^blackjack-masa-(\d{1,3})$/
-const MAX_PEERS = 16
+/** Everybody in the room is linked to everybody else now that spectators speak too, so the room stays small enough for a phone. */
+const MAX_PEERS = 12
 const STALE_SECONDS = 12
 const MAX_SDP = 20000
 
@@ -22,8 +23,8 @@ type Body = {
   payload?: unknown
 }
 
-/** Only seated human players may speak; everyone else at the table joins as a listener. Null means no voice room exists. */
-async function speakRight(room: string, userId: string): Promise<boolean | null> {
+/** Whether the member holds a seat at the table; spectators speak too, the seat only decides how they are listed. Null means no voice room exists. */
+async function seatAt(room: string, userId: string): Promise<boolean | null> {
   const bj = BLACKJACK_ROOM.exec(room)
   if (bj) return isSeatedAt(userId, Number(bj[1]))
   const t = await getTableRow(room)
@@ -62,9 +63,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   if (body.action !== 'join' && body.action !== 'beat') return NextResponse.json({ error: 'Geçersiz istek.' }, { status: 400 })
 
-  const canSpeak = await speakRight(room, m.id)
-  if (canSpeak === null) return NextResponse.json({ error: 'Bu masada sesli sohbet yok.' }, { status: 404 })
-  const muted = canSpeak ? body.muted !== false : true
+  const seated = await seatAt(room, m.id)
+  if (seated === null) return NextResponse.json({ error: 'Bu masada sesli sohbet yok.' }, { status: 404 })
+  const canSpeak = true
+  const muted = body.muted !== false
 
   if (body.action === 'join') {
     if (Math.random() < 0.1) {
@@ -82,7 +84,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   await pool.query(
     `INSERT INTO voice_peers (room, user_id, name, can_speak, muted) VALUES ($1,$2,$3,$4,$5)
      ON CONFLICT (room, user_id) DO UPDATE SET name = EXCLUDED.name, can_speak = EXCLUDED.can_speak, muted = EXCLUDED.muted, last_seen = now()`,
-    [room, m.id, m.name.slice(0, 40), canSpeak, muted],
+    // The stored flag keeps saying who holds a seat; everybody in the room may speak.
+    [room, m.id, m.name.slice(0, 40), seated, muted],
   )
 
   const [peers, signals] = await Promise.all([
@@ -101,8 +104,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   return NextResponse.json({
     me: m.id,
     canSpeak,
+    seated,
     ice,
-    peers: peers.rows.map((p) => ({ id: String(p.user_id), name: String(p.name), canSpeak: Boolean(p.can_speak), muted: Boolean(p.muted) })),
+    peers: peers.rows.map((p) => ({ id: String(p.user_id), name: String(p.name), canSpeak: true, seated: Boolean(p.can_speak), muted: Boolean(p.muted) })),
     signals: signals.rows
       .sort((a, b) => Number(a.id) - Number(b.id))
       .map((s) => ({ from: String(s.from_id), kind: String(s.kind), payload: s.payload })),

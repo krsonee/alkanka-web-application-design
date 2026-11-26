@@ -49,7 +49,7 @@ export const isCategory = (v: unknown): v is TaskCategory => TASK_CATEGORIES.som
 
 export const TASK_KINDS: { value: TaskKind; label: string; param: KindParam; counted: boolean; hint: string }[] = [
   { value: 'manual', label: 'Serbest (tıkla / onaylı)', param: null, counted: false, hint: 'Üye butona basar. "Onay beklesin" açıksa sen onaylayınca puan yazılır.' },
-  { value: 'game_play', label: 'Oyun oyna', param: 'game', counted: true, hint: 'Bitmiş masa/bot maçları sayılır. İade edilen maçlar sayılmaz.' },
+  { value: 'game_play', label: 'Oyun oyna', param: 'game', counted: true, hint: 'Sonuna kadar oynanan masa/bot maçları sayılır. İade edilen, masadan kalkılan, pes edilen ya da süresi dolan maçlar sayılmaz.' },
   { value: 'game_win', label: 'Oyun kazan', param: 'game', counted: true, hint: 'Sadece kazanılan maçlar sayılır.' },
   { value: 'games_distinct', label: 'Farklı oyun oyna', param: 'games', counted: true, hint: 'Dönem içinde oynanan farklı oyun sayısı. Oyun grubu seçersen sadece o gruptaki oyunlar sayılır.' },
   { value: 'sponsor_visit', label: 'Sponsor siteye git', param: 'site', counted: true, hint: 'Üye sitedeki "Git" butonuyla (affiliate linkin) siteye gidince sayılır.' },

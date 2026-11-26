@@ -213,7 +213,7 @@ export function StakeGate({
   async function dropPending() {
     if (!pending || busy) return
     setBusy('pending')
-    const res = pending.started ? await finishBotGame(pending.sessionId, 'loss') : await cancelBotGame(pending.sessionId)
+    const res = pending.started ? await finishBotGame(pending.sessionId, 'loss', undefined, true) : await cancelBotGame(pending.sessionId)
     setBusy(null)
     setPending(null)
     if (!res.ok) {
@@ -254,7 +254,7 @@ export function StakeGate({
     setPhase({ kind: 'playing', bet: trial ? 0 : amount, round: next })
   }
 
-  async function finish(result: GameResult, note?: string, score?: { for: number; against: number }) {
+  async function finish(result: GameResult, note?: string, score?: { for: number; against: number }, left = false) {
     const id = session.current
     if (!id || phase.kind !== 'playing') return
     session.current = null
@@ -268,7 +268,7 @@ export function StakeGate({
       setPhase({ kind: 'done', bet: 0, result, note, payout: 0 })
       return
     }
-    const res = await finishBotGame(id, result === 'lose' ? 'loss' : result, score)
+    const res = await finishBotGame(id, result === 'lose' ? 'loss' : result, score, left)
     if (!res.ok) {
       setError(res.error)
       setPhase({ kind: 'done', bet: playedBet, result, note, payout: 0 })
@@ -282,7 +282,7 @@ export function StakeGate({
 
   if (phase.kind === 'playing') {
     const saveKey = session.current ? `${game}:${session.current}` : undefined
-    const leave = () => void finish('lose', 'Masadan ayrıldın.')
+    const leave = () => void finish('lose', 'Masadan ayrıldın.', undefined, true)
     const again = async (result: GameResult, note?: string, score?: { for: number; against: number }) => {
       const sameBet = phase.bet
       await finish(result, note, score)

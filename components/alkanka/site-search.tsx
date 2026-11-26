@@ -4,26 +4,36 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ARENA_GAMES, ARENA_META, MINI_GAME_TITLES } from '@/lib/arena'
 import { NAV_ITEMS } from './data'
 
 type Result = { id: string; label: string; hint: string; href: string }
 
+/** Every game with its own page, straight from the list the game route is built from, so a new game is searchable at once. */
 const GAMES: [string, string][] = [
-  ['tavla', 'Tavla'],
-  ['okey', 'Okey'],
-  ['101-okey', '101 Okey'],
-  ['bilardo', 'Bilardo'],
-  ['blackjack', 'Blackjack'],
-  ['rulet', 'Rulet'],
-  ['kafa-topu', 'Kafa Topu'],
-  ['kafa-basketbolu', 'Kafa Basketbolu'],
+  ...ARENA_GAMES.map((g): [string, string] => [g, ARENA_META[g].title]),
+  ...(Object.entries(MINI_GAME_TITLES) as [string, string][]),
 ]
 
 export type SearchSponsor = { id: string; name: string; welcome: string }
 
+/** Where a menu address is only a redirect, the search goes to the page that really holds the content: tickets live under campaigns. */
+const DIRECT: Record<string, string> = { etkinlikler: '/kampanyalar' }
+
+/** Pages with no row of their own in the side menu. */
+const MORE_PAGES: Result[] = [
+  { id: 'x-profil', label: 'Profil', hint: 'Sayfa', href: '/profil' },
+  { id: 'x-gecmis', label: 'Oyun geçmişi', hint: 'Sayfa', href: '/profil?sekme=gecmis' },
+  { id: 'x-bonuslar', label: 'Bonuslar', hint: 'Sayfa', href: '/bonuslar' },
+  { id: 'x-rehber', label: 'Rehber', hint: 'Sayfa', href: '/rehber' },
+  { id: 'x-sampiyonlar', label: 'Şampiyonlar', hint: 'Sayfa', href: '/sampiyonlar' },
+]
+
+const PAGES: Result[] = [...NAV_ITEMS.map((n) => ({ id: `p-${n.id}`, label: n.label, hint: 'Sayfa', href: DIRECT[n.id] ?? n.href })), ...MORE_PAGES]
+
 const STATIC_INDEX: Result[] = [
-  ...NAV_ITEMS.map((n) => ({ id: `p-${n.id}`, label: n.label, hint: 'Sayfa', href: n.href })),
-  ...GAMES.map(([id, label]) => ({ id: `g-${id}`, label, hint: 'Oyun', href: `/oyunlar#${id}` })),
+  ...PAGES,
+  ...GAMES.map(([id, label]) => ({ id: `g-${id}`, label, hint: 'Oyun', href: `/oyunlar/${id}` })),
 ]
 
 const normalize = (v: string) =>
@@ -32,9 +42,9 @@ const normalize = (v: string) =>
 export function SiteSearch({ sponsors = [] }: { sponsors?: SearchSponsor[] }) {
   const INDEX = useMemo<Result[]>(
     () => [
-      ...STATIC_INDEX.slice(0, NAV_ITEMS.length),
+      ...STATIC_INDEX.slice(0, PAGES.length),
       ...sponsors.map((s) => ({ id: `s-${s.id}`, label: s.name, hint: s.welcome ? `Sponsor · ${s.welcome}` : 'Sponsor', href: `/siteler/${s.id}` })),
-      ...STATIC_INDEX.slice(NAV_ITEMS.length),
+      ...STATIC_INDEX.slice(PAGES.length),
     ],
     [sponsors],
   )
@@ -47,8 +57,11 @@ export function SiteSearch({ sponsors = [] }: { sponsors?: SearchSponsor[] }) {
   const results = useMemo(() => {
     const q = normalize(query.trim())
     if (!q) return []
-    return INDEX.filter((r) => normalize(`${r.label} ${r.hint}`).includes(q)).slice(0, 8)
-  }, [query])
+    const hits = INDEX.filter((r) => normalize(`${r.label} ${r.hint}`).includes(q))
+    // A name that starts with what was typed comes first: "tavla" should not sit under a sponsor whose bonus text mentions it.
+    const starts = (r: Result) => (normalize(r.label).startsWith(q) ? 0 : 1)
+    return hits.sort((a, b) => starts(a) - starts(b)).slice(0, 8)
+  }, [query, INDEX])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
