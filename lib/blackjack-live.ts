@@ -5,6 +5,7 @@ import { pool } from '@/lib/db'
 import { credit, debit, getBalance, recordHistory, type Member } from '@/lib/member'
 import { BJ_BET_MS, BJ_INS_MS, BJ_JOIN_GRACE_MS, BJ_PLAY_MS, BJ_RESULT_MS, BJ_SEATS, BJ_SIDE_STAKES, bjOpeningMs, bjRevealMs, handValue, pairsHit, threeCardHit, type BlackjackPhase, type Card, type SideHit } from '@/lib/casino'
 import { capPayout } from '@/lib/member-limits'
+import { houseLift, multLabel } from '@/lib/boosts'
 import { applyCoins } from '@/lib/wallet-ledger'
 import { isStackedBet } from '@/lib/arena'
 import { gameSecret, loadGameKey, usesRotatedKey } from '@/lib/game-keys'
@@ -337,8 +338,10 @@ async function settleFinished() {
   )
   for (const row of r.rows) {
     const s = settleSeat(Number(row.round_id), row)
-    const total = await capPayout(String(row.user_id), s.stake, s.ret)
-    const returned = Math.min(s.main.ret + s.insurance.ret, total)
+    // A running campaign that names these tables adds to the profit, up to the member's daily ceiling.
+    const lift = await houseLift(String(row.user_id), s.ret - s.stake)
+    const total = await capPayout(String(row.user_id), s.stake, s.ret + lift.extra)
+    const returned = Math.min(s.main.ret + s.insurance.ret + lift.extra, total)
     const sideReturned = total - returned
     await pool.query(`UPDATE blackjack_live SET returned = $2, side_returned = $3, staked = $4 WHERE id = $1`, [row.id, returned, sideReturned, s.stake])
     if (total) await credit(String(row.user_id), total, 'Blackjack ödemesi')
@@ -348,7 +351,7 @@ async function settleFinished() {
       userName: String(row.user_name),
       game: 'blackjack',
       mode: 'masa',
-      opponent: `Krupiye ${handValue(s.dealer)} · Sen ${values.join(' / ')}${row.surrendered ? ' (teslim)' : ''}`,
+      opponent: `Krupiye ${handValue(s.dealer)} · Sen ${values.join(' / ')}${row.surrendered ? ' (teslim)' : ''}${lift.extra && total > s.ret ? ` · çarpan ${multLabel(lift.mult)} +${total - s.ret} KC` : ''}`,
       stake: s.stake,
       result: total > s.stake ? 'win' : total === s.stake ? 'draw' : 'loss',
       delta: total - s.stake,

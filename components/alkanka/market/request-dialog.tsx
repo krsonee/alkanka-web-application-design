@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Check, Coins, UserCheck, X } from 'lucide-react'
 import { requestMarketItem } from '@/app/actions/market'
 import type { LinkedSponsorAccount, MarketProduct } from '@/lib/market'
-import { dealShown, rewardText } from '@/lib/market-shared'
+import { dealShown, dealSpentText, dealUsesText, rewardText } from '@/lib/market-shared'
 import { useEscape } from '@/lib/use-escape'
 import { formatAC } from '../points-context'
 
@@ -15,6 +15,8 @@ export function RequestDialog({
   item,
   pay,
   taskDone,
+  dealLeft = 0,
+  dealSpent = false,
   account,
   checking,
   points,
@@ -26,6 +28,9 @@ export function RequestDialog({
   /** The price on screen; the server refuses the purchase if it would charge more than this. */
   pay: number
   taskDone: boolean
+  /** Units the finished task still buys at the task price, this purchase included. */
+  dealLeft?: number
+  dealSpent?: boolean
   /** The account the member linked at this product's sponsor; the reward goes to it and no name is typed. */
   account: LinkedSponsorAccount | null
   /** True while the member's linked accounts are still being read. */
@@ -41,7 +46,7 @@ export function RequestDialog({
   const short = pay - points
   const auto = item.deliveryMode === 'auto' && item.reward
   const viaTask = taskDone && dealShown(item, true) && pay === item.dealPrice
-  const taskOpen = !taskDone && dealShown(item, false) && item.dealTask
+  const taskOpen = !taskDone && !dealSpent && dealShown(item, false) && item.dealTask
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -141,13 +146,14 @@ export function RequestDialog({
             </span>
           </div>
           {viaTask ? (
-            <p className="text-xs leading-relaxed text-success text-pretty">{`Görev fiyatı uygulandı: ${item.dealTask?.title ?? 'görev'} tamam.`}</p>
+            <p className="text-xs leading-relaxed text-success text-pretty">{`Görev fiyatı uygulandı: ${item.dealTask?.title ?? 'görev'} tamam. ${dealLeft > 1 ? `Bu alımdan sonra ${dealLeft - 1} adet daha bu fiyata alabilirsin.` : 'Bu, görevin açtığı son indirimli adet; sonraki alım normal fiyattan olur.'}`}</p>
           ) : (
             item.sale && pay < item.price && <p className="text-xs leading-relaxed text-muted-foreground text-pretty">{`${item.sale.name}: %${item.sale.pct} indirim uygulandı.`}</p>
           )}
+          {dealSpent && dealShown(item, false) && <p className="text-xs leading-relaxed text-muted-foreground text-pretty">{dealSpentText(item)}</p>}
           {taskOpen && (
             <p className="text-xs leading-relaxed text-muted-foreground text-pretty">
-              {`"${taskOpen.title}" görevini tamamlarsan bu ürünü ${formatAC(item.dealPrice)} KC'ye alırsın. `}
+              {`"${taskOpen.title}" görevini tamamlarsan bu ürünü ${formatAC(item.dealPrice)} KC'ye alırsın. ${dealUsesText(item)} `}
               <Link href={`/gorevler?gorev=${item.dealTaskId}`} className="font-semibold text-primary underline-offset-2 hover:underline">
                 Göreve git
               </Link>

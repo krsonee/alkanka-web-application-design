@@ -43,12 +43,6 @@ const SIZES = {
 
 const PX = { xs: 20, sm: 24, md: 36, lg: 48, xl: 112 } as const
 
-const TIER_RING: Record<Exclude<AvatarFrame, 'ozel'>, string> = {
-  altin: 'ring-gold',
-  elmas: 'ring-accent',
-  efsane: 'ring-ruby',
-}
-
 const FRAME_NAMES: Record<AvatarFrame, string> = {
   altin: 'Altın rozet çerçevesi',
   elmas: 'Elmas rozet çerçevesi',
@@ -59,20 +53,21 @@ const FRAME_NAMES: Record<AvatarFrame, string> = {
 export const frameName = (frame: AvatarFrame) => FRAME_NAMES[frame]
 
 /**
- * The frame drawn over an avatar. It sits inside the avatar's own rounded shell, so it needs no extra room and
- * works in every place an avatar already is. `weight` follows the avatar's size.
+ * The frame around an avatar. `outside` draws it around the picture instead of over its edge, so a small
+ * avatar keeps every pixel of its picture and the frame is still thick enough to be seen; the default sits
+ * inside an avatar shell that clips its own edge. `weight` follows the avatar's size.
  */
-export function FrameRing({ frame, weight = 'md' }: { frame?: AvatarFrame | null; weight?: 'sm' | 'md' | 'lg' }) {
+export function FrameRing({ frame, weight = 'md', outside }: { frame?: AvatarFrame | null; weight?: 'sm' | 'md' | 'lg'; outside?: boolean }) {
   if (!frame) return null
   return (
     <span
       aria-hidden="true"
       data-weight={weight}
+      data-frame={frame}
       className={cn(
-        'pointer-events-none absolute inset-0 z-[1] rounded-[inherit]',
-        frame === 'ozel'
-          ? 'avatar-frame-gold'
-          : cn('ring-inset', weight === 'sm' ? 'ring-1' : weight === 'lg' ? 'ring-4' : 'ring-2', TIER_RING[frame]),
+        'avatar-frame pointer-events-none absolute z-[1]',
+        outside ? 'avatar-frame-out rounded-full' : 'inset-0 rounded-[inherit]',
+        frame === 'ozel' ? 'avatar-frame-gold' : 'avatar-frame-tier',
       )}
     />
   )
@@ -95,19 +90,15 @@ export function AvatarFace({
   const frames = useFrameMap()
   const frame = userId ? frames[userId] : null
   return (
-    <span
-      className={cn(
-        'relative flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary font-display font-bold text-primary-foreground',
-        SIZES[size],
-        className,
-      )}
-    >
-      {src ? (
-        <Image src={src} alt="" width={PX[size] * 2} height={PX[size] * 2} className="size-full object-cover" />
-      ) : (
-        <span aria-hidden="true">{name.slice(0, 1).toUpperCase() || '?'}</span>
-      )}
-      <FrameRing frame={frame} weight={size === 'xs' || size === 'sm' ? 'sm' : size === 'xl' ? 'lg' : 'md'} />
+    <span className={cn('relative flex shrink-0 rounded-full', SIZES[size], className)}>
+      <span className="flex size-full items-center justify-center overflow-hidden rounded-full bg-primary font-display font-bold text-primary-foreground">
+        {src ? (
+          <Image src={src} alt="" width={PX[size] * 2} height={PX[size] * 2} className="size-full object-cover" />
+        ) : (
+          <span aria-hidden="true">{name.slice(0, 1).toUpperCase() || '?'}</span>
+        )}
+      </span>
+      <FrameRing frame={frame} weight={size === 'xs' || size === 'sm' ? 'sm' : size === 'xl' ? 'lg' : 'md'} outside />
     </span>
   )
 }

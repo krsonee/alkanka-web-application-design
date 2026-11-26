@@ -167,6 +167,11 @@ function CampaignForm({ draft, setDraft, badges, sites }: { draft: Campaign; set
                 </label>
               ))}
             </div>
+            {draft.sources.includes('kasa') && (
+              <p className="rounded-lg border border-primary/40 bg-primary/5 px-2.5 py-2 text-xs leading-relaxed text-foreground text-pretty">
+                Blackjack ve Rulet kasaya karşı oynanır: sınırsız çarpan bu iki oyunda masanın aldığından fazlasını öder. Bu yüzden çarpanın bir üyeye bir günde ekleyeceği coin sınırlıdır; sınırı aşağıdaki &quot;Seri ve sadakat&quot; kutusundan ayarlarsın. Sınır dolunca üye o gün normal kazancını almaya devam eder.
+              </p>
+            )}
           </fieldset>
           <label className={label}>
             Çarpan
@@ -480,6 +485,13 @@ export function BoostManager({ initial, badges, sites }: { initial: BoostConfig;
             <label className={label}>Kalkan fiyatı KC<input type="number" min={1} className={input} value={cfg.shieldPrice} onChange={(e) => setCfg((c) => ({ ...c, shieldPrice: Number(e.target.value) }))} /></label>
             <label className={label}>Sadakat günü<input type="number" min={7} max={365} className={input} value={cfg.loyaltyDays} onChange={(e) => setCfg((c) => ({ ...c, loyaltyDays: Number(e.target.value) }))} /></label>
           </div>
+          <label className={label}>
+            Blackjack ve Rulette çarpanın bir üyeye günde ekleyeceği en fazla coin
+            <input type="number" min={0} max={1000000} className={input} value={cfg.houseCap} onChange={(e) => setCfg((c) => ({ ...c, houseCap: Number(e.target.value) }))} />
+          </label>
+          <p className="text-xs leading-relaxed text-muted-foreground text-pretty">
+            Sadece kazanç türlerinde &quot;Blackjack ve Rulette kazanılan kâr&quot; işaretli bir çarpan kampanyası çalışırken işler. 0 yazarsan çarpan bu iki oyunda hiç işlemez.
+          </p>
         </div>
 
         <div className={box}>

@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import type { MarketProduct } from '@/lib/market'
 import { productImage } from '@/lib/market-image'
 import { stockLevel } from '@/lib/market-stock'
-import { dealShown, rewardText } from '@/lib/market-shared'
+import { dealShown, dealSpentText, dealUsesText, rewardText } from '@/lib/market-shared'
 import { DetailButton } from '../detail-modal'
 import { formatAC } from '../points-context'
 
@@ -39,14 +39,22 @@ export function SaleTag({ item, className }: { item: MarketProduct; className?: 
 }
 
 /** The cheaper price a finished task unlocks; links to the task until the member has done it. */
-export function DealLine({ item, taskDone, className }: { item: MarketProduct; taskDone: boolean; className?: string }) {
+export function DealLine({ item, taskDone, left = 0, spent = false, className }: { item: MarketProduct; taskDone: boolean; left?: number; spent?: boolean; className?: string }) {
   if (!dealShown(item, taskDone) || !item.dealTask) return null
   const price = `${formatAC(item.dealPrice)} KC`
+  if (spent) {
+    return (
+      <p className={cn('flex items-start gap-1.5 rounded-lg bg-secondary px-2 py-1.5 text-xs leading-relaxed text-muted-foreground', className)}>
+        <Target className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 text-pretty">{dealSpentText(item)}</span>
+      </p>
+    )
+  }
   if (taskDone) {
     return (
       <p className={cn('flex items-start gap-1.5 rounded-lg bg-success/10 px-2 py-1.5 text-xs font-semibold leading-relaxed text-success', className)}>
         <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-        <span className="min-w-0 text-pretty">{`Görevi tamamladın, fiyatın ${price}`}</span>
+        <span className="min-w-0 text-pretty">{`Görevi tamamladın: ${Math.max(1, left)} adet ${price} fiyatla alabilirsin`}</span>
       </p>
     )
   }
@@ -58,7 +66,7 @@ export function DealLine({ item, taskDone, className }: { item: MarketProduct; t
       <Target className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden="true" />
       <span className="min-w-0 text-pretty">
         <b className="font-bold text-primary">{`Görevle ${price}`}</b>
-        {`: ${item.dealTask.title}`}
+        {`: ${item.dealTask.title}. ${dealUsesText(item)}`}
       </span>
     </Link>
   )
@@ -224,14 +232,18 @@ type CardProps = {
   /** What this member is charged right now. */
   pay: number
   taskDone: boolean
+  /** Units the finished task still buys at the task price. */
+  dealLeft?: number
+  /** The task is done but every discounted unit it covered has been bought. */
+  dealSpent?: boolean
   onBuy: () => void
   onDetail: () => void
 }
 
-export function ProductCard({ item, left, used, points, signedIn, pay, taskDone, onBuy, onDetail }: CardProps) {
+export function ProductCard({ item, left, used, points, signedIn, pay, taskDone, dealLeft, dealSpent, onBuy, onDetail }: CardProps) {
   const state = buyState(item, left, used, points, signedIn, pay)
   const level = stockLevel(left, item.total)
-  const deal = dealShown(item, taskDone) && Boolean(item.dealTask)
+  const deal = dealShown(item, taskDone) && Boolean(item.dealTask) && !dealSpent
   const logoTile = item.kind === 'sponsor' && Boolean(item.sponsorLogo)
   const tagged = Boolean(item.sale) || deal
   // Phones: the card is the picture, the name and the price; one tap opens the detail sheet, which carries the button.
@@ -286,7 +298,7 @@ export function ProductCard({ item, left, used, points, signedIn, pay, taskDone,
         </div>
         <StockMeter left={left} total={item.total} />
         <div className="mt-auto flex flex-col gap-2">
-          <DealLine item={item} taskDone={taskDone} />
+          <DealLine item={item} taskDone={taskDone} left={dealLeft} spent={dealSpent} />
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <Price value={pay} was={item.price} />
             <LimitLine item={item} used={used} signedIn={signedIn} />
@@ -299,7 +311,7 @@ export function ProductCard({ item, left, used, points, signedIn, pay, taskDone,
   )
 }
 
-export function FeaturedCard({ item, left, used, points, signedIn, pay, taskDone, onBuy, onDetail }: CardProps) {
+export function FeaturedCard({ item, left, used, points, signedIn, pay, taskDone, dealLeft, dealSpent, onBuy, onDetail }: CardProps) {
   const state = buyState(item, left, used, points, signedIn, pay)
   return (
     <li className="panel-gold flex flex-col overflow-hidden rounded-2xl @lg:flex-row">
@@ -317,7 +329,7 @@ export function FeaturedCard({ item, left, used, points, signedIn, pay, taskDone
           <DeliveryLine item={item} className="max-w-full" />
         </div>
         <StockMeter left={left} total={item.total} />
-        <DealLine item={item} taskDone={taskDone} className="self-start" />
+        <DealLine item={item} taskDone={taskDone} left={dealLeft} spent={dealSpent} className="self-start" />
         <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-2">
           <Price value={pay} was={item.price} />
           <LimitLine item={item} used={used} signedIn={signedIn} />

@@ -1,5 +1,5 @@
 /** Rewards a campaign can multiply. Admin, badge and prize payouts are never boosted. */
-export type BoostSource = 'sure' | 'gorev' | 'giris' | 'online' | 'kankatv' | 'seri' | 'arena' | 'tahmin' | 'mini'
+export type BoostSource = 'sure' | 'gorev' | 'giris' | 'online' | 'kankatv' | 'seri' | 'arena' | 'tahmin' | 'mini' | 'kasa'
 
 export const BOOST_SOURCES: { id: BoostSource; label: string; short: string }[] = [
   { id: 'sure', label: 'Sitede geçen dakika puanı', short: 'Dakika puanı' },
@@ -9,9 +9,17 @@ export const BOOST_SOURCES: { id: BoostSource; label: string; short: string }[] 
   { id: 'seri', label: 'Seri bonusu (7, 14, 30 gün)', short: 'Seri bonusu' },
   { id: 'kankatv', label: 'KankaTV izleme, devre arası ve gol sandığı', short: 'KankaTV' },
   { id: 'tahmin', label: 'Tahmin ödülü', short: 'Tahmin ödülü' },
-  { id: 'arena', label: 'Oyunda kazanılan kâr: bota karşı maç ve coinli masa (Blackjack ve Rulet hariç)', short: 'Oyun kazancı' },
+  { id: 'arena', label: 'Oyunda kazanılan kâr: bota karşı maç ve coinli masa (Blackjack ve Rulet ayrı satırda)', short: 'Oyun kazancı' },
   { id: 'mini', label: 'Çark, zar ve sandık ödülü', short: 'Çark, zar, sandık' },
+  { id: 'kasa', label: 'Blackjack ve Rulette kazanılan kâr (üye başına günlük sınırla)', short: 'Blackjack, Rulet' },
 ]
+
+/**
+ * Blackjack and roulette are played against the house: a multiplier on the profit turns the odds in the
+ * member's favour. The source is therefore never part of a default campaign, and what the multiplier adds
+ * is limited per member per day (`BoostConfig.houseCap`).
+ */
+export const HOUSE_SOURCE: BoostSource = 'kasa'
 
 /** What the old fixed "Mutlu Saatler" box multiplied. */
 export const HAPPY_SOURCES: BoostSource[] = ['sure', 'gorev', 'giris', 'online', 'kankatv', 'seri']
@@ -60,6 +68,8 @@ export type BoostConfig = {
   bestBonus: { on: boolean; siteId: string; title: string; text: string; kp: number }
   cashback: { siteId: string; weekday: number; text: string }[]
   loyaltyDays: number
+  /** The most coins a multiplier can add to one member's Blackjack and Roulette winnings in a day. */
+  houseCap: number
 }
 
 /** The six fixed boxes this list replaced. Their stored values are left untouched, so an older build still reads them. */
@@ -230,7 +240,7 @@ export function legacyCampaigns(input: LegacyBoosts): Campaign[] {
   return [
     {
       // The strip promised "every earning", so the campaign covers every source a multiplier can reach.
-      ...blank, id: 'happy', name: 'Mutlu Saatler', on: input.happyHour?.on ?? true, kind: 'carpan', sources: BOOST_SOURCES.map((s) => s.id),
+      ...blank, id: 'happy', name: 'Mutlu Saatler', on: input.happyHour?.on ?? true, kind: 'carpan', sources: BOOST_SOURCES.map((s) => s.id).filter((id) => id !== HOUSE_SOURCE),
       mult: num(input.happyHour?.mult, 2, 1, 5), text: 'Görev, giriş, oyun ve çark kazançları',
       when: { type: 'saat', days: [], start: whole(input.happyHour?.start, 20, 0, 23), end: whole(input.happyHour?.end, 22, 0, 23) },
     },
@@ -266,6 +276,7 @@ const DEFAULTS = {
   shieldPrice: 400,
   bestBonus: { on: false, siteId: '', title: 'Bu haftanın en iyi bonusu', text: '', kp: 10 },
   loyaltyDays: 30,
+  houseCap: 1000,
 }
 
 export const DEFAULT_BOOSTS: BoostConfig = { ...DEFAULTS, cashback: [], campaigns: legacyCampaigns({}) }
@@ -298,6 +309,7 @@ export function cleanBoosts(input: (Partial<BoostConfig> & LegacyBoosts) | null 
       .filter((c) => c.siteId)
       .slice(0, 20),
     loyaltyDays: whole(i.loyaltyDays, d.loyaltyDays, 7, 365),
+    houseCap: whole(i.houseCap, d.houseCap, 0, 1_000_000),
   }
 }
 

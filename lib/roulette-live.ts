@@ -6,6 +6,7 @@ import { credit, debit, getBalance, recordHistory, type Member } from '@/lib/mem
 import { betLabel, betReturn, RL_BET_MS, rouletteClock as clock, validBet, type RouletteBet } from '@/lib/casino'
 import { roundBots } from '@/lib/roulette-bots'
 import { capPayout } from '@/lib/member-limits'
+import { houseLift, multLabel } from '@/lib/boosts'
 import { gameSecret, loadGameKey } from '@/lib/game-keys'
 
 /** Distinct spots per player per round; chips on the same spot are merged into one entry. */
@@ -75,7 +76,10 @@ export async function settleRounds(userId?: string) {
     const total = Number(row.total)
     if (total <= 0) continue
     const userId = String(row.user_id)
-    const returned = await capPayout(userId, total, bets.reduce((a, b) => a + betReturn(b, n), 0))
+    const won = bets.reduce((a, b) => a + betReturn(b, n), 0)
+    // A running campaign that names these tables adds to the profit, up to the member's daily ceiling.
+    const lift = await houseLift(userId, won - total)
+    const returned = await capPayout(userId, total, won + lift.extra)
     await pool.query(`UPDATE roulette_bets SET returned = $2 WHERE id = $1`, [row.id, returned])
     if (returned) await credit(userId, returned, 'Canlı rulet ödemesi')
     await recordHistory({
@@ -83,7 +87,7 @@ export async function settleRounds(userId?: string) {
       userName: String(row.user_name),
       game: 'rulet',
       mode: 'masa',
-      opponent: `Sayı ${n} - ${bets.map(betLabel).join(', ').slice(0, 60)}`,
+      opponent: `Sayı ${n} - ${bets.map(betLabel).join(', ').slice(0, 60)}${lift.extra && returned > won ? ` · çarpan ${multLabel(lift.mult)} +${returned - won} KC` : ''}`,
       stake: total,
       result: returned > total ? 'win' : returned === total ? 'draw' : 'loss',
       delta: returned - total,

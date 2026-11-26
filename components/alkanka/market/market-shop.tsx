@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { getMyMarketAccounts, getMyMarketDeals, getMyMarketRequests } from '@/app/actions/market'
 import type { MarketProduct } from '@/lib/market'
 import { productImage } from '@/lib/market-image'
-import { FEATURED_SLOTS, MARKET_CATEGORIES, dealShown, isMarketCategory, payable, rewardText, type MarketCategory } from '@/lib/market-shared'
+import { FEATURED_SLOTS, MARKET_CATEGORIES, dealShown, isMarketCategory, payable, rewardText, type MarketCategory, dealSpentText, dealUsesText } from '@/lib/market-shared'
 import { MARKET_KIND_PARAM } from '@/lib/record-links'
 import { TR_TZ } from '@/lib/tr-time'
 import { DetailModal } from '../detail-modal'
@@ -58,7 +58,7 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
   const [flash, setFlash] = useState<{ ok: boolean; text: string } | null>(null)
   const [stock, setStock] = useState<Record<string, number>>(() => Object.fromEntries(items.map((i) => [i.id, i.stock])))
   const { data: mine, mutate } = useSWR(member ? ['market-mine', member.id] : null, () => getMyMarketRequests())
-  const { data: doneTasks } = useSWR(member ? ['market-deals', member.id] : null, () => getMyMarketDeals())
+  const { data: rights, mutate: mutateRights } = useSWR(member ? ['market-deals', member.id] : null, () => getMyMarketDeals())
   // Undefined until the answer arrives; the purchase form waits for it rather than asking for a name it will not use.
   const { data: accounts } = useSWR(member ? ['market-accounts', member.id] : null, () => getMyMarketAccounts())
 
@@ -72,7 +72,10 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
   const signedIn = Boolean(member)
   const leftOf = (item: MarketProduct) => stock[item.id] ?? item.stock
   const usedOf = (item: MarketProduct) => (mine ?? []).filter((r) => r.itemId === item.id && r.status !== 'reddedildi').length
-  const taskDoneOf = (item: MarketProduct) => item.dealTaskId != null && (doneTasks ?? []).includes(item.dealTaskId)
+  // The task price is spent per completion: once its units are bought the product costs the usual price again.
+  const dealLeftOf = (item: MarketProduct) => (item.dealTaskId != null ? (rights?.left[item.id] ?? 0) : 0)
+  const taskDoneOf = (item: MarketProduct) => dealLeftOf(item) > 0
+  const dealSpentOf = (item: MarketProduct) => item.dealTaskId != null && Boolean(rights?.done.includes(item.dealTaskId)) && dealLeftOf(item) < 1
   const payOf = (item: MarketProduct) => payable(item, taskDoneOf(item))
   const cardProps = (item: MarketProduct) => ({
     item,
@@ -82,6 +85,8 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
     signedIn,
     pay: payOf(item),
     taskDone: taskDoneOf(item),
+    dealLeft: dealLeftOf(item),
+    dealSpent: dealSpentOf(item),
     onBuy: () => start(item),
     onDetail: () => setDetail(item),
   })
@@ -89,7 +94,7 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
   const soldOutLast = (a: MarketProduct, b: MarketProduct) => Number(leftOf(a) <= 0) - Number(leftOf(b) <= 0)
   const featured = items.filter((i) => i.featured && leftOf(i) > 0).slice(0, FEATURED_SLOTS)
   const inCategory = (id: 'sponsor' | 'alkanka') => items.filter((i) => i.kind === id).sort(soldOutLast)
-  const deals = items.filter((i) => dealShown(i, taskDoneOf(i))).sort(soldOutLast)
+  const deals = items.filter((i) => dealShown(i, taskDoneOf(i)) && !(dealSpentOf(i) && !i.dealTask?.repeats)).sort(soldOutLast)
   const counts: Partial<Record<MarketCategory, number>> = { firsat: deals.length, sponsor: inCategory('sponsor').length, alkanka: inCategory('alkanka').length }
   const categories = MARKET_CATEGORIES.filter((c) => c.id !== 'firsat' || deals.length > 0)
   // The deals tab disappears with its last product; a link that still points at it lands on a real category.
@@ -120,6 +125,7 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
     setFlash({ ok: true, text: res.message })
     setAsking(null)
     void mutate()
+    void mutateRights()
     // Bought wheel and dice rights show up on the games right away.
     void refreshShared('mini-status')
   }
@@ -311,7 +317,12 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
               { label: 'Fiyat', value: detailPay < detail.price ? `${formatAC(detailPay)} KC (normali ${formatAC(detail.price)} KC)` : `${formatAC(detail.price)} KC` },
               ...(detail.sale ? [{ label: 'Kampanya', value: `${detail.sale.name} · %${detail.sale.pct} · ${saleEnd(detail.sale.endsAt)} tarihinde biter` }] : []),
               ...(dealShown(detail, taskDoneOf(detail)) && detail.dealTask
-                ? [{ label: 'Görevle', value: `${formatAC(detail.dealPrice)} KC · ${detail.dealTask.title}${taskDoneOf(detail) ? ' (tamamladın)' : ''}` }]
+                ? [{
+                    label: 'Görevle',
+                    value: dealSpentOf(detail)
+                      ? dealSpentText(detail)
+                      : `${formatAC(detail.dealPrice)} KC · ${detail.dealTask.title}. ${taskDoneOf(detail) ? `Görevi tamamladın: ${dealLeftOf(detail)} adet daha bu fiyata alabilirsin.` : dealUsesText(detail)}`,
+                  }]
                 : []),
               { label: 'Stok', value: `${leftOf(detail)}${detail.total ? ` / ${detail.total}` : ''}` },
               { label: 'Limit', value: `Kişi başı ${detail.perUser}` },
@@ -350,6 +361,8 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
           item={asking}
           pay={payOf(asking)}
           taskDone={taskDoneOf(asking)}
+          dealLeft={dealLeftOf(asking)}
+          dealSpent={dealSpentOf(asking)}
           account={asking.kind === 'sponsor' && asking.sponsorSlug ? (accounts?.[asking.sponsorSlug] ?? null) : null}
           checking={Boolean(member) && asking.kind === 'sponsor' && accounts === undefined}
           points={points}
