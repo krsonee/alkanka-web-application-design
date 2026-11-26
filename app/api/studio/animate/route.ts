@@ -3,7 +3,7 @@ import { canPanel, isPanelOwner } from '@/lib/admin-auth'
 import { logPanel } from '@/lib/panel-log'
 import { rejectCrossSite } from '@/lib/same-origin'
 import { addJob, getAsset, getBrand, getJob, readFile, storeFile } from '@/lib/studio'
-import { libraryStill, makeGif, makeMotionSticker, makeVideo, videoToGif } from '@/lib/studio-animate'
+import { libraryStill, makeGif, makeLiveVideo, makeMotionSticker, makeVideo, videoToGif } from '@/lib/studio-animate'
 import { cleanMotion, motionLabel } from '@/lib/studio-brief'
 import { closeHold, holdBudget } from '@/lib/studio-budget'
 import { faultMessage, studioFault } from '@/lib/studio-fault'
@@ -25,6 +25,19 @@ const kb = (data: Buffer) => `${Math.max(1, Math.round(data.length / 1024))} KB`
 const mb = (data: Buffer) => `${(data.length / 1024 / 1024).toFixed(1)} MB`
 /** Size, length and weight of a finished video sticker, so the card shows it meets Telegram's list. */
 const stickerAbout = async (data: Buffer) => [await videoStickerFacts(data), kb(data)].filter(Boolean).join(' · ')
+
+const SPARED_TAG = 'Model görseli reddetti, model kullanılmadan hareketlendirildi'
+
+/** What staff are told when the model turned the picture down and it was moved without one. */
+function sparedNote(mode: Mode) {
+  const why =
+    'Video modeli bu görseli hareketlendirmeyi reddetti (sağlayıcının içerik denetimi). Sebep çoğunlukla görseldeki gerçek kişi ya da ünlü yüzüdür (futbolcu gibi); tekrar denemek sonucu değiştirmez.'
+  const instead =
+    mode === 'tgmotion'
+      ? 'İş boşa gitmesin diye sticker model kullanılmadan hareketlendirildi: sticker sallanır ve hafifçe zıplar, içindeki kişi kendi hareket etmez.'
+      : 'İş boşa gitmesin diye görsel model kullanılmadan hareketlendirildi: görsel yavaşça yakınlaşıp geri gelir, üstünden ışık geçer; içindeki kişi kendi hareket etmez, ses yoktur.'
+  return `${why} ${instead} Bu iş için Stüdyo harcamasına tutar yazılmadı.`
+}
 
 export async function POST(request: NextRequest) {
   const crossSite = rejectCrossSite(request)
@@ -83,6 +96,15 @@ export async function POST(request: NextRequest) {
   const onBilled = () => {
     hold.billed = true
   }
+  // The provider turns some pictures down outright (a real person's face) and asking again changes
+  // nothing. The job is not dropped: the same picture is then moved here, without a model.
+  let spared = false
+  const refused = (error: unknown) => {
+    if (hold.billed || studioFault(error) !== 'blocked') return false
+    console.warn('[studio:animate] model refused the picture, moving it without a model:', sourceName, mode)
+    spared = true
+    return true
+  }
 
   try {
     // A sticker is animated from its full-size copy, not from the 512 px Telegram file made from it.
@@ -93,9 +115,15 @@ export async function POST(request: NextRequest) {
     // With the text-free original at hand, the model animates that and the logo and copy are printed
     // on the finished clip. Older jobs without it are animated as they are.
     const clip = async (seconds: number, sound: boolean) => {
-      if (!source?.cleanPathname) return makeVideo({ image, format, motion, duration: seconds, audio: sound, hd, brush: null, onBilled })
-      const [clean, brand] = await Promise.all([readFile(source.cleanPathname), source.brandId ? getBrand(source.brandId) : null])
-      return makeVideo({ image: clean, format, motion, duration: seconds, audio: sound, hd, brush: brushOf(brand, source.texts), onBilled })
+      const clean = source?.cleanPathname ? await readFile(source.cleanPathname) : null
+      const brush = source && clean ? brushOf(source.brandId ? await getBrand(source.brandId) : null, source.texts) : null
+      const shot = { image: clean ?? image, format, duration: seconds, hd, brush }
+      try {
+        return await makeVideo({ ...shot, motion, audio: sound, onBilled })
+      } catch (error) {
+        if (!refused(error)) throw error
+        return makeLiveVideo(shot)
+      }
     }
     const asked = motionLabel(motion)
     const made = async (): Promise<{ data: Buffer; contentType: string; ext: string; folder: string; label: string }> => {
@@ -105,24 +133,27 @@ export async function POST(request: NextRequest) {
       if (mode === 'aigif') {
         const data = await videoToGif(await clip(gifSeconds, false), quality)
         const about = `${gifSeconds} sn hareketli GIF · ${hd ? 'yüksek' : 'standart'} · ${mb(data)}`
-        return { data, contentType: 'image/gif', ext: 'gif', folder: 'gifs', label: asked ? `${asked} · ${about}` : about }
+        return { data, contentType: 'image/gif', ext: 'gif', folder: 'gifs', label: spared ? `${SPARED_TAG} · ${about}` : asked ? `${asked} · ${about}` : about }
       }
       if (mode === 'tgsticker') {
         const data = await makeVideoSticker(image)
         return { data, contentType: 'video/webm', ext: 'webm', folder: 'stickers', label: `Telegram hareketli sticker (sallanma) · ${await stickerAbout(data)}` }
       }
       if (mode === 'tgmotion') {
-        const data = await makeMotionSticker(image, motion, onBilled)
-        const about = `Telegram hareketli sticker · ${await stickerAbout(data)}`
-        return { data, contentType: 'video/webm', ext: 'webm', folder: 'stickers', label: asked ? `${asked} · ${about}` : about }
+        const data = await makeMotionSticker(image, motion, onBilled).catch((error) => {
+          if (!refused(error)) throw error
+          return makeVideoSticker(image)
+        })
+        const about = `Telegram hareketli sticker${spared ? ' (sallanma)' : ''} · ${await stickerAbout(data)}`
+        return { data, contentType: 'video/webm', ext: 'webm', folder: 'stickers', label: spared ? `${SPARED_TAG} · ${about}` : asked ? `${asked} · ${about}` : about }
       }
       if (mode === 'tgicon') {
         const data = await makeStickerIcon(image)
         return { data, contentType: 'image/webp', ext: 'webp', folder: 'stickers', label: `Telegram paket ikonu · ${kb(data)}` }
       }
       const data = await clip(duration, audio)
-      const about = `${duration} sn video · ${hd ? '1080p' : '720p'}${audio ? ' · sesli' : ''}`
-      return { data, contentType: 'video/mp4', ext: 'mp4', folder: 'videos', label: asked ? `${asked} · ${about}` : about }
+      const about = `${duration} sn video · ${hd ? '1080p' : '720p'}${audio && !spared ? ' · sesli' : ''}`
+      return { data, contentType: 'video/mp4', ext: 'mp4', folder: 'videos', label: spared ? `${SPARED_TAG} · ${about}` : asked ? `${asked} · ${about}` : about }
     }
     const result = await made()
     const pathname = await storeFile(result.folder, result.data, result.contentType, result.ext)
@@ -134,11 +165,11 @@ export async function POST(request: NextRequest) {
       pathname,
       clean: '',
       parentId: source?.id ?? null,
-      cost: paid,
+      cost: spared ? 0 : paid,
     })
     await closeHold(hold, 'recorded')
     await logPanel('studio', 'Hareketli içerik üretildi', brandName || null, `Üretim #${job.id} · ${(tag + result.label).slice(0, 200)}`)
-    return NextResponse.json({ job: { ...job, brandName } })
+    return NextResponse.json({ job: { ...job, brandName }, note: spared ? sparedNote(mode) : undefined })
   } catch (error) {
     console.error('Studio animation failed:', error)
     await closeHold(hold, 'failed', `Hareketli içerik kaydedilemedi (${sourceName}, ${mode})`)

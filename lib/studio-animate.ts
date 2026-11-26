@@ -283,6 +283,84 @@ export async function makeVideo({
   return padded || overlay ? finishClip(clip, { width, height }, padded ? art : null, overlay) : clip
 }
 
+const LIVE_FPS = 24
+const LIVE_BATCH = 6
+
+/**
+ * The clip for a picture the video model will not take (it refuses a real person's face, and asking
+ * again changes nothing). The picture is moved here instead: a slow push-in and back with the light
+ * effect over it. Nothing in the picture is redrawn, and the clip ends on the frame it began with.
+ */
+export async function makeLiveVideo({
+  image,
+  format,
+  duration,
+  hd,
+  brush,
+}: {
+  image: Buffer
+  format: string
+  duration: number
+  hd: boolean
+  /** Logo and copy to print over the finished clip, as in `makeVideo`. */
+  brush: Brush | null
+}) {
+  if (!ffmpegPath) throw new Error('Video dönüştürücü bulunamadı.')
+  const [long, short] = hd ? [1920, 1080] : [1280, 720]
+  const [width, height] = format === '16:9' ? [long, short] : format === '9:16' ? [short, long] : [short, short]
+  // Twice the size, so the push-in advances in half pixels and does not judder.
+  const [bigW, bigH] = [width * 2, height * 2]
+  const big = await sharp(image).resize(bigW, bigH, { fit: 'cover' }).flatten({ background: LIBRARY_GROUND }).raw().toBuffer()
+  const sparkles = sparkleField(width, height)
+  const total = Math.round(duration * LIVE_FPS)
+  const beats = Math.max(1, Math.round(duration / 2))
+  const dir = await mkdtemp(path.join(tmpdir(), 'live-'))
+  try {
+    const draw = async (i: number) => {
+      const t = i / total
+      const zoom = 1.03 + 0.045 * (0.5 - 0.5 * Math.cos(t * 2 * Math.PI))
+      const w = Math.round(bigW / zoom)
+      const h = Math.round(bigH / zoom)
+      const left = Math.round((bigW - w) * (0.5 + 0.3 * Math.sin(t * 2 * Math.PI)))
+      const top = Math.round((bigH - h) * (0.5 + 0.3 * Math.sin(t * 4 * Math.PI)))
+      await sharp(big, { raw: { width: bigW, height: bigH, channels: 3 } })
+        .extract({ left, top, width: w, height: h })
+        .resize(width, height, { fit: 'fill' })
+        .composite([{ input: effectOverlay(width, height, (t * beats) % 1, sparkles) }])
+        .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
+        .toFile(path.join(dir, `f${String(i).padStart(4, '0')}.jpg`))
+    }
+    for (let i = 0; i < total; i += LIVE_BATCH) {
+      await Promise.all(Array.from({ length: Math.min(LIVE_BATCH, total - i) }, (_, k) => draw(i + k)))
+    }
+    const output = path.join(dir, 'out.mp4')
+    await run(ffmpegPath, [
+      '-y',
+      '-framerate',
+      String(LIVE_FPS),
+      '-i',
+      path.join(dir, 'f%04d.jpg'),
+      '-c:v',
+      'libx264',
+      '-preset',
+      'medium',
+      '-crf',
+      '17',
+      '-pix_fmt',
+      'yuv420p',
+      '-movflags',
+      '+faststart',
+      output,
+    ])
+    const clip = await readFile(output)
+    if (clip.length < 10_000) throw new Error('Video son haline getirilemedi.')
+    const overlay = brush ? await buildOverlay(width, height, brush, image) : null
+    return overlay ? finishClip(clip, { width, height }, null, overlay) : clip
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+
 /**
  * A Telegram video sticker whose character really moves: the cut-out sticker is animated on a green
  * screen by the video model, and the green is removed again afterwards.
