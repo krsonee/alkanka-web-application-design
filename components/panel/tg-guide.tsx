@@ -323,7 +323,7 @@ const SETUP_STEPS: GuideStep[] = [
         </li>
         <li>
           Oran postu kanalımıza kaynağın yazısıyla değil, kendi düzenimizle gider: kalın başlık, altında etiket, her maç ve bahsi, eski oran üstü çizili
-          yeni oran kalın, en yüksek bahis ve katılım şartı. Maçı sadece görselde yazan oran postunda maç görselden okunur. Freespin, bonus, turnuva gibi
+          yeni oran kalın, en yüksek bahis ve katılım şartı. Maçı sadece görselde yazan ya da oranı rakamla değil premium emojiyle yazan oran postunda eksik olan görselden okunur. Freespin, bonus, turnuva gibi
           kampanya postları oran sayılmaz.
         </li>
         <li>
