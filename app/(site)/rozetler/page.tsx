@@ -95,7 +95,7 @@ export default async function BadgesPage() {
         image="/images/badges/hero-jako-rozet.png"
       />
 
-      <nav aria-label="Rozet bölümleri" className="sticky top-[calc(3.5rem+var(--safe-top)+var(--tg-strip-h,0px))] z-20 -mx-4 -my-4 flex gap-2 overflow-x-auto bg-background px-4 py-2 no-scrollbar lg:top-[calc(0.5rem+var(--tg-strip-h,0px))] sm:mx-0 sm:rounded-full sm:border sm:border-border sm:px-2">
+      <nav aria-label="Rozet bölümleri" className="sticky top-[calc(3.5rem+var(--safe-top)+var(--tg-strip-h,0px))] z-20 -mx-4 -my-4 flex gap-2 overflow-x-auto bg-background px-4 py-2 no-scrollbar max-sm:flex-wrap max-sm:gap-1.5 max-sm:overflow-visible lg:top-[calc(0.5rem+var(--tg-strip-h,0px))] sm:mx-0 sm:rounded-full sm:border sm:border-border sm:px-2">
         {[
           { href: '#kazan', label: 'KP kazan' },
           ...groups.map((g) => ({ href: `#lig-${g.tier}`, label: TIER_NAMES[g.tier] })),
@@ -104,7 +104,7 @@ export default async function BadgesPage() {
           { href: '#gizli', label: 'Gizli' },
           { href: '#akis', label: 'Akış' },
         ].map((l) => (
-          <a key={l.href} href={l.href} className="shrink-0 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-bold text-foreground transition-colors hover:border-gold/50 hover:text-gold">
+          <a key={l.href} href={l.href} className="shrink-0 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-bold text-foreground transition-colors hover:border-gold/50 hover:text-gold max-sm:px-2.5 max-sm:py-1">
             {l.label}
           </a>
         ))}

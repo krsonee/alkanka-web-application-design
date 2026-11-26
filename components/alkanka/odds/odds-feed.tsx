@@ -261,14 +261,14 @@ export function OddsFeed({ initial, today, channelUrl }: { initial: DayData; tod
             </label>
           )}
         </div>
-        <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 md:mx-0 md:px-0" role="group" aria-label="Duruma göre filtrele">
+        <div className="flex gap-1.5 max-sm:grid max-sm:grid-cols-5 max-sm:gap-1 sm:-mx-4 sm:overflow-x-auto sm:px-4 md:mx-0 md:px-0" role="group" aria-label="Duruma göre filtrele">
           {FILTERS.map((f) => (
             <button
               key={f.id}
               type="button"
               aria-pressed={filter === f.id}
               onClick={() => setFilter(f.id)}
-              className={cn('shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors', filter === f.id ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:text-foreground')}
+              className={cn('shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors max-sm:px-0 max-sm:text-center', filter === f.id ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:text-foreground')}
             >
               {f.label}
             </button>

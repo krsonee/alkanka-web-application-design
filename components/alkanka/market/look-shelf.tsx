@@ -66,7 +66,7 @@ export function LookShelf() {
                       <div className="relative aspect-square overflow-hidden rounded-full bg-secondary ring-1 ring-primary/25">
                         <Image src={a.src || '/placeholder.svg'} alt="" fill sizes="(min-width: 1024px) 15vw, 45vw" className="object-cover" />
                       </div>
-                      <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start justify-between gap-2 max-sm:flex-col max-sm:gap-0.5">
                         <p className="min-w-0 text-sm font-semibold leading-snug text-foreground text-pretty">{a.name}</p>
                         {!mine && (
                           <span className="flex shrink-0 items-center gap-1 text-sm font-bold text-primary tabular-nums">

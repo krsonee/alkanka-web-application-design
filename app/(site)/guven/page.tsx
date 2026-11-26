@@ -161,7 +161,7 @@ export default async function TrustPage({ searchParams }: { searchParams: Promis
               </span>
               <span className="flex min-w-0 flex-col">
                 <span className="text-sm font-bold text-foreground">{title}</span>
-                <span className="line-clamp-2 text-[11px] leading-snug text-muted-foreground sm:text-xs sm:leading-relaxed">{text}</span>
+                <span className="text-[11px] leading-snug text-muted-foreground text-pretty sm:line-clamp-2 sm:text-xs sm:leading-relaxed">{text}</span>
               </span>
             </li>
           ))}

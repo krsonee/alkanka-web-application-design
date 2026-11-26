@@ -188,7 +188,7 @@ function MatchRow({ match, sport }: { match: Match; sport: SportSlug }) {
               homeWin ? 'font-bold' : 'font-medium',
             )}
           >
-            <span className="truncate text-right text-foreground max-sm:text-left">{match.home.name}</span>
+            <span className="min-w-0 text-right text-foreground max-sm:text-left max-sm:leading-snug max-sm:[overflow-wrap:anywhere] sm:truncate">{match.home.name}</span>
             <TeamCrest src={match.home.logo} />
           </span>
           <span
@@ -202,7 +202,7 @@ function MatchRow({ match, sport }: { match: Match; sport: SportSlug }) {
           </span>
           <span className={cn('flex min-w-0 items-center gap-2 text-sm max-sm:col-start-1 max-sm:row-start-2', awayWin ? 'font-bold' : 'font-medium')}>
             <TeamCrest src={match.away.logo} />
-            <span className="truncate text-foreground">{match.away.name}</span>
+            <span className="min-w-0 text-foreground max-sm:leading-snug max-sm:[overflow-wrap:anywhere] sm:truncate">{match.away.name}</span>
           </span>
         </span>
         <ChevronDown
