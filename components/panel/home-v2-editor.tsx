@@ -15,9 +15,9 @@ import {
   HOME_GAME_KEYS,
   HOME_GAME_LABEL,
   RAIL_ICONS,
-  SLIDE_GAME_KEYS,
 } from '@/lib/home-v2-shared'
 import { ImageField } from '@/components/panel/image-field'
+import { useSiblingTabs } from '@/components/panel/telegram-tabs'
 
 const RAIL_ICON_LABEL: Record<string, string> = {
   wheel: 'Çark',
@@ -109,6 +109,8 @@ export function HomeV2Editor({ initial, part }: { initial: HomeV2Settings; part:
   const [state, action, pending] = useActionState<ActionState, FormData>(saveHomeV2, {})
   const [v, setV] = useState<HomeV2Settings>(initial)
   const [section, setSection] = useState<HomeSection>('general')
+  const tabs = useSiblingTabs()
+  const sliderTab = tabs?.tabs.some((tab) => tab.id === 'slider')
   const on = (id: HomeSection) => part === 'home' && section === id
   const home = v.home
   const setup = v.setup
@@ -173,7 +175,17 @@ export function HomeV2Editor({ initial, part }: { initial: HomeV2Settings; part:
             </button>
           )}
         </div>
-        <KeyPicker label="Kapak slaytında dönen oyunlar (misafir)" all={SLIDE_GAME_KEYS} value={home.slides} onChange={(slides) => setHome({ slides })} />
+        <p className="rounded-lg border border-border bg-background p-3 text-xs leading-relaxed text-muted-foreground">
+          Sayfanın en üstünde dönen slaytlar (oyun kapakları ve kendi afişlerin) artık tek yerden yönetilir: sırası, görseli, gizlenmesi ve yenisinin eklenmesi{' '}
+          {sliderTab ? (
+            <button type="button" onClick={() => tabs?.open('slider')} className="font-semibold text-primary hover:underline">
+              Slider sekmesinde
+            </button>
+          ) : (
+            <span className="font-semibold text-foreground">Site → Slider bölümünde</span>
+          )}
+          .
+        </p>
         <KeyPicker label="Oyunlar bölümünde gösterilen oyunlar" all={HOME_GAME_KEYS} value={home.games} onChange={(games) => setHome({ games })} />
         <div className="grid gap-4 md:grid-cols-3">
           <Field label="Oyunlar başlığı">
@@ -302,6 +314,12 @@ export function HomeV2Editor({ initial, part }: { initial: HomeV2Settings; part:
       {on('member') && (
       <Section title="Üye ana sayfası (giriş yapınca)" desc="Giriş yapmış üyeler ana sayfada bu bölümü görür.">
         <Toggle label="Yeni üye ana sayfasını göster" checked={home.enabled} onChange={(enabled) => setHome({ enabled })} hint="Kapatırsan üyeler eski ana sayfayı görür." />
+        <Toggle
+          label="'Kaldığın yer' slaytını göster"
+          checked={home.showResume}
+          onChange={(showResume) => setHome({ showResume })}
+          hint="Üye slider'ının ilk slaytı: aşağıdaki başlık, etiketler ve düğmelerle üyeyi masasına geri gönderir. Kapatırsan slider sadece Slider sekmesindeki slaytları döndürür. Kendi afişini buraya değil Slider sekmesine ekle; orada üstüne yazı basılmaz."
+        />
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Üst satır" hint="{ad} yazan yere üyenin adı gelir.">
             <input className={input} value={home.eyebrow} maxLength={60} onChange={(e) => setHome({ eyebrow: e.target.value })} />
@@ -329,7 +347,13 @@ export function HomeV2Editor({ initial, part }: { initial: HomeV2Settings; part:
             onChange={(e) => setHome({ pills: e.target.value.split(',').map((s) => s.trimStart()).slice(0, 5) })}
           />
         </Field>
-        <ImageField label="Kapak görseli" value={home.heroImage} onChange={(heroImage) => setHome({ heroImage })} uploadId="home-v2-hero" />
+        <ImageField
+          label="'Kaldığın yer' slaytının arka plan görseli"
+          value={home.heroImage}
+          onChange={(heroImage) => setHome({ heroImage })}
+          uploadId="home-v2-hero"
+          hint="Bu görselin üstüne başlık, etiketler ve düğmeler gelir; sol tarafı karartılır. Boş bırakırsan hazır okey görseli kullanılır."
+        />
       </Section>
       )}
 
