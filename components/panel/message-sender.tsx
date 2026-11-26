@@ -10,6 +10,7 @@ import { deleteInboxMessage, deleteMessageTemplate, saveMessageTemplate, searchM
 import { scheduleMessage } from '@/app/panel/outbox-actions'
 import type { SentMessage } from '@/lib/inbox'
 import { cleanSendAt, type MessageTemplate, type OutboxItem } from '@/lib/outbox-shared'
+import { DIRECT_UPLOAD_OVER_BYTES } from '@/lib/upload-limits'
 import { cn } from '@/lib/utils'
 
 type Member = { id: string; name: string; email: string }
@@ -54,6 +55,11 @@ export function MessageSender({ sent, outbox, templates }: { sent: SentMessage[]
 
   const upload = async (file: File) => {
     setStatus(null)
+    if (file.size > DIRECT_UPLOAD_OVER_BYTES) {
+      setStatus({ ok: false, text: `Bu dosya ${(file.size / 1024 / 1024).toLocaleString('tr-TR', { maximumFractionDigits: 1 })} MB. Mesaj görseli en fazla 4 MB olabilir.` })
+      if (fileRef.current) fileRef.current.value = ''
+      return
+    }
     setUploading(true)
     try {
       const form = new FormData()
@@ -294,7 +300,7 @@ export function MessageSender({ sent, outbox, templates }: { sent: SentMessage[]
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-semibold text-muted-foreground">Görsel (isteğe bağlı · PNG, JPG, WEBP, GIF · en fazla 2 MB)</span>
+          <span className="text-xs font-semibold text-muted-foreground">Görsel (isteğe bağlı · PNG, JPG, WEBP, GIF · en fazla 4 MB)</span>
           <input
             ref={fileRef}
             type="file"
