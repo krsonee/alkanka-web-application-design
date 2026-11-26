@@ -141,7 +141,7 @@ export function LiveFeed({ items }: { items: FeedItem[] }) {
           {items.map((it) => (
             <li key={it.id} className="flex items-center gap-3 px-3 py-2.5">
               <SpecialEmblem icon={it.icon} tier={it.tier ?? (it.kind === 'turnuva' ? 'efsane' : 'altin')} size="xs" />
-              <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+              <p className="min-w-0 flex-1 text-sm text-muted-foreground max-sm:leading-snug max-sm:text-pretty sm:truncate">
                 <span className="font-bold text-foreground">{it.name}</span>{' '}
                 {it.kind === 'gorev' ? 'bir görev' : <span className="font-semibold text-foreground">{it.text}</span>} {VERB[it.kind]}
               </p>

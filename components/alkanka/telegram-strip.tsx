@@ -104,11 +104,21 @@ export function TelegramStrip({
       root.style.setProperty('--tg-strip-h', '0px')
       return
     }
-    const sync = () => root.style.setProperty('--tg-strip-h', `${el.offsetHeight}px`)
+    // The bar only stays pinned where its parent is as tall as the page. Where it scrolls away with the
+    // content, anything stuck below it must close the gap, so publish the part still on screen.
+    let last = -1
+    const sync = () => {
+      const shown = Math.max(0, Math.min(el.offsetHeight, Math.round(el.getBoundingClientRect().bottom)))
+      if (shown === last) return
+      last = shown
+      root.style.setProperty('--tg-strip-h', `${shown}px`)
+    }
     sync()
     const ro = new ResizeObserver(sync)
     ro.observe(el)
+    document.addEventListener('scroll', sync, { passive: true, capture: true })
     return () => {
+      document.removeEventListener('scroll', sync, { capture: true })
       ro.disconnect()
       root.style.setProperty('--tg-strip-h', '0px')
     }

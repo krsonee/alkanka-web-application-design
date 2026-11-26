@@ -30,8 +30,8 @@ export function NotificationPreview() {
               <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">AL KANKA</span>
               <span className="text-[11px] text-muted-foreground">{n.time}</span>
             </div>
-            <span className="truncate text-sm font-bold text-foreground">{n.title}</span>
-            <span className="truncate text-sm text-muted-foreground">{n.body}</span>
+            <span className="text-sm font-bold leading-snug text-foreground text-pretty">{n.title}</span>
+            <span className="text-sm leading-snug text-muted-foreground text-pretty">{n.body}</span>
           </div>
         </div>
       ))}

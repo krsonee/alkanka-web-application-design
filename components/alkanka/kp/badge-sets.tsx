@@ -46,7 +46,7 @@ export function BadgeSets({ sets, badges, signedIn }: { sets: SetProgress[]; bad
                       className={cn('flex min-w-0 items-center gap-2 rounded-xl border px-2 py-1.5', have ? 'border-gold/40 bg-gold/10' : 'border-border bg-background/60')}
                     >
                       <SpecialEmblem icon={b.icon} tier={b.tier} size="xs" locked={signedIn && !have} />
-                      <span className={cn('min-w-0 truncate text-xs font-semibold', have ? 'text-foreground' : 'text-muted-foreground')}>{b.name}</span>
+                      <span className={cn('min-w-0 text-xs font-semibold max-sm:leading-tight max-sm:text-pretty sm:truncate', have ? 'text-foreground' : 'text-muted-foreground')}>{b.name}</span>
                     </li>
                   )
                 })}

@@ -56,7 +56,7 @@ function StatusBadge({ match }: { match: Match }) {
   }
   if (match.state === 'post') {
     return (
-      <span className="block truncate rounded-md bg-muted px-2 py-1 text-center text-xs font-bold text-muted-foreground">
+      <span className="block rounded-md bg-muted px-2 py-1 text-center text-xs font-bold text-muted-foreground max-sm:px-1 max-sm:text-[10px] max-sm:leading-tight max-sm:[overflow-wrap:anywhere] sm:truncate">
         {!match.status || /^sonu/i.test(match.status) ? 'MS' : match.status}
       </span>
     )
