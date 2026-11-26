@@ -42,7 +42,17 @@ export type TaskRecord = {
   deals?: TaskDeal[]
 }
 
-export type TaskDeal = { itemId: string; name: string; price: number; dealPrice: number; uses: number }
+export type TaskDeal = {
+  itemId: string
+  name: string
+  price: number
+  dealPrice: number
+  uses: number
+  /** Where the member who finished the task stands on this price; unset for a visitor or an unfinished task. */
+  state?: 'open' | 'spent' | 'wait'
+  /** With `wait`: what was done since the task was linked to the product, out of what it asks for (0 when it cannot be counted again). */
+  wait?: { have: number; need: number }
+}
 
 export const DAILY_PICKS = 5
 export const WEEKLY_PICKS = 4
@@ -454,16 +464,48 @@ export async function completedTaskIds(userId: string): Promise<number[]> {
 }
 
 /** The same completions by task, each with the record it was written under: what a market task price is spent against. */
-export async function completedTaskRefs(userId: string): Promise<Map<number, string>> {
+export type TaskCompletion = { ref: string; at: string }
+
+/** The tasks the member has finished in the current period, with the completion each one stands on and when it was claimed. */
+export async function taskCompletions(userId: string): Promise<Map<number, TaskCompletion>> {
   await ensureTasks()
   await ensureKp()
-  const found = await rows<{ ref: string }>(sql`SELECT ref FROM kp_events WHERE user_id = ${userId} AND source = 'gorev' AND ref IS NOT NULL`)
-  const out = new Map<number, string>()
-  for (const { ref } of found) {
+  const found = await rows<{ ref: string; created_at: string | Date }>(
+    sql`SELECT ref, created_at FROM kp_events WHERE user_id = ${userId} AND source = 'gorev' AND ref IS NOT NULL`,
+  )
+  const out = new Map<number, TaskCompletion>()
+  for (const { ref, created_at } of found) {
     const [id, key = ''] = String(ref).split(':')
-    if (Number.isInteger(Number(id)) && isCurrentKey(key)) out.set(Number(id), String(ref))
+    if (Number.isInteger(Number(id)) && isCurrentKey(key)) out.set(Number(id), { ref: String(ref), at: new Date(created_at).toISOString() })
   }
   return out
+}
+
+/** Kinds counted from dated records, so "what the member did since a moment" has an answer. */
+const DATED_KINDS: TaskKind[] = [
+  'game_play', 'game_win', 'games_distinct', 'sponsor_visit', 'invite', 'invite_active', 'tv_watch', 'tv_predict',
+  'tg_comment', 'tg_active_days', 'predict', 'predict_correct', 'chat_message', 'cember_join', 'table_invite',
+  'trust_review', 'trust_helpful', 'login_days', 'app_login', 'tournament_join', 'tournament_win',
+]
+
+/** `need` is 0 for a task that cannot be counted again from a moment (a linked account, a code, a staff approval). */
+export type SinceStanding = { earned: boolean; have: number; need: number }
+
+/**
+ * Whether a finished task was earned after `from`. A task counted from dated records (messages, games,
+ * visits) is counted again from that moment, so what the member did before it does not count; any other
+ * task counts when it was claimed after it.
+ */
+export async function earnedSince(userId: string, task: TaskRecord, done: TaskCompletion, from: string | null, memo?: ProgressMemo): Promise<SinceStanding> {
+  const start = from ? Date.parse(from) : NaN
+  if (!Number.isFinite(start)) return { earned: true, have: 0, need: 0 }
+  if (!DATED_KINDS.includes(task.kind)) return { earned: Date.parse(done.at) >= start, have: 0, need: 0 }
+  const need = Math.max(1, task.target)
+  // A period (or a task) that began after that moment was earned inside it entirely.
+  const counted = Math.max(periodStart(task.period)?.getTime() ?? 0, task.startsAt ? Date.parse(task.startsAt) || 0 : 0)
+  if (counted >= start) return { earned: true, have: need, need }
+  const have = Math.min(need, await taskProgress(userId, task, memo, from))
+  return { earned: have >= need, have, need }
 }
 
 export async function taskClaimMap(userId: string): Promise<Record<number, ClaimStatus>> {
@@ -714,10 +756,11 @@ export type ProgressMemo = Map<string, Promise<number>>
 
 const COUNTED_PER_TASK: TaskKind[] = ['bundle', 'social_follow', 'social_like', 'secret_code']
 
-export async function taskProgress(userId: string, task: TaskRecord, memo?: ProgressMemo): Promise<number> {
+/** `from` moves the start of the count later, for a reward that only counts what was done after it was offered. */
+export async function taskProgress(userId: string, task: TaskRecord, memo?: ProgressMemo, from?: string | null): Promise<number> {
   if (task.kind === 'manual') return 0
   const start = periodStart(task.period)
-  const floor = task.startsAt ? Date.parse(task.startsAt) : 0
+  const floor = Math.max(task.startsAt ? Date.parse(task.startsAt) : 0, from ? Date.parse(from) || 0 : 0)
   const since = new Date(Math.max(start?.getTime() ?? 0, floor)).toISOString()
   if (!memo || COUNTED_PER_TASK.includes(task.kind)) return countProgress(userId, task, since, memo)
   const key = `${task.kind}|${task.param ?? ''}|${since}`

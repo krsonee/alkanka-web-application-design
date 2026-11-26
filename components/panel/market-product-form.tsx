@@ -3,6 +3,7 @@
 import { useId, useState, type ReactNode } from 'react'
 import { Hand, Loader2, Save, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { TR_TZ } from '@/lib/tr-time'
 import type { MarketKind, ProductInput } from '@/lib/market'
 import { REWARD_KINDS, rewardMeta, type DeliveryMode, type RewardKind } from '@/lib/market-shared'
 import { ImageField } from '@/components/panel/image-field'
@@ -52,6 +53,11 @@ export function MarketProductForm({
   const [dealOn, setDealOn] = useState(Boolean(value.dealTaskId))
   const dealTask = tasks.find((t) => t.id === v.dealTaskId)
   const dealBad = dealOn && Number(v.dealPrice) >= Number(v.price)
+  // The link time on record belongs to the task the product was saved with; a newly picked task starts its own.
+  const dealStarted =
+    value.dealSince && value.dealTaskId != null && v.dealTaskId === value.dealTaskId
+      ? new Date(value.dealSince).toLocaleString('tr-TR', { timeZone: TR_TZ, day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
+      : null
 
   function setDeal(on: boolean) {
     setDealOn(on)
@@ -220,6 +226,13 @@ export function MarketProductForm({
                 {dealBad
                   ? 'Görev fiyatı normal fiyattan düşük olmalı.'
                   : `Üye bu ürünü ${Number(v.price).toLocaleString('tr-TR')} KC ödeyerek her zaman alabilir. Seçtiğin görevi tamamlamışsa ve indirimli adet hakkı duruyorsa ${Number(v.dealPrice).toLocaleString('tr-TR')} KC öder; fiyat kendiliğinden uygulanır, sana iş düşmez. Ürün markette "Görevli fırsatlar" sekmesinde de görünür.`}
+              </p>
+              <p className="rounded-lg border border-border bg-background px-3 py-2 text-xs leading-relaxed text-foreground text-pretty sm:col-span-2">
+                <b className="font-semibold">İndirim geriye dönük işlemez.</b>{' '}
+                {dealStarted
+                  ? `Bu görev ürüne ${dealStarted} tarihinde bağlandı; üyenin o andan sonra yaptıkları sayılır.`
+                  : 'Üyenin, görev bu ürüne bağlandıktan (kaydettiğin andan) sonra yaptıkları sayılır.'}{' '}
+                Örnek: görev "5 mesaj yaz" ise, önceden yazılmış mesajlar indirim açmaz; üye bağlandıktan sonra 5 mesaj yazınca fiyat düşer. Başka bir görev seçersen sayım o andan yeniden başlar; fiyatı ya da adedi değiştirmek sayımı bozmaz.
               </p>
               <p className="text-xs leading-relaxed text-muted-foreground text-pretty sm:col-span-2">
                 Günlük görevde üyenin görevi o gün, haftalık görevde o hafta tamamlamış olması gerekir. Onay isteyen görevde indirim, görev onaylandıktan sonra açılır.

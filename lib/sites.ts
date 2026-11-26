@@ -155,11 +155,11 @@ export async function listPublicSites(): Promise<PublicSponsor[]> {
   return all.filter((site) => site.active && site.slug).map(toPublicSponsor).sort(byTier)
 }
 
-export type SiteOption = { id: string; name: string; initials: string }
+export type SiteOption = { id: string; name: string; initials: string; logo: string }
 
 export async function siteOptions(): Promise<SiteOption[]> {
   const all = await listPublicSites().catch(() => [] as PublicSponsor[])
-  return all.map((site) => ({ id: site.id, name: site.name, initials: site.initials }))
+  return all.map((site) => ({ id: site.id, name: site.name, initials: site.initials, logo: site.logoUrl?.trim() ?? '' }))
 }
 
 export async function siteNameLookup() {

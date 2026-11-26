@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import type { MarketProduct } from '@/lib/market'
 import { productImage } from '@/lib/market-image'
 import { stockLevel } from '@/lib/market-stock'
-import { dealShown, dealSpentText, dealUsesText, rewardText } from '@/lib/market-shared'
+import { dealShown, dealSpentText, dealUsesText, dealWaitText, rewardText, type DealWait } from '@/lib/market-shared'
 import { DetailButton } from '../detail-modal'
 import { formatAC } from '../points-context'
 
@@ -39,8 +39,34 @@ export function SaleTag({ item, className }: { item: MarketProduct; className?: 
 }
 
 /** The cheaper price a finished task unlocks; links to the task until the member has done it. */
-export function DealLine({ item, taskDone, left = 0, spent = false, className }: { item: MarketProduct; taskDone: boolean; left?: number; spent?: boolean; className?: string }) {
-  if (!dealShown(item, taskDone) || !item.dealTask) return null
+export function DealLine({
+  item,
+  taskDone,
+  left = 0,
+  spent = false,
+  wait = null,
+  className,
+}: {
+  item: MarketProduct
+  taskDone: boolean
+  left?: number
+  spent?: boolean
+  wait?: DealWait | null
+  className?: string
+}) {
+  if (!item.dealTask) return null
+  if (wait && !taskDone && dealShown(item, false)) {
+    return (
+      <Link
+        href={`/gorevler?gorev=${item.dealTaskId}`}
+        className={cn('flex items-start gap-1.5 rounded-lg border border-border bg-secondary px-2 py-1.5 text-xs leading-relaxed text-foreground hover:border-primary/50', className)}
+      >
+        <Clock className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden="true" />
+        <span className="min-w-0 text-pretty">{dealWaitText(item, wait)}</span>
+      </Link>
+    )
+  }
+  if (!dealShown(item, taskDone)) return null
   const price = `${formatAC(item.dealPrice)} KC`
   if (spent) {
     return (
@@ -236,11 +262,13 @@ type CardProps = {
   dealLeft?: number
   /** The task is done but every discounted unit it covered has been bought. */
   dealSpent?: boolean
+  /** The task is finished, but not since it was linked to this product. */
+  dealWait?: DealWait | null
   onBuy: () => void
   onDetail: () => void
 }
 
-export function ProductCard({ item, left, used, points, signedIn, pay, taskDone, dealLeft, dealSpent, onBuy, onDetail }: CardProps) {
+export function ProductCard({ item, left, used, points, signedIn, pay, taskDone, dealLeft, dealSpent, dealWait, onBuy, onDetail }: CardProps) {
   const state = buyState(item, left, used, points, signedIn, pay)
   const level = stockLevel(left, item.total)
   const deal = dealShown(item, taskDone) && Boolean(item.dealTask) && !dealSpent
@@ -298,7 +326,7 @@ export function ProductCard({ item, left, used, points, signedIn, pay, taskDone,
         </div>
         <StockMeter left={left} total={item.total} />
         <div className="mt-auto flex flex-col gap-2">
-          <DealLine item={item} taskDone={taskDone} left={dealLeft} spent={dealSpent} />
+          <DealLine item={item} taskDone={taskDone} left={dealLeft} spent={dealSpent} wait={dealWait} />
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <Price value={pay} was={item.price} />
             <LimitLine item={item} used={used} signedIn={signedIn} />
@@ -311,7 +339,7 @@ export function ProductCard({ item, left, used, points, signedIn, pay, taskDone,
   )
 }
 
-export function FeaturedCard({ item, left, used, points, signedIn, pay, taskDone, dealLeft, dealSpent, onBuy, onDetail }: CardProps) {
+export function FeaturedCard({ item, left, used, points, signedIn, pay, taskDone, dealLeft, dealSpent, dealWait, onBuy, onDetail }: CardProps) {
   const state = buyState(item, left, used, points, signedIn, pay)
   return (
     <li className="panel-gold flex flex-col overflow-hidden rounded-2xl @lg:flex-row">
@@ -329,7 +357,7 @@ export function FeaturedCard({ item, left, used, points, signedIn, pay, taskDone
           <DeliveryLine item={item} className="max-w-full" />
         </div>
         <StockMeter left={left} total={item.total} />
-        <DealLine item={item} taskDone={taskDone} left={dealLeft} spent={dealSpent} className="self-start" />
+        <DealLine item={item} taskDone={taskDone} left={dealLeft} spent={dealSpent} wait={dealWait} className="self-start" />
         <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-2">
           <Price value={pay} was={item.price} />
           <LimitLine item={item} used={used} signedIn={signedIn} />

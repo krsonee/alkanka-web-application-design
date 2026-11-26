@@ -4,7 +4,7 @@ import { adminConfigured, canPanel } from '@/lib/admin-auth'
 import { getPanelSession, totpRenewalIds, type PanelSession } from '@/lib/panel-auth'
 import type { PanelModule } from '@/lib/panel-modules'
 import { rows, sql } from '@/lib/db'
-import { getAllContent, type HeroOverride, type SlideOverride } from '@/lib/content'
+import { getAllContent, getLogos, type HeroOverride, type SlideOverride } from '@/lib/content'
 import { TEXTS_KEY, type SiteTexts } from '@/lib/site-texts-shared'
 import { TextsEditor } from '@/components/panel/texts-editor'
 import { LegalEditor } from '@/components/panel/legal-editor'
@@ -1031,17 +1031,19 @@ export default async function PanelPage({ searchParams }: { searchParams: Promis
       return <RewardsEditor initial={config} hidden={hidden.mini ?? []} winRate={winRate} stats={stats} />
     }),
     section(ctx, 'catalog', 'Etkinlik ve kampanyalar', async () => {
-      const [{ rewards: _rewards, ...catalog }, hidden, options, cups, league] = await Promise.all([
+      const [{ rewards: _rewards, ...catalog }, hidden, options, cups, league, logos] = await Promise.all([
         getCatalog({ includeHidden: true }),
         getHidden(),
         siteOptions(),
         ctx.session.isOwner || ctx.session.permissions.includes('tournaments') ? listTournaments().catch(miss([])) : [],
         tabHome('league', can) === 'catalog' ? listLeagueMatches(null, { admin: true }).catch(miss([])) : null,
+        // The site draws a sponsor's own logo, or the one picked for it in the logo settings: the form previews the same.
+        getLogos().catch(() => null),
       ])
       return (
         <CatalogEditor
           catalog={catalog}
-          sponsors={options.map((s) => ({ id: String(s.id), name: s.name }))}
+          sponsors={options.map((s) => ({ id: String(s.id), name: s.name, logo: s.logo || logos?.sponsors[String(s.id)] || '', initials: s.initials }))}
           library={IMAGE_LIBRARY}
           hidden={hidden}
           tournaments={cups.map((t) => ({ id: t.id, title: t.title, startsAt: t.startsAt, endsAt: t.endsAt, finishedAt: t.finishedAt, status: t.status }))}

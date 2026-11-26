@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { getMyMarketAccounts, getMyMarketDeals, getMyMarketRequests } from '@/app/actions/market'
 import type { MarketProduct } from '@/lib/market'
 import { productImage } from '@/lib/market-image'
-import { FEATURED_SLOTS, MARKET_CATEGORIES, dealShown, isMarketCategory, payable, rewardText, type MarketCategory, dealSpentText, dealUsesText } from '@/lib/market-shared'
+import { FEATURED_SLOTS, MARKET_CATEGORIES, dealShown, isMarketCategory, payable, rewardText, type MarketCategory, dealSpentText, dealUsesText, dealWaitText } from '@/lib/market-shared'
 import { MARKET_KIND_PARAM } from '@/lib/record-links'
 import { TR_TZ } from '@/lib/tr-time'
 import { DetailModal } from '../detail-modal'
@@ -75,7 +75,9 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
   // The task price is spent per completion: once its units are bought the product costs the usual price again.
   const dealLeftOf = (item: MarketProduct) => (item.dealTaskId != null ? (rights?.left[item.id] ?? 0) : 0)
   const taskDoneOf = (item: MarketProduct) => dealLeftOf(item) > 0
-  const dealSpentOf = (item: MarketProduct) => item.dealTaskId != null && Boolean(rights?.done.includes(item.dealTaskId)) && dealLeftOf(item) < 1
+  const dealSpentOf = (item: MarketProduct) => item.dealTaskId != null && rights?.left[item.id] === 0
+  // The task was finished, but (partly) before it was linked to this product: only what came after counts.
+  const dealWaitOf = (item: MarketProduct) => (item.dealTaskId != null ? (rights?.waiting?.[item.id] ?? null) : null)
   const payOf = (item: MarketProduct) => payable(item, taskDoneOf(item))
   const cardProps = (item: MarketProduct) => ({
     item,
@@ -87,6 +89,7 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
     taskDone: taskDoneOf(item),
     dealLeft: dealLeftOf(item),
     dealSpent: dealSpentOf(item),
+    dealWait: dealWaitOf(item),
     onBuy: () => start(item),
     onDetail: () => setDetail(item),
   })
@@ -321,7 +324,9 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
                     label: 'Görevle',
                     value: dealSpentOf(detail)
                       ? dealSpentText(detail)
-                      : `${formatAC(detail.dealPrice)} KC · ${detail.dealTask.title}. ${taskDoneOf(detail) ? `Görevi tamamladın: ${dealLeftOf(detail)} adet daha bu fiyata alabilirsin.` : dealUsesText(detail)}`,
+                      : dealWaitOf(detail)
+                        ? `${formatAC(detail.dealPrice)} KC · ${detail.dealTask.title}. ${dealWaitText(detail, dealWaitOf(detail)!)}`
+                        : `${formatAC(detail.dealPrice)} KC · ${detail.dealTask.title}. ${taskDoneOf(detail) ? `Görevi tamamladın: ${dealLeftOf(detail)} adet daha bu fiyata alabilirsin.` : dealUsesText(detail)}`,
                   }]
                 : []),
               { label: 'Stok', value: `${leftOf(detail)}${detail.total ? ` / ${detail.total}` : ''}` },
@@ -363,6 +368,7 @@ export function MarketShop({ items, focus, kind }: { items: MarketProduct[]; foc
           taskDone={taskDoneOf(asking)}
           dealLeft={dealLeftOf(asking)}
           dealSpent={dealSpentOf(asking)}
+          dealWait={dealWaitOf(asking)}
           account={asking.kind === 'sponsor' && asking.sponsorSlug ? (accounts?.[asking.sponsorSlug] ?? null) : null}
           checking={Boolean(member) && asking.kind === 'sponsor' && accounts === undefined}
           points={points}

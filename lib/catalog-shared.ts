@@ -197,7 +197,8 @@ export function cleanCampaigns(raw: unknown): Campaign[] {
         ...(startsAt ? { startsAt } : {}),
         ...(endsAt ? { endsAt } : {}),
         ...(link(c.url) ? { url: link(c.url) } : {}),
-        ...(c.logo === true ? { logo: true } : {}),
+        // The logo is the chosen sponsor's: a campaign without a sponsor has none to show.
+        ...(c.logo === true && str(c.sponsorId, 40) ? { logo: true } : {}),
       }
     }),
   )

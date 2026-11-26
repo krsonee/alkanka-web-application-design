@@ -34,7 +34,16 @@ export type PublicTask = {
   badge?: string | null
   cap?: number
   /** Market products that get cheaper for a member who finishes this task. */
-  deals?: { itemId: string; name: string; price: number; dealPrice: number; uses: number }[]
+  deals?: {
+    itemId: string
+    name: string
+    price: number
+    dealPrice: number
+    uses: number
+    /** Where a member who finished the task stands on this price. */
+    state?: 'open' | 'spent' | 'wait'
+    wait?: { have: number; need: number }
+  }[]
   /** A super task's own conditions with where the member stands on each. */
   parts?: { label: string; progress: number; target: number; done: boolean }[]
 }
@@ -46,6 +55,19 @@ const DEAL_LASTS: Record<TaskPeriod, string> = {
   daily: 'İndirimin bugün açık',
   weekly: 'İndirimin bu hafta açık',
   monthly: 'İndirimin bu ay açık',
+}
+
+/**
+ * What a finished task's market price is worth to this member. The price only counts what was done after
+ * the task was linked to the product, so a finished task does not always mean an open price.
+ */
+function dealLabel(deal: NonNullable<PublicTask['deals']>[number], period: TaskPeriod) {
+  if (deal.state === 'open') return DEAL_LASTS[period]
+  if (deal.state === 'spent') return 'İndirimi kullandın'
+  if (deal.state === 'wait') {
+    return deal.wait && deal.wait.need > 0 ? `İndirim sonradan yapılanı sayar (${deal.wait.have} / ${deal.wait.need})` : 'İndirimden önce tamamlandı, sayılmaz'
+  }
+  return 'Market indirimi'
 }
 
 /** The market price this task unlocks: said on the task, where the member decides whether to do it. */
@@ -64,7 +86,7 @@ function TaskDeals({ task, done, small }: { task: Pick<PublicTask, 'deals' | 'pe
           >
             <Tag className="size-3.5 shrink-0 text-gold" aria-hidden="true" />
             <span className="min-w-0 flex-1 text-pretty">
-              <span className="text-gold">{done ? DEAL_LASTS[task.period] : 'Market indirimi'}</span>
+              <span className="text-gold">{done ? dealLabel(deal, task.period) : 'Market indirimi'}</span>
               {`: ${deal.name} · ${deal.uses} adet`}
             </span>
             <span className="shrink-0 tabular-nums">
