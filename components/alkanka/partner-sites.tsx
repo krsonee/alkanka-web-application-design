@@ -498,7 +498,7 @@ export function SponsorDirectory({ sponsors = [] }: { sponsors?: Sponsor[]; main
         description={`${pool.length} sponsor, her gün kontrol ediliyor. Kategoriye göre filtrele, ara veya sırala.`}
       />
 
-      <div className="-mx-1 flex flex-col gap-2 rounded-xl border border-border bg-surface/95 p-2 backdrop-blur-md lg:sticky lg:top-[calc(4rem+var(--tg-strip-h,0px))] lg:z-20 lg:flex-row lg:items-center lg:gap-3 lg:p-3">
+      <div className="-mx-1 flex flex-col gap-2 rounded-xl border border-border bg-surface p-2 lg:sticky lg:top-[calc(0.5rem+var(--tg-strip-h,0px))] lg:z-20 lg:flex-row lg:items-center lg:gap-3 lg:p-3">
         <div className="flex min-w-0 items-start gap-2 lg:items-center">
           {/* Every category stays in sight; the chips wrap rather than slide off the edge. */}
           <div className="flex min-w-0 flex-1 flex-wrap gap-1.5 sm:gap-2">

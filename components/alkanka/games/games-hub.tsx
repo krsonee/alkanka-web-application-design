@@ -4,7 +4,7 @@ import type { CSSProperties } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight, Clock, Trophy, Users } from 'lucide-react'
-import { ARENA_GAMES, ARENA_META, botMatchFactor, type ArenaGame, type ArenaSettings } from '@/lib/arena'
+import { ARENA_GAMES, ARENA_META, botMatchFactor, posterCover, type ArenaGame, type ArenaSettings } from '@/lib/arena'
 import type { MiniGame } from '@/app/actions/wallet'
 import { cn } from '@/lib/utils'
 import { formatRemaining, useMiniLock } from './mini-status'
@@ -112,7 +112,10 @@ export function GamesHub({ arena, hiddenMini = [] }: { arena: ArenaSettings; hid
             {tables.map((g, index) => {
               const meta = ARENA_META[g]
               const s = arena[g]
-              const wide = lead && index === 0
+              const poster = posterCover(s)
+              // A poster keeps the 4:3 shape it was drawn in, so it never becomes the wide lead card.
+              const wide = lead && index === 0 && !poster
+              const factor = botMatchFactor(g, s) ?? 0
               return (
                 <li key={g} className={cn(wide && 'max-sm:col-span-2')}>
                   <Link
@@ -123,15 +126,16 @@ export function GamesHub({ arena, hiddenMini = [] }: { arena: ArenaSettings; hid
                     )}
                   >
                     <Image src={s.image || meta.image || '/placeholder.svg'} alt="" fill sizes="(min-width: 1280px) 20vw, (min-width: 640px) 33vw, 50vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
-                    <span className="absolute left-2 top-2 flex items-center gap-1 whitespace-nowrap rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
-                      <Users className="size-3" aria-hidden="true" />
-                      {SHORT_PLAYERS[g]}
+                    {!poster && <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />}
+                    {/* A poster has its logo in the top left corner, so both tags move to the right. */}
+                    <span className={cn('absolute top-2 flex items-center gap-1.5', poster ? 'right-2' : 'inset-x-2 justify-between')}>
+                      <span className="flex items-center gap-1 whitespace-nowrap rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                        <Users className="size-3" aria-hidden="true" />
+                        {SHORT_PLAYERS[g]}
+                      </span>
+                      {factor > 1 && <span className="rounded bg-primary px-1.5 py-0.5 font-display text-xs font-bold text-primary-foreground">x{factor.toLocaleString('tr-TR')}</span>}
                     </span>
-                    {(botMatchFactor(g, s) ?? 0) > 1 && (
-                      <span className="absolute right-2 top-2 rounded bg-primary px-1.5 py-0.5 font-display text-xs font-bold text-primary-foreground">x{botMatchFactor(g, s)?.toLocaleString('tr-TR')}</span>
-                    )}
-                    <div className="relative flex flex-col gap-1 p-3">
+                    <div className={cn('relative flex flex-col gap-1 p-3', poster && 'sr-only')}>
                       <h3 className={cn('font-display text-lg font-bold uppercase leading-tight text-foreground max-sm:normal-case', wide ? 'max-sm:text-2xl' : 'max-sm:text-base')}>{meta.title}</h3>
                       <span className={cn('flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-primary max-sm:text-xs max-sm:normal-case max-sm:tracking-normal', !wide && 'max-sm:hidden')}>
                         Masaya otur

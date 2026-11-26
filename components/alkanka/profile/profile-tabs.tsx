@@ -20,7 +20,7 @@ export type ProfileTab = (typeof PROFILE_TABS)[number]['id']
 
 export function ProfileTabs({ active, unread = 0 }: { active: ProfileTab; unread?: number }) {
   return (
-    <nav aria-label="Profil bölümleri" className="sticky top-[calc(4rem+var(--tg-strip-h,0px))] z-10 -mx-4 border-b border-border bg-background/90 px-4 backdrop-blur max-sm:top-[calc(3.5rem+var(--safe-top)+var(--tg-strip-h,0px))] max-sm:px-0 lg:-mx-6 lg:px-6">
+    <nav aria-label="Profil bölümleri" className="sticky top-[calc(3.5rem+var(--tg-strip-h,0px))] z-10 -mx-4 border-b border-border bg-background px-4 max-sm:top-[calc(3.5rem+var(--safe-top)+var(--tg-strip-h,0px))] max-sm:px-0 lg:top-[var(--tg-strip-h,0px)] lg:-mx-6 lg:px-6">
       <TabRailFocus railId={RAIL_ID} tabId={`tab-${active}`} />
       <ul id={RAIL_ID} role="tablist" className="relative flex flex-wrap gap-1.5 py-2.5 max-sm:no-scrollbar max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:px-4 max-sm:py-2 max-sm:[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)] md:no-scrollbar md:flex-nowrap md:gap-1 md:overflow-x-auto md:py-0 md:pr-8 md:[mask-image:linear-gradient(to_right,black_calc(100%-2.5rem),transparent)]">
         {PROFILE_TABS.map((t) => {

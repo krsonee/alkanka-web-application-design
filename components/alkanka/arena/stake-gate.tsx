@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { cancelBotGame, finishBotGame, markBotGameStarted, matchNow, playBotsNow, startBotGame } from '@/app/actions/arena'
 import { Bot, Coins, HelpCircle, Loader2, LogOut, Play, RotateCcw, Swords, Undo2, UserPlus, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { ARENA_META, BOT_DAILY_PROFIT_CAP, botFillSeconds, botWinMultiplier, isFullPotGame, quickSeats, tablePot, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
+import { ARENA_META, BOT_DAILY_PROFIT_CAP, botFillSeconds, botWinMultiplier, isFullPotGame, posterCover, quickSeats, tablePot, type ArenaGame, type ArenaGameSettings } from '@/lib/arena'
 import { formatAC, usePoints } from '../points-context'
 import { ParticleBurst } from '../games/particle-burst'
 import { LandscapeFit } from './landscape-fit'
@@ -158,6 +158,7 @@ export function StakeGate({
   quick: QuickPlay
 }) {
   const meta = ARENA_META[game]
+  const poster = posterCover(settings)
   const { member, points, loading, setBalance, requireLogin, refresh } = usePoints()
   const [bet, setBet] = useState(settings.bets[0])
   const [phase, setPhase] = useState<Phase>({ kind: 'lobby' })
@@ -534,15 +535,22 @@ export function StakeGate({
   return (
     // Phones: the cover runs edge to edge and fades into the page; the frame comes back from tablets up.
     <section className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card max-sm:-mx-4 max-sm:rounded-none max-sm:border-0 max-sm:bg-transparent lg:grid lg:grid-cols-[1.05fr_1fr]">
-      <div className="relative aspect-[16/7] max-sm:aspect-[16/9] sm:aspect-[4/3] lg:aspect-auto lg:min-h-full">
-        <Image src={settings.image || meta.image || '/placeholder.svg'} alt={`${meta.title} masası`} fill priority sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover object-top" />
-        <span className="absolute inset-0 bg-gradient-to-t from-card via-card/50 to-transparent max-sm:from-background max-sm:via-background/45" aria-hidden="true" />
-        <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1 p-4 max-sm:gap-1.5 max-sm:pb-2 lg:p-8">
+      <div className={cn('relative', poster ? 'flex flex-col' : 'aspect-[16/7] max-sm:aspect-[16/9] sm:aspect-[4/3] lg:aspect-auto lg:min-h-full')}>
+        {poster ? (
+          // A poster carries its own lettering: it keeps its own shape and the game name sits under it, never on it.
+          <Image src={poster} alt={`${meta.title} masası`} width={1200} height={896} priority sizes="(min-width: 1024px) 50vw, 100vw" className="h-auto w-full" />
+        ) : (
+          <>
+            <Image src={settings.image || meta.image || '/placeholder.svg'} alt={`${meta.title} masası`} fill priority sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover object-top" />
+            <span className="absolute inset-0 bg-gradient-to-t from-card via-card/50 to-transparent max-sm:from-background max-sm:via-background/45" aria-hidden="true" />
+          </>
+        )}
+        <div className={cn('flex flex-col gap-1 p-4', poster ? 'lg:px-8 lg:py-6' : 'absolute inset-x-0 bottom-0 max-sm:gap-1.5 max-sm:pb-2 lg:p-8')}>
           <span className="flex w-fit items-center gap-1.5 rounded-md bg-background/90 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-primary">
             <Users className="size-3.5" aria-hidden="true" />
             {meta.players}
           </span>
-          <h2 className="font-display text-3xl font-bold uppercase leading-none text-foreground max-sm:text-4xl max-sm:normal-case lg:text-5xl">{meta.title}</h2>
+          <h2 className={cn('font-display font-bold uppercase leading-none text-foreground max-sm:normal-case', poster ? 'text-2xl lg:text-3xl' : 'text-3xl max-sm:text-4xl lg:text-5xl')}>{meta.title}</h2>
           <p className="line-clamp-1 text-sm text-muted-foreground max-sm:line-clamp-2 max-sm:text-foreground/80 max-sm:text-pretty lg:line-clamp-none">{meta.short}</p>
         </div>
       </div>
