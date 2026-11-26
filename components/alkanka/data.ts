@@ -304,7 +304,8 @@ export const SPONSORS: Sponsor[] = [
 export type Bonus = {
   id: string
   sponsorId: string
-  type: 'Hoş geldin' | 'Yatırım' | 'Kayıp' | 'Freespin' | 'Deneme'
+  /** One of the usual kinds or any name typed in the panel. */
+  type: string
   title: string
   amount: string
   wager: string
@@ -353,6 +354,8 @@ export type Campaign = {
   endsAt?: string
   /** Optional custom destination; falls back to the sponsor's /git link. */
   url?: string
+  /** Lay the sponsor's logo over the middle of the picture. */
+  logo?: boolean
 }
 
 export const CAMPAIGNS: Campaign[] = [

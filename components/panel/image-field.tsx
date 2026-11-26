@@ -193,7 +193,7 @@ export function ImageField({
           ))}
         </ul>
       )}
-      <p className="sr-only">PNG, JPG, WEBP ve SVG en fazla 2 MB, GIF en fazla 8 MB. Her piksel boyutu kabul edilir.</p>
+      <p className="sr-only">PNG, JPG, WEBP ve GIF en fazla 8 MB, SVG en fazla 2 MB. Her piksel boyutu kabul edilir.</p>
     </div>
   )
 }

@@ -155,7 +155,7 @@ export function AdsEditor({ saved, stats = {} }: { saved: AdMap; stats?: Stats }
             }}
             uploadId={`ad-${page}-${pos}`}
             placeholder="Görsel linki: GIF, PNG, JPG veya WEBP"
-            hint="PNG, JPG ve WEBP en fazla 2 MB, GIF en fazla 8 MB. Piksel boyutu serbest: görsel kendi boyutunda gösterilir."
+            hint="PNG, JPG, WEBP ve GIF en fazla 8 MB. Piksel boyutu serbest: görsel kendi boyutunda gösterilir."
           />
           {current.image && current.w && current.h && shownAt && (
             <p role="status" className="flex items-start gap-2 rounded-lg bg-secondary px-3 py-2 text-xs leading-relaxed text-foreground">

@@ -112,9 +112,10 @@ export function GamesHub({ arena, hiddenMini = [] }: { arena: ArenaSettings; hid
             {tables.map((g, index) => {
               const meta = ARENA_META[g]
               const s = arena[g]
-              // A poster's own lettering is unreadable at tile size and would sit under the tile's label, so the grid
-              // keeps the built-in art for that game; the poster is shown whole on the game's own page.
-              const cover = posterCover(s) ? meta.image : s.image || meta.image
+              // The cover uploaded in the panel is the game's cover everywhere. A poster carries its own lettering,
+              // so the tile prints no title or shade over it; a plain picture keeps the tile's own label.
+              const poster = Boolean(posterCover(s))
+              const cover = s.image || meta.image
               const wide = lead && index === 0
               const factor = botMatchFactor(g, s) ?? 0
               return (
@@ -127,7 +128,7 @@ export function GamesHub({ arena, hiddenMini = [] }: { arena: ArenaSettings; hid
                     )}
                   >
                     <Image src={cover || '/placeholder.svg'} alt="" fill sizes="(min-width: 1280px) 20vw, (min-width: 640px) 33vw, 50vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
+                    {!poster && <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />}
                     <span className="absolute inset-x-2 top-2 flex items-center justify-between gap-1.5">
                       <span className="flex items-center gap-1 whitespace-nowrap rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
                         <Users className="size-3" aria-hidden="true" />
@@ -135,7 +136,7 @@ export function GamesHub({ arena, hiddenMini = [] }: { arena: ArenaSettings; hid
                       </span>
                       {factor > 1 && <span className="rounded bg-primary px-1.5 py-0.5 font-display text-xs font-bold text-primary-foreground">x{factor.toLocaleString('tr-TR')}</span>}
                     </span>
-                    <div className="relative flex flex-col gap-1 p-3">
+                    <div className={cn('relative flex flex-col gap-1 p-3', poster && 'sr-only')}>
                       <h3 className={cn('font-display text-lg font-bold uppercase leading-tight text-foreground max-sm:normal-case', wide ? 'max-sm:text-2xl' : 'max-sm:text-base')}>{meta.title}</h3>
                       <span className={cn('flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-primary max-sm:text-xs max-sm:normal-case max-sm:tracking-normal', !wide && 'max-sm:hidden')}>
                         Masaya otur

@@ -9,7 +9,8 @@ import { CatalogCalendar, type CalendarTournament } from '@/components/panel/cat
 import { ArrowDown, ArrowUp, ChevronDown, Loader2, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
 import { loadEventBoard, loadPredictionPicks, resetCatalog, saveCatalogList, saveCategoryOrder, settleEventNow } from '@/app/panel/catalog-actions'
 import { EVENT_GAME_OPTIONS, EVENT_RANKS, RANK_LABEL, RANK_SHORT, cleanPayouts, eventGameLabel, lastPrizePlace, parseKc, payoutTotal, type EventRank } from '@/lib/event-rules'
-import { BONUS_TYPES, EVENT_KINDS, PREDICTION_PAYOUT, predictionPayout, sortByOrder, type Catalog, type CategoryOrder } from '@/lib/catalog-shared'
+import { BONUS_TYPES, EVENT_KINDS, PREDICTION_PAYOUT, TYPE_NAME_MAX, predictionPayout, sortByOrder, type Catalog, type CategoryOrder } from '@/lib/catalog-shared'
+import { SortableList } from '@/components/panel/sortable-list'
 import type { LeagueMatch } from '@/lib/predictions'
 import { LeagueAdmin } from '@/components/panel/league-admin'
 import { GoalAdmin } from '@/components/panel/goal-admin'
@@ -31,6 +32,9 @@ type Field =
   | { key: string; label: string; type: 'select'; options: string[] }
   | { key: string; label: string; type: 'choice'; options: { value: string; label: string }[] }
   | { key: string; label: string; type: 'sponsor' }
+  /** A name picked from the suggestions or typed by hand. */
+  | { key: string; label: string; type: 'combo'; options: string[]; max: number }
+  | { key: string; label: string; type: 'toggle'; text: string }
   | { key: string; label: string; type: 'lines'; hint: string }
   | { key: string; label: string; type: 'pairs'; hint: string; a: string; b: string; numericB?: boolean }
 
@@ -85,11 +89,12 @@ const SCHEMAS: Record<Kind, { title: string; hint: string; field: string; fields
     fields: [
       { key: 'title', label: 'Başlık', type: 'text', max: 60 },
       { key: 'sponsorId', label: 'Sponsor', type: 'sponsor' },
-      { key: 'tag', label: 'Etiket', type: 'text', max: 20 },
+      { key: 'tag', label: 'Etiket · listeden seç ya da kendin yaz', type: 'combo', options: [], max: TYPE_NAME_MAX },
       { key: 'startsAt', label: 'Başlangıç tarihi', type: 'datetime' },
       { key: 'endsAt', label: 'Bitiş tarihi', type: 'datetime' },
       { key: 'url', label: 'Yönlendirme linki · boşsa sponsorun linki kullanılır', type: 'text', max: 400, wide: true },
       { key: 'image', label: 'Görsel', type: 'image', wide: true },
+      { key: 'logo', label: 'Sponsor logosu', type: 'toggle', text: 'Sponsorun logosunu görselin ortasına yerleştir' },
       { key: 'description', label: 'Açıklama', type: 'textarea', max: 300, wide: true },
     ],
     blank: () => {
@@ -105,9 +110,9 @@ const SCHEMAS: Record<Kind, { title: string; hint: string; field: string; fields
     fields: [
       { key: 'title', label: 'Başlık', type: 'text', max: 60 },
       { key: 'sponsorId', label: 'Sponsor', type: 'sponsor' },
-      { key: 'type', label: 'Tür', type: 'select', options: BONUS_TYPES },
-      { key: 'amount', label: 'Tutar', type: 'text', max: 40 },
-      { key: 'wager', label: 'Çevrim', type: 'text', max: 30 },
+      { key: 'type', label: 'Tür · listeden seç ya da kendin yaz', type: 'combo', options: BONUS_TYPES, max: TYPE_NAME_MAX },
+      { key: 'amount', label: 'Tutar', type: 'text', max: 60 },
+      { key: 'wager', label: 'Çevrim', type: 'text', max: 40 },
       { key: 'code', label: 'Promo kod', type: 'text', max: 30 },
     ],
     blank: () => ({ id: '', sponsorId: '', type: 'Hoş geldin', title: 'Yeni bonus', amount: '', wager: '', code: '' }),
@@ -145,7 +150,7 @@ function fromPairs(text: string, a: string, b: string, numericB?: boolean, prev?
     }))
 }
 
-function FieldInput({ field, item, set, sponsors, library }: { field: Field; item: Item; set: (v: Item) => void; sponsors: Option[]; library: string[] }) {
+function FieldInput({ field, item, set, sponsors, library, used = [] }: { field: Field; item: Item; set: (v: Item) => void; sponsors: Option[]; library: string[]; used?: string[] }) {
   const value = item[field.key]
   const wide = field.type === 'lines' || field.type === 'pairs' || ('wide' in field && field.wide)
   const id = `${String(item.id)}-${field.key}`
@@ -189,6 +194,42 @@ function FieldInput({ field, item, set, sponsors, library }: { field: Field; ite
           ))}
           {value && !sponsors.some((s) => s.id === value) ? <option value={String(value)}>{String(value)}</option> : null}
         </select>
+      ) : field.type === 'combo' ? (
+        <>
+          <input
+            id={id}
+            list={`${id}-liste`}
+            maxLength={field.max}
+            autoComplete="off"
+            placeholder="Seç ya da yaz"
+            className={input}
+            value={String(value ?? '')}
+            onChange={(e) => set({ [field.key]: e.target.value })}
+          />
+          <datalist id={`${id}-liste`}>
+            {Array.from(new Set([...field.options, ...used])).map((o) => (
+              <option key={o} value={o} />
+            ))}
+          </datalist>
+          <span className="flex flex-wrap gap-1">
+            {Array.from(new Set([...field.options, ...used])).map((o) => (
+              <button
+                key={o}
+                type="button"
+                aria-pressed={value === o}
+                onClick={() => set({ [field.key]: o })}
+                className={cn('rounded-full border px-2 py-0.5 text-[11px] font-semibold', value === o ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:border-primary hover:text-primary')}
+              >
+                {o}
+              </button>
+            ))}
+          </span>
+        </>
+      ) : field.type === 'toggle' ? (
+        <span className="flex min-h-10 items-center gap-2 text-sm text-foreground">
+          <input id={id} type="checkbox" className="size-4 shrink-0 accent-primary" checked={value === true} onChange={(e) => set({ [field.key]: e.target.checked })} />
+          {field.text}
+        </span>
       ) : field.type === 'textarea' ? (
         <textarea id={id} rows={3} maxLength={field.max} className={cn(input, 'resize-y leading-relaxed')} value={String(value ?? '')} onChange={(e) => set({ [field.key]: e.target.value })} />
       ) : field.type === 'lines' ? (
@@ -366,26 +407,28 @@ function CategoryOrderEditor({ title, values, order, onSave }: { title: string; 
 function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder, focusId, onSaved }: { kind: Kind; initial: Item[]; sponsors: Option[]; library: string[]; hidden: string[]; order: CategoryOrder; setOrder: (o: CategoryOrder) => void; focusId?: string; onSaved: (items: Item[]) => void }) {
   const schema = SCHEMAS[kind]
   const [items, setItems] = useState<Item[]>(initial)
-  const [open, setOpen] = useState<number | null>(() => {
-    const i = focusId ? initial.findIndex((x) => String(x.id) === focusId) : -1
-    return i >= 0 ? i : null
-  })
+  // The open card is remembered by its id, so it stays open while the list is dragged into a new order.
+  const [open, setOpen] = useState<string | null>(() => (focusId && initial.some((x) => String(x.id) === focusId) ? focusId : null))
   const arrived = useRef(false)
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
   const [pending, start] = useTransition()
 
-  const update = (i: number, v: Item) => setItems((list) => list.map((x, j) => (j === i ? { ...x, ...v } : x)))
+  const update = (id: string, v: Item) => setItems((list) => list.map((x) => (String(x.id) === id ? { ...x, ...v } : x)))
   const add = () => {
-    setItems((list) => [{ ...schema.blank(), id: `${kind}-${Date.now().toString(36)}` }, ...list])
-    setOpen(0)
+    const id = `${kind}-${Date.now().toString(36)}`
+    setItems((list) => [{ ...schema.blank(), id }, ...list])
+    setOpen(id)
   }
-  const remove = (i: number) => {
+  const remove = (id: string) => {
     void askConfirm('Bu kayıt silinsin mi?').then((ok) => {
       if (!ok) return
-    setItems((list) => list.filter((_, j) => j !== i))
-    setOpen(null)
+      setItems((list) => list.filter((x) => String(x.id) !== id))
+      setOpen(null)
     })
   }
+  const nameOf = (item: Item) => (kind === 'predictions' ? `${item.home} - ${item.away}` : String(item[schema.field] || 'Adsız'))
+  // Names already in use on this list, offered next to the usual ones wherever a kind is typed by hand.
+  const usedNames = Array.from(new Set(items.map((x) => String((kind === 'campaigns' ? x.tag : x.type) ?? '').trim()).filter(Boolean)))
   const save = () =>
     start(async () => {
       const r = await saveCatalogList(kind, items)
@@ -465,8 +508,9 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder,
                   const { days, ...template } = t
                   const start = new Date()
                   const dates = { startsAt: toTrIso(start), endsAt: toTrIso(new Date(start.getTime() + days * 86_400_000)) }
-                  setItems((list) => [{ ...schema.blank(), ...template, ...dates, id: `events-${Date.now().toString(36)}` }, ...list])
-                  setOpen(0)
+                  const id = `events-${Date.now().toString(36)}`
+                  setItems((list) => [{ ...schema.blank(), ...template, ...dates, id }, ...list])
+                  setOpen(id)
                 }}
                 className="rounded-full border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:border-primary hover:text-primary"
               >
@@ -477,15 +521,22 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder,
         </div>
       )}
 
-      <ul className="flex flex-col gap-2">
-        {items.map((item, i) => {
-          const expanded = open === i
+      {items.length > 1 && <p className="text-xs leading-relaxed text-muted-foreground">Sırayı değiştirmek için satırın solundaki tutamağı sürükle (klavyede: tutamağa gel, Boşluk, ok tuşları, Boşluk). Sitede bu sırayla görünür; sıra &quot;Kaydet&quot;e basınca yayına girer.</p>}
+      <SortableList
+        items={items}
+        idOf={(x) => String(x.id)}
+        nameOf={nameOf}
+        onMove={(ids) => setItems((list) => ids.flatMap((id) => list.filter((x) => String(x.id) === id).slice(0, 1)))}
+        className="flex flex-col gap-2"
+        itemClassName="rounded-xl bg-card"
+      >
+        {(item, handle) => {
           const id = String(item.id)
+          const expanded = open === id
           const isHidden = hidden.includes(id)
-          const name = kind === 'predictions' ? `${item.home} - ${item.away}` : String(item[schema.field] || 'Adsız')
+          const name = nameOf(item)
           return (
-            <li
-              key={id}
+            <div
               ref={
                 id === focusId
                   ? (el) => {
@@ -498,8 +549,9 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder,
               }
               className={cn('overflow-hidden rounded-xl border border-border', isHidden && 'border-dashed')}
             >
-              <div className="flex items-center gap-2 pr-2 hover:bg-secondary/60">
-                <button type="button" aria-expanded={expanded} onClick={() => setOpen(expanded ? null : i)} className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left">
+              <div className="flex items-center gap-1 pl-1.5 pr-2 hover:bg-secondary/60">
+                {handle}
+                <button type="button" aria-expanded={expanded} onClick={() => setOpen(expanded ? null : id)} className="flex min-w-0 flex-1 items-center gap-3 py-3 pl-1.5 pr-4 text-left">
                   <span className={cn('min-w-0 flex-1 truncate text-sm font-medium', isHidden ? 'text-muted-foreground line-through' : 'text-foreground')}>{name}</span>
                   {isHidden && <span className="shrink-0 text-xs font-bold uppercase text-muted-foreground">Gizli</span>}
                   {kind === 'events' && !item.endsAt && <span className="shrink-0 text-xs font-bold text-destructive">Bitiş tarihi yok</span>}
@@ -514,7 +566,7 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder,
                 <div className="flex flex-col gap-3 border-t border-border p-4">
                   <div className="grid gap-3 md:grid-cols-2">
                     {schema.fields.map((f) => (
-                      <FieldInput key={f.key} field={f} item={item} set={(v) => update(i, v)} sponsors={sponsors} library={library} />
+                      <FieldInput key={f.key} field={f} item={item} set={(v) => update(id, v)} sponsors={sponsors} library={library} used={usedNames} />
                     ))}
                   </div>
                   {kind === 'events' && <EventBoardBox id={id} item={item} />}
@@ -533,17 +585,17 @@ function ListEditor({ kind, initial, sponsors, library, hidden, order, setOrder,
                     ) : (
                       <p className="text-xs leading-relaxed text-muted-foreground">Linki kaydettikten sonra buradan kopyalarsın.</p>
                     ))}
-                  <button type="button" onClick={() => remove(i)} className="inline-flex items-center gap-1.5 self-start rounded-lg px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10">
+                  <button type="button" onClick={() => remove(id)} className="inline-flex items-center gap-1.5 self-start rounded-lg px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10">
                     <Trash2 className="size-3.5" aria-hidden />
                     Sil
                   </button>
                 </div>
               )}
-            </li>
+            </div>
           )
-        })}
-        {items.length === 0 && <li className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">Liste boş, sitede bu bölüm gizlenir.</li>}
-      </ul>
+        }}
+      </SortableList>
+      {items.length === 0 && <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">Liste boş, sitede bu bölüm gizlenir.</p>}
 
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" onClick={save} disabled={pending} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60">

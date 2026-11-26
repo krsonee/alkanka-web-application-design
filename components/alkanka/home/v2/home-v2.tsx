@@ -1,6 +1,7 @@
 import { HOME_GAME_LABEL, type HomeV2Config } from '@/lib/home-v2-shared'
 import { MemberHeroSlider, type MemberSlide } from './member-hero-slider'
 import type { MarketProduct } from '@/lib/market'
+import type { GameCovers } from '@/lib/arena'
 import type { MiniGame, MiniStatus } from '@/app/actions/wallet'
 import type { HomeTournament } from '@/lib/home-events'
 import type { LeagueMatch } from '@/lib/predictions'
@@ -36,6 +37,7 @@ export function GuestHomeV2({
   weekly,
   bonus,
   tournaments = [],
+  covers,
 }: {
   config: HomeV2Config
   slides: HeroSlide[]
@@ -43,6 +45,8 @@ export function GuestHomeV2({
   weekly: Row[]
   bonus: number
   tournaments?: HomeTournament[]
+  /** Game covers uploaded in the panel, by game. */
+  covers?: GameCovers
 }) {
   const primaryLabel = config.guestPrimaryCta.replace('{bonus}', String(bonus))
   return (
@@ -74,7 +78,7 @@ export function GuestHomeV2({
       {config.games.length > 0 && (
         <section className="flex flex-col gap-4">
           <SectionHead title={config.gamesTitle} sub={config.gamesSub} link={{ label: 'Tüm oyunlar', href: '/oyunlar' }} />
-          <GamesGrid games={config.games} />
+          <GamesGrid games={config.games} covers={covers} />
         </section>
       )}
 
@@ -110,6 +114,7 @@ export function MemberHomeV2Page({
   streak,
   match = null,
   tournaments = [],
+  covers,
 }: {
   config: HomeV2Config
   slides: HeroSlide[]
@@ -125,6 +130,7 @@ export function MemberHomeV2Page({
   streak?: { days: number; checkedToday: boolean }
   match?: LeagueMatch | null
   tournaments?: HomeTournament[]
+  covers?: GameCovers
 }) {
   const hidden = new Set(mini?.hidden ?? [])
   const daily: DailyState[] = config.daily
@@ -226,7 +232,7 @@ export function MemberHomeV2Page({
       {config.games.length > 0 && (
         <section className="flex flex-col gap-4">
           <SectionHead title={config.gamesTitle} sub={config.memberGamesSub} link={{ label: 'Tüm oyunlar', href: '/oyunlar' }} />
-          <GamesGrid games={config.games} />
+          <GamesGrid games={config.games} covers={covers} />
         </section>
       )}
     </div>

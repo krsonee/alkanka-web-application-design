@@ -156,6 +156,17 @@ export function posterCover(settings: ArenaGameSettings): string | null {
   return settings.image && !settings.imageBare ? settings.image : null
 }
 
+/** The cover uploaded for each game that has one. `poster` marks a picture that carries its own lettering, so nothing is printed over it. */
+export type GameCovers = Record<string, { src: string; poster: boolean }>
+
+export function gameCovers(settings: ArenaSettings): GameCovers {
+  const out: GameCovers = {}
+  for (const [game, s] of Object.entries(settings)) {
+    if (s?.image) out[game] = { src: s.image, poster: !s.imageBare }
+  }
+  return out
+}
+
 const base = { enabled: true, pvpEnabled: true, bets: [10, 25, 50, 100, 250, 500, 1000, 2500], commission: 10 }
 
 export const DEFAULT_ARENA: ArenaSettings = {
