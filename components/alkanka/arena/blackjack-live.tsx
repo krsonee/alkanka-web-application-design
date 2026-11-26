@@ -364,21 +364,24 @@ function dealerLine(
 }
 
 /**
- * Seat centres around the table rail, as % of the table box.
- * Mobile uses a compact round table (two side columns + a bottom pair) so the whole game fits one screen; sm+ uses a wide poker-style arc.
+ * Seat centres along the wide table arc (sm and up), as % of the table box.
+ * Seats are numbered the way a real table is: seat 1 sits at the far right, on the dealer's left, and the numbers run right to left.
  */
-const SEAT_POS: { m: [number, number]; d: [number, number] }[] = [
-  { m: [14, 41], d: [9, 47] },
-  { m: [86, 41], d: [22, 75] },
-  { m: [15, 67], d: [40, 86] },
-  { m: [85, 67], d: [60, 86] },
-  { m: [37, 87], d: [78, 75] },
-  { m: [63, 87], d: [91, 47] },
+const SEAT_POS: [number, number][] = [
+  [91, 47],
+  [78, 75],
+  [60, 86],
+  [40, 86],
+  [22, 75],
+  [9, 47],
 ];
+
+/** Seat index drawn bottom-centre on a phone for someone who has not sat down yet; it puts seat 1 on the right edge so the table still reads right to left. */
+const MOBILE_GUEST_ANCHOR = 2;
 
 /**
  * Mobile slots by offset from the player's own seat, so on a phone you always sit bottom-centre
- * and the other five seats wrap around you towards the dealer.
+ * and the other five seats wrap around you towards the dealer, higher numbers to your left.
  */
 const MOBILE_SLOTS: [number, number][] = [
   [50, 80],
@@ -421,8 +424,8 @@ function SeatPod({
   const style = {
     "--mx": `${mobile[0]}%`,
     "--my": `${mobile[1]}%`,
-    "--dx": `${pos.d[0]}%`,
-    "--dy": `${pos.d[1]}%`,
+    "--dx": `${pos[0]}%`,
+    "--dy": `${pos[1]}%`,
   } as React.CSSProperties;
   const place =
     "absolute left-(--mx) top-(--my) -translate-x-1/2 -translate-y-1/2 sm:left-(--dx) sm:top-(--dy)";
@@ -1042,7 +1045,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
                 <SeatPod
                   key={i}
                   index={i}
-                  anchor={me ? me.seat - 1 : 0}
+                  anchor={me ? me.seat - 1 : MOBILE_GUEST_ANCHOR}
                   seat={s}
                   phase={phase}
                   revealed={revealed}

@@ -270,6 +270,10 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
   const sameRound = data?.roundId === clock.roundId
   const number = sameRound && clock.phase !== 'bet' ? (data?.number ?? null) : null
   const players = sameRound ? (data?.players ?? []) : []
+  // A result snapshot can reach a screen whose wheel is still turning; its outcome waits until the ball has landed here too.
+  const early = !!data && data.lastRound.id >= clock.roundId && clock.phase !== 'result'
+  const history = early ? data.history.slice(1) : (data?.history ?? [])
+  const lastRound = early ? undefined : data?.lastRound
   const me = players.find((p) => p.mine)
   const meRef = useRef(me)
   meRef.current = me
@@ -375,7 +379,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
     playSound('tick')
   }, [betting, secondsLeft])
 
-  // The server pays a round as soon as betting closes, so any post-bet snapshot of this round already holds the paid balance.
+  // The server pays a round only after the ball has landed, so only a result-phase snapshot of this round holds the paid balance.
   // If our clock reaches the result before the server snapshot does, fetch again instead of waiting for the next poll.
   const settledSnapshot = data && data.roundId === clock.roundId && data.phase === 'result'
   useEffect(() => {
@@ -522,7 +526,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
               Tur #{clock.roundId % 10000}
             </span>
             <ol className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1 [mask-image:linear-gradient(to_right,black_85%,transparent)]" aria-label="Son çıkan sayılar">
-              {(data?.history ?? []).slice(0, 14).map((n, i) => (
+              {history.slice(0, 14).map((n, i) => (
                 <li key={i} className={cn('rounded-full', i === 0 && 'ring-2 ring-primary ring-offset-1 ring-offset-background')}>
                   <NumberPill n={n} />
                 </li>
@@ -674,7 +678,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
                 className="no-scrollbar flex min-w-0 flex-1 gap-1.5 overflow-x-auto px-1 py-1 [mask-image:linear-gradient(to_right,black_85%,transparent)]"
                 aria-label="Son çıkan sayılar"
               >
-                {(data?.history ?? []).map((n, i) => (
+                {history.map((n, i) => (
                   <li key={i} className={cn(i === 0 && 'ring-2 ring-primary ring-offset-1 ring-offset-card', 'rounded-full')}>
                     <NumberPill n={n} />
                   </li>
@@ -798,7 +802,7 @@ export function RouletteLive({ settings }: { settings: ArenaGameSettings }) {
         </section>
 
         <div className="grid gap-4 md:grid-cols-2 xl:flex xl:flex-col rail-narrow:grid">
-          <WinnersPanel last={data?.lastRound} />
+          <WinnersPanel last={lastRound} />
           <PlayersPanel players={players} phase={clock.phase} />
           <FairPanel fair={data?.fair} />
           <TableChat tableId="rulet-canli" className="hidden h-80 md:col-span-2 lg:flex xl:h-96" />
