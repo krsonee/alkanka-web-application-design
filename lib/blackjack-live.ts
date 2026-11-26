@@ -372,8 +372,8 @@ async function seatedTable(c: PoolClient | typeof pool, userId: string) {
 export type JoinResult = { balance: number; tableNo: number; seated: boolean }
 
 /**
- * One button, no seat picking: the member lands on the first table that has a free seat and is taking bets.
- * If the only tables with room are mid-hand, they are sent there to wait for the next hand.
+ * The member sits at the table they are looking at (`prefer`). If it is mid-hand they wait there for the next hand;
+ * if it is full they land on the first other table with a free seat that is taking bets.
  * Only when every table is full does a fresh 6-seat table open.
  */
 export type SideBets = { pairs: number; t213: number }
@@ -398,15 +398,30 @@ export async function joinBlackjack(
   try {
     out = await inTx(async (c) => {
       await c.query(`SELECT pg_advisory_xact_lock($1)`, [JOIN_LOCK])
+      const nos = await tableNumbers(c)
       const already = await seatedTable(c, member.id)
       if (already !== null) {
         const round = await advance(c, already)
-        const mine = await c.query(`SELECT leaving FROM blackjack_live WHERE round_id = $1 AND user_id = $2`, [round.id, member.id])
-        const stays = mine.rowCount && !mine.rows[0].leaving
-        if (stays || round.phase !== 'result') return { tableNo: already, seated: true, charged: false }
+        const mine = await c.query(`SELECT id, leaving, bet, side_pairs, side_213 FROM blackjack_live WHERE round_id = $1 AND user_id = $2`, [round.id, member.id])
+        const row = mine.rows[0]
+        const stays = Boolean(row) && !row.leaving
+        // Sitting down at a table other than the one they hold a seat at is a move, not a return to the old seat.
+        const moving = !fresh && prefer != null && prefer !== already && nos.includes(prefer)
+        if (!moving) {
+          if (stays || round.phase !== 'result') return { tableNo: already, seated: true, charged: false }
+        } else if (round.phase === 'waiting' || round.phase === 'bet') {
+          if (row) {
+            await c.query(`DELETE FROM blackjack_live WHERE id = $1`, [row.id])
+            await creditIn(c, member.id, Number(row.bet) + (Number(row.side_pairs) || 0) + (Number(row.side_213) || 0))
+          }
+          await advance(c, already)
+        } else if (round.phase !== 'result') {
+          throw new Error(`Masa ${already}'te elin sürüyor kanka. El bitince bu masaya geçebilirsin.`)
+        } else if (stays) {
+          await c.query(`UPDATE blackjack_live SET leaving = true WHERE id = $1`, [row.id])
+        }
       }
 
-      const nos = await tableNumbers(c)
       const ordered = fresh ? [] : prefer && nos.includes(prefer) ? [prefer, ...nos.filter((n) => n !== prefer)] : nos
       let waitAt: number | null = null
 
@@ -424,6 +439,8 @@ export async function joinBlackjack(
         if (taken.rowCount! >= BJ_SEATS) continue
         const open = round.phase === 'waiting' || (round.phase === 'bet' && (round.endsAt ?? 0) - Date.now() > 1000)
         if (!open) {
+          // The member chose this table: they wait for its next hand instead of being sat down somewhere else.
+          if (no === prefer) return { tableNo: no, seated: false, charged: false }
           waitAt ??= no
           continue
         }

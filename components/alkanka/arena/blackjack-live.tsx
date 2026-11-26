@@ -757,6 +757,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
   }
 
   const [notice, setNotice] = useState("");
+  const [queued, setQueued] = useState<number | null>(null);
 
   async function join(fresh = false) {
     if (busy || !requireLogin()) return;
@@ -774,6 +775,7 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
     setBusy(false);
     if (!res.ok) {
       setPickedSeat(null);
+      setQueued(null);
       mutate();
       return setError(res.error);
     }
@@ -781,9 +783,10 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
     setBalance(res.balance);
     setViewTable(res.tableNo);
     setEntered(true);
+    setQueued(res.seated ? null : res.tableNo);
     if (!res.seated)
       setNotice(
-        `Masa ${res.tableNo} el oynuyor. Bu el bitince tekrar "Masaya otur"a bas, ilk boş koltuk senin.`,
+        `Masa ${res.tableNo} şu an el oynuyor. El biter bitmez seni bu masaya oturtacağım, o zamana kadar izleyebilirsin.`,
       );
     else if (fresh)
       setNotice(
@@ -795,6 +798,20 @@ export function BlackjackLive({ settings }: { settings: ArenaGameSettings }) {
       );
     mutate();
   }
+
+  // A seat asked for while the table was mid-hand is taken as soon as that table opens for bets, once per hand.
+  const queueTried = useRef("");
+  useEffect(() => {
+    if (queued === null) return;
+    if (me) return setQueued(null);
+    // The table on screen may still be the previous one for a moment after a move; only the awaited table counts.
+    if (!data || data.tableNo !== queued || busy || (phase !== "bet" && phase !== "waiting")) return;
+    const attempt = `${data.roundId}:${phase}`;
+    if (queueTried.current === attempt) return;
+    queueTried.current = attempt;
+    void join();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queued, phase, data?.tableNo, data?.roundId, Boolean(me), busy]);
 
   async function leave() {
     if (busy) return;
