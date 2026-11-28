@@ -73,6 +73,14 @@ export async function memberCard(tgId: number, opts: { withEmail: boolean }): Pr
 }
 
 /** Resolves what a moderator typed (id, @username or display name) to Telegram ids, newest writers first. */
+/** Removes the site connection of a Telegram account; returns the member's name, or null when there was none. */
+export async function unlinkByTelegram(tgId: number) {
+  const gone = await rows<{ user_id: string }>(sql`DELETE FROM tg_links WHERE tg_id = ${tgId} RETURNING user_id`)
+  if (!gone[0]) return null
+  const [u] = await rows<{ name: string | null }>(sql`SELECT name FROM public."user" WHERE id = ${gone[0].user_id}`)
+  return u?.name ?? 'Üye'
+}
+
 export async function findMemberIds(query: string): Promise<number[]> {
   const raw = query.trim().slice(0, 80)
   if (!raw) return []

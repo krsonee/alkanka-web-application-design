@@ -396,6 +396,28 @@ export type MemberCard = {
   log: HubLogRow[]
 }
 
+export type SponsorGroup = HubConfig['support']['sponsors'][number]
+
+export const MAX_SPONSOR_GROUPS = 40
+
+/** The command a team member writes inside a sponsor's group to connect it, without opening the panel. */
+export const SPONSOR_BIND_COMMAND = '/sponsor'
+
+/** What a member writes to the support bot to renew a forgotten password. */
+export const PASSWORD_COMMAND = '/sifre'
+
+/**
+ * Connects a support group to a sponsor. One group serves one sponsor and one sponsor has one group, and a
+ * replaced entry keeps its place, so the order of the bot's sponsor menu never shifts. Null when the list is full.
+ */
+export function withSponsorGroup(list: SponsorGroup[], entry: SponsorGroup): SponsorGroup[] | null {
+  const same = (name: string) => name.toLocaleLowerCase('tr') === entry.name.toLocaleLowerCase('tr')
+  const byChat = list.findIndex((s) => s.chatId === entry.chatId)
+  const at = byChat >= 0 ? byChat : list.findIndex((s) => same(s.name))
+  if (at < 0) return list.length >= MAX_SPONSOR_GROUPS ? null : [...list, entry]
+  return list.map((s, i) => (i === at ? entry : s)).filter((s, i) => i === at || (s.chatId !== entry.chatId && !same(s.name)))
+}
+
 /** A chat the panel already knows by name, offered in pickers so nobody has to type a -100… id. */
 export type KnownChat = { chatId: string; title: string }
 

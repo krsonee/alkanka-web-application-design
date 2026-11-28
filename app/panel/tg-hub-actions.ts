@@ -12,6 +12,7 @@ import {
   CONTENT_KINDS,
   DEFAULT_HUB,
   GUARD_TUNABLES,
+  MAX_SPONSOR_GROUPS,
   REPLY_BUTTON_MAX,
   REPLY_RULE_MAX,
   REPLY_WORD_MAX,
@@ -20,6 +21,7 @@ import {
   generalRules,
   readReplyButtons,
   rulesDiff,
+  withSponsorGroup,
   type ContentRule,
   type DmDraft,
   type GroupRules,
@@ -443,9 +445,26 @@ export async function addHubChat(kind: 'group' | 'log' | 'staff' | 'sponsor' | '
     const hub = await getHub()
     const botId = kind === 'staff' || kind === 'sponsor' ? hub.supportBotId : hub.guardBotId
     if (!botId) return { ok: false, message: kind === 'staff' || kind === 'sponsor' ? 'Önce Destek botunu seç.' : 'Önce Bekçi botunu seç.' }
-    if (!input.trim()) return { ok: false, message: 'Grup adresi ya da ID gir.' }
-    const chat = await resolveChatFor(botId, input)
-    if (!chat.isAdmin) return { ok: false, message: `Bot "${chat.title}" içinde yönetici değil. Önce botu yönetici yap.` }
+    const botName = kind === 'staff' || kind === 'sponsor' ? 'Destek botu' : 'Bekçi botu'
+    const sponsor = sponsorName.replace(/\s+/g, ' ').trim().slice(0, 60)
+    if (kind === 'sponsor') {
+      if (!sponsor) return { ok: false, message: 'Sponsor adını yaz.' }
+      if (/^-?\d{5,}$/.test(sponsor) || /^@\w+$/.test(sponsor) || /t\.me\//i.test(sponsor)) {
+        return { ok: false, message: 'Sponsor adı kutusuna grup adresi yazılmış. Sponsorun adını ilk kutuya, grubu ikinci kutuya yaz.' }
+      }
+    }
+    if (!input.trim()) return { ok: false, message: kind === 'sponsor' ? 'Sponsorun destek grubunu seç ya da grup numarasını yaz.' : 'Grup adresi ya da ID gir.' }
+    let chat: Awaited<ReturnType<typeof resolveChatFor>>
+    try {
+      chat = await resolveChatFor(botId, input)
+    } catch (error) {
+      const text = String((error as Error)?.message ?? error)
+      if (/chat not found|not a member|was kicked|PEER_ID_INVALID|chat_id is empty/i.test(text)) {
+        return { ok: false, message: `${botName} bu grubu göremiyor. Önce ${botName}nu gruba ekleyip yönetici yap, grup numarasının -100 ile başladığına bak, sonra yeniden dene.` }
+      }
+      return fail(error)
+    }
+    if (!chat.isAdmin) return { ok: false, message: `${botName} "${chat.title}" içinde yönetici değil. Önce botu yönetici yap.` }
     let next: HubConfig = hub
     if (kind === 'group') {
       if (hub.groups.some((g) => g.chatId === chat.id)) return { ok: false, message: 'Bu grup zaten ekli.' }
@@ -454,13 +473,13 @@ export async function addHubChat(kind: 'group' | 'log' | 'staff' | 'sponsor' | '
     else if (kind === 'leader') next = { ...hub, counter: { ...hub.counter, postToChatId: chat.id } }
     else if (kind === 'staff') next = { ...hub, support: { ...hub.support, staffChatId: chat.id, staffChatTitle: chat.title } }
     else {
-      const name = sponsorName.trim().slice(0, 60)
-      if (!name) return { ok: false, message: 'Sponsor adını yaz.' }
-      const sponsors = hub.support.sponsors.filter((s) => s.name.toLocaleLowerCase('tr') !== name.toLocaleLowerCase('tr'))
-      next = { ...hub, support: { ...hub.support, sponsors: [...sponsors, { name, chatId: chat.id, title: chat.title }].slice(0, 40) } }
+      if (chat.id === hub.support.staffChatId) return { ok: false, message: 'Bu grup yetkili grubu. Sponsor için ayrı bir grup aç.' }
+      const sponsors = withSponsorGroup(hub.support.sponsors, { name: sponsor, chatId: chat.id, title: chat.title })
+      if (!sponsors) return { ok: false, message: `En fazla ${MAX_SPONSOR_GROUPS} sponsor grubu bağlanabilir. Önce kullanılmayan bir grubu kaldır.` }
+      next = { ...hub, support: { ...hub.support, sponsors } }
     }
     await commit(hub, next, 'Sohbet bağlantısı')
-    return logged('telegram', done(`"${chat.title}" eklendi.`))
+    return logged('telegram', done(kind === 'sponsor' ? `${sponsor} sponsoru "${chat.title}" grubuna bağlandı.` : `"${chat.title}" eklendi.`))
   } catch (error) {
     return fail(error)
   }
@@ -760,6 +779,20 @@ export async function memberAction(tgId: number, action: MemberAction): Promise<
   try {
     const { memberAct } = await import('@/lib/tg-guard')
     return logged('tg_mod', done(await memberAct(Number(tgId), action, await actor())))
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+/** Cuts the tie between a Telegram account and the site membership it was connected to. */
+export async function unlinkSiteAccount(tgId: number): Promise<Result> {
+  const no = await blocked('mod')
+  if (no) return no
+  try {
+    const { unlinkByTelegram } = await import('@/lib/tg-member')
+    const name = await unlinkByTelegram(Number(tgId))
+    if (!name) return { ok: false, message: 'Bu Telegram hesabı bir üyeliğe bağlı değil.' }
+    return logged('tg_mod', done(`${name} üyeliğinin Telegram bağlantısı kaldırıldı. Üye doğru hesabı siteden yeniden bağlayabilir.`))
   } catch (error) {
     return fail(error)
   }

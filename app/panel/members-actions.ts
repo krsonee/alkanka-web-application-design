@@ -41,6 +41,7 @@ import {
   MEMBER_SORTS,
   type MemberStatus,
 } from '@/lib/members-admin'
+import { RESET_LINK_MINUTES, createResetLink, setMemberPassword, updateMemberInfo, type MemberInfoInput } from '@/lib/member-account'
 import { bulkMembers } from '@/lib/members-bulk'
 import { addMemberNote, deleteMemberNote, listMemberNotes } from '@/lib/member-notes'
 import type { BulkInput, BulkSkipped, MemberNote } from '@/lib/members-bulk-shared'
@@ -303,6 +304,35 @@ export async function revokeSessionsAction(userId: string) {
     await revokeSessions(String(userId))
     return 'Tüm oturumlar kapatıldı. Üye tekrar giriş yapmak zorunda.'
   })
+}
+
+export async function memberInfoAction(userId: string, input: MemberInfoInput) {
+  return guard(async () => {
+    const changed = await updateMemberInfo(String(userId), {
+      name: String(input?.name ?? ''),
+      email: String(input?.email ?? ''),
+      phone: String(input?.phone ?? ''),
+    })
+    return changed.length ? 'Üyelik bilgileri güncellendi.' : 'Değişen bir şey yok.'
+  })
+}
+
+export async function memberPasswordAction(userId: string, password: string) {
+  return guard(async () => {
+    await setMemberPassword(String(userId), String(password ?? ''))
+    return 'Şifre değiştirildi. Üyenin açık oturumları kapatıldı.'
+  })
+}
+
+export type ResetLinkOutcome = { ok: true; url: string; minutes: number } | { ok: false; error: string }
+
+export async function memberResetLinkAction(userId: string): Promise<ResetLinkOutcome> {
+  if (!(await canPanel('users'))) return { ok: false, error: 'Bu işlem için yetkin yok ya da oturum süren doldu.' }
+  try {
+    return { ok: true, url: await createResetLink(String(userId)), minutes: RESET_LINK_MINUTES }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Bağlantı üretilemedi.' }
+  }
 }
 
 export async function unlinkTelegramAction(userId: string) {

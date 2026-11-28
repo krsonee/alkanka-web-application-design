@@ -570,7 +570,7 @@
   <h3>Kurulum</h3>
   <ol>
     <li><strong>Yetkili grubu:</strong> AL Kanka ekibinin olduğu bir grup aç, Destek botunu ekleyip yönetici yap, ID'sini buraya yaz. Bütün biletler bu gruba düşer.</li>
-    <li><strong>Sponsor destek grupları:</strong> Her sponsor için ayrı bir grup aç (sen, sponsorun yetkilisi ve Destek botu). Sponsor adını ve grubun ID'sini yaz. O sponsorla ilgili biletler o gruba da düşer, sponsor yetkilisi gruptan cevaplar.</li>
+    <li><strong>Sponsor destek grupları:</strong> Her sponsor için ayrı bir grup aç (sen, sponsorun yetkilisi ve Destek botu). Destek botunu o grupta yönetici yap. Sonra iki yoldan biriyle bağla: panelde <strong>Sponsor adı</strong> kutusuna sponsorun adını, <strong>Sponsorun destek grubu</strong> kutusuna grubu yazıp <kbd>Ekle</kbd> de (grup listede yoksa "Listede yok, elle yaz…" seçip -100 ile başlayan grup numarasını yaz); ya da sponsorun grubunda <code>/sponsor Sponsor Adı</code> yaz. Komut sadece yetkili grubundaki ekip üyelerinde çalışır, başkasına cevap vermez. Aynı sponsor ya da aynı grup yeniden eklenirse eski kaydın yerine geçer. O sponsorla ilgili biletler o gruba da düşer, sponsor yetkilisi gruptan cevaplar.</li>
     <li><strong>Bot ayarları:</strong> karşılama mesajı, sorun türleri (virgülle), "Sık sorulara otomatik cevap" (üyenin sorusu sitedeki SSS'de varsa bot önce cevabı gösterir; "Çözülmedi" derse bilet açılır).</li>
     <li><strong>Cevapsız bilet uyarısı:</strong> Bir bileti belirlediğin dakika kimse üstlenmezse yetkili grubuna bir kez hatırlatma gider ve bilet panelde kırmızı işaretlenir (en az 5 dakika, 0 = kapalı).</li>
     <li><strong>Hazır cevaplar:</strong> Sık verdiğin cevapları başlığıyla kaydet (en fazla 20).</li>
@@ -583,6 +583,14 @@
     <li><kbd>Çözüldü olarak gönder</kbd> ya da <kbd>Reddet</kbd>; yazdığın cevap üyeye özelden gider.</li>
     <li>Biletleri Telegram grubundan da cevaplayabilirsin: gruba düşen bilete <strong>yanıt vererek</strong> yazdığın cevap üyeye gider.</li>
     <li>Deneme için açılmış kapalı bir bileti <kbd>Sil</kbd> ile silebilirsin; silinen bilet sponsor karnesinden de düşer.</li>
+  </ul>
+  <h3>Şifre talepleri</h3>
+  <ul>
+    <li>Sitedeki "Şifremi unuttum" penceresi üyeyi Destek botuna yollar; üye bota <code>/sifre</code> yazar.</li>
+    <li><strong>Telegram hesabı üyeliğine bağlıysa</strong> bot tek kullanımlık şifre yenileme bağlantısını kendisi gönderir. Bağlantı 15 dakika geçerlidir; üye yeni şifresini kaydedince bütün açık oturumları kapanır. Ekibe iş düşmez, işlem panel kayıtlarına "Destek botu" adıyla yazılır.</li>
+    <li><strong>Bağlı değilse</strong> bot kullanıcı adını ve kayıtlı e-postasını sorar, talep "Şifre talebi" türünde bilet olarak yetkili grubuna düşer. Bilgileri üyenin kaydıyla karşılaştır; tutuyorsa <span class="path">Üyeler → üye → Şifre → Bağlantı üret</span> ile bağlantıyı kopyala ve bilete cevap olarak gönder. Bilgiler tutmuyorsa bileti reddet.</li>
+    <li>Üye bağlantıyı açamıyorsa aynı yerden <kbd>Şifreyi elle belirle</kbd> ile geçici şifre verebilirsin; üyeye girişten sonra şifresini değiştirmesini söyle.</li>
+    <li>Yanlış Telegram hesabı bağlamış üyenin bağlantısını <span class="path">Üyeler → üye → Güvenlik ve bağlı hesaplar</span> ya da Telegram'daki üye kartında <kbd>Site bağlantısını kaldır</kbd> ile kaldırırsın; üye doğru hesabı siteden yeniden bağlar.</li>
   </ul>
   <p><strong>Sponsor destek karnesi (son 7 gün)</strong> sponsorların kaç talep aldığını, kaçını çözdüğünü, ortalama süreyi ve üye puanını gösterir; bu veri Güven Merkezi'ne de otomatik yansır.</p>
 </section>

@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import type { MemberAction, MemberCard } from '@/lib/tg-hub-shared'
 import { askConfirm } from '@/components/panel/confirm-dialog'
 import { OWNER_ONLY, btnDanger, btnGhost, fmt, useAction, useTgAccess } from '@/components/panel/tg-hub-ui'
-import { loadMemberCardAction, markTrusted, memberAction, unbanEverywhere } from '@/app/panel/tg-hub-actions'
+import { loadMemberCardAction, markTrusted, memberAction, unbanEverywhere, unlinkSiteAccount } from '@/app/panel/tg-hub-actions'
 
 let openCard: ((tgId: number) => void) | null = null
 
@@ -108,11 +108,25 @@ function CardBody({ card, onChanged }: { card: MemberCard; onChanged: () => void
       <section className="flex flex-col gap-1.5">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Site hesabı</h3>
         {card.site ? (
-          <p className="text-sm leading-relaxed text-foreground">
-            {card.site.name}
-            {card.site.email ? ` · ${card.site.email}` : ''}
-            <span className="text-muted-foreground"> · {fmt(card.site.linkedAt)} tarihinde bağladı</span>
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="min-w-0 text-sm leading-relaxed text-foreground">
+              {card.site.name}
+              {card.site.email ? ` · ${card.site.email}` : ''}
+              <span className="text-muted-foreground"> · {fmt(card.site.linkedAt)} tarihinde bağladı</span>
+            </p>
+            <button
+              type="button"
+              className={btnGhost}
+              disabled={a.pending}
+              onClick={() =>
+                void askConfirm(`${card.site?.name ?? 'Üye'} üyeliğinin bu Telegram hesabıyla bağlantısı kaldırılsın mı? Üye doğru hesabı siteden yeniden bağlayabilir.`).then(
+                  (ok) => ok && simple(() => unlinkSiteAccount(card.tgId)),
+                )
+              }
+            >
+              Site bağlantısını kaldır
+            </button>
+          </div>
         ) : (
           <p className="text-sm text-muted-foreground">Telegram hesabını siteye bağlamamış.</p>
         )}

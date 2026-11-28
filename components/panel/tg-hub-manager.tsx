@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react'
 import useSWR, { useSWRConfig } from 'swr'
 import { Plus, Trash2 } from 'lucide-react'
 import type { MirrorBot } from '@/lib/telegram-mirror'
-import { CANNED_MAX, CAPTCHA_MINUTES, CAPTCHA_MODES, RAID_BAN_MINUTES, REPLY_BUTTON_MAX, REPLY_RULE_MAX, REPLY_WORD_MAX, TG_GUIDE_URL } from '@/lib/tg-hub-shared'
+import { CANNED_MAX, CAPTCHA_MINUTES, CAPTCHA_MODES, RAID_BAN_MINUTES, REPLY_BUTTON_MAX, REPLY_RULE_MAX, REPLY_WORD_MAX, SPONSOR_BIND_COMMAND, TG_GUIDE_URL } from '@/lib/tg-hub-shared'
 import type { HubConfig, HubGroup, HubStats, KnownChat, LeaderRow, LockRow, LogPage, QuietRow, ReplyRule, SponsorSupportStat, TicketRow } from '@/lib/tg-hub-shared'
 import { TelegramTabs } from '@/components/panel/telegram-tabs'
 import { ChatField } from '@/components/panel/tg-chat-field'
@@ -103,11 +103,20 @@ function ChatAdder({ kind, placeholder, withName }: { kind: 'group' | 'log' | 's
   const [name, setName] = useState('')
   const a = useAction()
   const chats = useKnownChats()
+  const addressAsName = Boolean(withName) && /^(-?\d{5,}|@\w+|\S*t\.me\/\S+)$/i.test(name.trim())
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-col gap-2 sm:flex-row">
-        {withName && <input aria-label="Sponsor adı" className={input} placeholder="Sponsor adı (ör. Betkanka)" value={name} onChange={(e) => setName(e.target.value)} />}
-        <ChatField label="Grup ya da kanal" chats={chats} placeholder={placeholder} value={value} onChange={setValue} />
+      <div className={`grid items-end gap-2 ${withName ? 'sm:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_auto]' : 'sm:grid-cols-[minmax(0,1fr)_auto]'}`}>
+        {withName && (
+          <label className="grid min-w-0 gap-1 text-xs text-muted-foreground">
+            Sponsor adı
+            <input className={input} placeholder="ör. Betkanka" value={name} aria-invalid={addressAsName} onChange={(e) => setName(e.target.value)} />
+          </label>
+        )}
+        <div className="grid min-w-0 gap-1 text-xs text-muted-foreground">
+          {withName && <span aria-hidden="true">Sponsorun destek grubu</span>}
+          <ChatField label={withName ? 'Sponsorun destek grubu' : 'Grup ya da kanal'} chats={chats} placeholder={placeholder} value={value} onChange={setValue} />
+        </div>
         <button
           type="button"
           className={btn}
@@ -126,6 +135,11 @@ function ChatAdder({ kind, placeholder, withName }: { kind: 'group' | 'log' | 's
           {a.pending ? 'Ekleniyor…' : 'Ekle'}
         </button>
       </div>
+      {addressAsName && (
+        <p role="alert" className="text-xs leading-relaxed text-destructive">
+          Bu kutuya sponsorun adı yazılır (ör. Betkanka). Grup numarasını ya da adresini yandaki &quot;Sponsorun destek grubu&quot; kutusuna yaz.
+        </p>
+      )}
       {a.note}
     </div>
   )
@@ -324,14 +338,19 @@ function SupportSection({ d }: { d: TgHubData }) {
       <Card title="Yetkili grubu" hint="Alkanka ekibinin olduğu grup. Tüm biletler buraya düşer. Destek botunu bu grupta yönetici yap.">
         {d.hub.support.staffChatId ? <ul><ChatChip kind="staff" id={d.hub.support.staffChatId} label={d.hub.support.staffChatTitle} /></ul> : <ChatAdder kind="staff" placeholder="Yetkili grubunun ID'si (-100…)" />}
       </Card>
-      <Card title="Sponsor destek grupları" hint="Her sponsorla ortak bir grup aç (sen + sponsorun yetkilisi + Destek botu). O sponsorla ilgili biletler o gruba da düşer, sponsor yetkilisi gruptan cevaplar.">
-        <ChatAdder kind="sponsor" placeholder="Sponsor grubunun ID'si (-100…)" withName />
-        {d.hub.support.sponsors.length > 0 && (
+      <Card title="Sponsor destek grupları" hint="Her sponsorla ortak bir grup aç (sen + sponsorun yetkilisi + Destek botu) ve Destek botunu o grupta yönetici yap. O sponsorla ilgili biletler o gruba da düşer, sponsor yetkilisi gruptan cevaplar.">
+        <ChatAdder kind="sponsor" placeholder="Grup numarası (-100…) ya da @adres" withName />
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Panele girmeden de bağlanır: sponsorun grubunda <span className="font-mono text-foreground">{SPONSOR_BIND_COMMAND} Sponsor Adı</span> yaz. Komutu sadece yetkili grubundaki ekip üyeleri kullanabilir; aynı sponsor ya da aynı grup yeniden eklenirse eski kaydın yerine geçer.
+        </p>
+        {d.hub.support.sponsors.length > 0 ? (
           <ul className="flex flex-col gap-2">
             {d.hub.support.sponsors.map((sp) => (
-              <ChatChip key={sp.name} kind="sponsor" id={sp.name} label={`${sp.name} → ${sp.title}`} />
+              <ChatChip key={sp.name} kind="sponsor" id={sp.name} label={`${sp.name} → ${sp.title}`} note={`Grup numarası ${sp.chatId}`} />
             ))}
           </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">Henüz sponsor grubu yok. Biletlerin hepsi yetkili grubuna düşer.</p>
         )}
       </Card>
       <Card title="Bot ayarları">

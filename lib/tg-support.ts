@@ -3,12 +3,23 @@ import { generateText } from 'ai'
 import { rows, sql } from '@/lib/db'
 import { botToken, callBot } from '@/lib/telegram-mirror'
 import type { TgMessage } from '@/lib/telegram-chat'
-import { ensureHubTables, getHub, modLog, who, type TgCallback, type TgUser } from '@/lib/tg-hub'
-import { TICKET_PAGE, type HubConfig, type SponsorSupportStat, type TicketPage, type TicketRow } from '@/lib/tg-hub-shared'
+import { ensureHubTables, getHub, modLog, saveHub, who, type TgCallback, type TgUser } from '@/lib/tg-hub'
+import {
+  MAX_SPONSOR_GROUPS,
+  PASSWORD_COMMAND,
+  SPONSOR_BIND_COMMAND,
+  TICKET_PAGE,
+  withSponsorGroup,
+  type HubConfig,
+  type SponsorSupportStat,
+  type TicketPage,
+  type TicketRow,
+} from '@/lib/tg-hub-shared'
 
 const AI_MODEL = 'google/gemini-3.5-flash'
 const MAX_OPEN_PER_USER = 3
 const GENERAL = 'Alkanka (genel)'
+const PASSWORD_CATEGORY = 'Şifre talebi'
 
 let supportReady: Promise<void> | null = null
 export function ensureSupportTables() {
@@ -204,6 +215,88 @@ async function markStaffMessages(token: string, ticketId: number, label: string)
 
 // --- Entry points ------------------------------------------------------------
 
+/**
+ * `/sponsor Ad` written inside a sponsor's group connects that group to the sponsor. Only someone who is
+ * in the staff group may do it; anyone else gets no answer, so the command tells a stranger nothing.
+ */
+async function bindSponsorGroup(token: string, hub: HubConfig, m: TgMessage, rawName: string) {
+  const from = m.from
+  if (!from || !hub.support.staffChatId) return
+  const staff = await callBot<{ status: string }>(token, 'getChatMember', { chat_id: hub.support.staffChatId, user_id: from.id }).catch(() => null)
+  if (!staff || !['creator', 'administrator', 'member'].includes(staff.status)) return
+
+  const say = (text: string) =>
+    callBot(token, 'sendMessage', { chat_id: m.chat.id, text, reply_parameters: { message_id: m.message_id, allow_sending_without_reply: true } }).catch(() => null)
+  const chatId = String(m.chat.id)
+  if (chatId === hub.support.staffChatId) {
+    await say(`Burası yetkili grubu. Komutu sponsorla ortak açtığın grupta yaz: ${SPONSOR_BIND_COMMAND} Sponsor Adı`)
+    return
+  }
+  const name = rawName.replace(/\s+/g, ' ').trim().slice(0, 60)
+  const bound = hub.support.sponsors.find((s) => s.chatId === chatId)
+  if (!name) {
+    await say(
+      bound
+        ? `Bu grup "${bound.name}" sponsorunun destek grubu. Adı değiştirmek için: ${SPONSOR_BIND_COMMAND} Yeni Ad`
+        : `Bu grubu bir sponsora bağlamak için sponsorun adını yaz. Örnek: ${SPONSOR_BIND_COMMAND} Makrobet`,
+    )
+    return
+  }
+  const me = await callBot<{ id: number }>(token, 'getMe')
+  const mine = await callBot<{ status: string }>(token, 'getChatMember', { chat_id: m.chat.id, user_id: me.id }).catch(() => null)
+  if (!mine || !['administrator', 'creator'].includes(mine.status)) {
+    await say('Önce beni bu grupta yönetici yap, sonra komutu yeniden yaz.')
+    return
+  }
+  const sponsors = withSponsorGroup(hub.support.sponsors, { name, chatId, title: m.chat.title ?? name })
+  if (!sponsors) {
+    await say(`En fazla ${MAX_SPONSOR_GROUPS} sponsor grubu bağlanabilir. Kullanılmayan bir grubu panelden kaldır.`)
+    return
+  }
+  const next: HubConfig = { ...hub, support: { ...hub.support, sponsors } }
+  await saveHub(next)
+  const { recordHubChange } = await import('@/lib/tg-history')
+  await recordHubChange(hub, next, `Telegram · ${who(from)}`, 'Sohbet bağlantısı').catch(() => null)
+  await say(`Tamam. Bu grup artık "${name}" sponsorunun destek grubu: ${name} ile ilgili talepler buraya da düşer, talebin mesajını yanıtlayarak cevap verebilirsiniz.`)
+}
+
+/**
+ * Password renewal over Telegram. A Telegram account the member connected on the site is proof enough,
+ * so it gets a single-use link at once; any other account is passed to staff as a ticket.
+ */
+async function sendPasswordHelp(token: string, user: TgUser, chatId: number) {
+  const [link] = await rows<{ user_id: string; name: string | null }>(
+    sql`SELECT l.user_id, u.name FROM tg_links l JOIN public."user" u ON u.id = l.user_id WHERE l.tg_id = ${user.id}`,
+  ).catch(() => [])
+  if (!link) {
+    await setState(user.id, { step: 'text', sponsor: GENERAL, category: PASSWORD_CATEGORY })
+    await callBot(token, 'sendMessage', {
+      chat_id: chatId,
+      text: 'Bu Telegram hesabı bir Alkanka üyeliğine bağlı değil, bu yüzden şifreni buradan kendim yenileyemiyorum.\n\nTalebini yetkililere ileteyim: kullanıcı adını ve kayıtlı e-posta adresini (ya da telefon numaranı) tek mesajda yaz.',
+    })
+    return
+  }
+  const [ban] = await rows(sql`SELECT 1 FROM member_bans WHERE user_id = ${link.user_id} AND (until IS NULL OR until > now()) LIMIT 1`).catch(() => [])
+  if (ban) {
+    await callBot(token, 'sendMessage', { chat_id: chatId, text: 'Hesabın şu an kapalı olduğu için şifre yenilenemiyor. Yetkililere yazmak için /destek yaz.' })
+    return
+  }
+  const { createResetLink, RESET_LINK_MINUTES } = await import('@/lib/member-account')
+  const url = await createResetLink(link.user_id, 'Destek botu')
+  await clearState(user.id)
+  const text = `<b>Şifre yenileme</b>\n\nÜyelik: <b>${esc(link.name ?? 'Üye')}</b>\n\nYeni şifreni belirleyeceğin sayfa hazır. Bağlantı ${RESET_LINK_MINUTES} dakika geçerli ve tek kullanımlık; yeni şifreni kaydedince açık oturumların kapanır.\n\nBu bağlantıyı kimseyle paylaşma. Alkanka ekibi senden bağlantı ya da şifre istemez.`
+  await callBot(token, 'sendMessage', {
+    chat_id: chatId,
+    text,
+    parse_mode: 'HTML',
+    protect_content: true,
+    reply_markup: { inline_keyboard: [[{ text: 'Yeni şifre belirle', url }]] },
+  }).catch(() => callBot(token, 'sendMessage', { chat_id: chatId, text: `${text}\n\n${esc(url)}`, parse_mode: 'HTML', protect_content: true, link_preview_options: { is_disabled: true } }))
+}
+
+const PASSWORD_ASK = new RegExp(`^\\/(?:start\\s+)?(?:${PASSWORD_COMMAND.slice(1)}|şifre)(?:@\\w+)?(?:\\s|$)`, 'i')
+const SPONSOR_BIND = new RegExp(`^\\${SPONSOR_BIND_COMMAND}(?:@\\w+)?(?:\\s+([\\s\\S]*))?$`, 'i')
+
 export async function handleSupportMessage(botId: number, m: TgMessage): Promise<boolean> {
   await ensureSupportTables()
   const hub = await getHub()
@@ -211,6 +304,11 @@ export async function handleSupportMessage(botId: number, m: TgMessage): Promise
   if (!m.from || m.from.is_bot) return false
 
   if (m.chat.type !== 'private') {
+    const bind = SPONSOR_BIND.exec((m.text ?? '').trim())
+    if (bind) {
+      await bindSponsorGroup(token, hub, m, bind[1] ?? '')
+      return true
+    }
     if (!isStaffChat(hub, m.chat.id)) return false
     const text = (m.text ?? m.caption ?? '').trim()
     if (/^\/acik(@\w+)?$/i.test(text)) {
@@ -242,6 +340,10 @@ export async function handleSupportMessage(botId: number, m: TgMessage): Promise
   if (!hub.support.enabled) return false
   const text = (m.text ?? m.caption ?? '').trim()
   const hasMedia = Boolean(m.photo || m.video || (m as { document?: unknown }).document)
+  if (PASSWORD_ASK.test(text)) {
+    await sendPasswordHelp(token, m.from, m.chat.id)
+    return true
+  }
   if (/^\/(start|destek|menu|menü)\b/i.test(text)) {
     await sendMenu(token, hub, m.chat.id, m.from.id)
     return true
@@ -258,7 +360,7 @@ export async function handleSupportMessage(botId: number, m: TgMessage): Promise
   const state = await getState(m.from.id)
   if (state?.step === 'text') {
     if (!text && !hasMedia) return true
-    if (hub.support.aiFaq && text.length >= 8) {
+    if (hub.support.aiFaq && text.length >= 8 && state.category !== PASSWORD_CATEGORY) {
       const answer = await faqAnswer(text)
       if (answer) {
         await setState(m.from.id, { step: 'faq', sponsor: state.sponsor, category: state.category, pending_text: text, pending_msg: hasMedia ? m.message_id : null })
