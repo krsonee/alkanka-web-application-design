@@ -26,6 +26,7 @@ import { MemberActivityTabs, type ActivityTab } from '@/components/panel/member-
 import { MemberLedger } from '@/components/panel/member-ledger'
 import { BulkBar, type Picked } from '@/components/panel/member-bulk'
 import { MemberNotes } from '@/components/panel/member-notes'
+import { MemberAccount } from '@/components/panel/member-account'
 
 type Filter = MemberStatus | 'tumu'
 
@@ -643,6 +644,8 @@ function MemberDrawer({ id, level, onClose, onChanged }: { id: string; level: st
                 {amount.trim().startsWith('-') ? 'Bakiyeden düş' : 'Bakiyeye ekle'}
               </button>
             </Section>
+
+            <MemberAccount key={`${m.name}|${m.email}|${m.phone ?? ''}`} member={m} busy={busy} run={run} />
 
             <Section icon={<Lock className="size-4" aria-hidden="true" />} title="Güvenlik ve bağlı hesaplar">
               <div className="flex items-center justify-between gap-3 rounded-lg bg-background px-3 py-2 text-sm">

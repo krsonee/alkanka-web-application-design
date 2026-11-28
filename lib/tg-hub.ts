@@ -179,6 +179,7 @@ export async function saveHub(cfg: HubConfig) {
 
 export async function resolveChatFor(botId: number, input: string) {
   const ref = normalizeChat(input)
+  if (!ref) throw new Error('Grup adresi tanınmadı. @adres, t.me bağlantısı ya da -100 ile başlayan grup numarası yaz.')
   const token = await botToken(botId)
   const info = await callBot<{ id: number; title?: string; type: string; linked_chat_id?: number }>(token, 'getChat', { chat_id: ref })
   const me = await callBot<{ id: number }>(token, 'getMe')

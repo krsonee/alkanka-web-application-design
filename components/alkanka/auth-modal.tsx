@@ -4,9 +4,11 @@ import { useEffect, useState, type FormEvent } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { Send } from 'lucide-react'
-import { useSWRConfig } from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
 import { cn } from '@/lib/utils'
 import { authClient } from '@/lib/auth-client'
+import { passwordHelp } from '@/app/actions/password-help'
+import { ForgotByTelegram } from './forgot-by-telegram'
 import { useTelegramUrl } from './telegram-address'
 import { Modal } from './modal'
 import { useTexts } from './texts-context'
@@ -143,6 +145,7 @@ export function AuthModal({ signupClosed = false }: { signupClosed?: boolean }) 
 
   const isRegister = mode === 'kayit'
   const isForgot = mode === 'sifremi-unuttum'
+  const help = useSWR(isForgot ? 'password-help' : null, () => passwordHelp(), { revalidateOnFocus: false })
   const registerClosed = isRegister && signupClosed
   const registerOpen = isRegister && !signupClosed
 
@@ -208,6 +211,8 @@ export function AuthModal({ signupClosed = false }: { signupClosed?: boolean }) 
                 Giriş yap
               </button>
             </div>
+          ) : isForgot && (help.isLoading || (help.data && !help.data.mail)) ? (
+            <ForgotByTelegram bot={help.data?.bot ?? null} loading={help.isLoading} onLogin={() => switchTo('giris')} />
           ) : (
             <form onSubmit={onSubmit} className="flex flex-col gap-4">
               <h2 className="font-display text-xl font-bold">
