@@ -205,6 +205,11 @@ const MOD_STEPS: GuideStep[] = [
         </li>
         <li>Kırmızı “Cevapsız” etiketi, biletin belirlenen süreden uzun süredir üstlenilmediğini gösterir.</li>
         <li>Biletleri Telegram’daki yetkili grubundan, bilete yanıt vererek de cevaplayabilirsin.</li>
+        <li>
+          <b>Şifre talebi</b>: üye Destek botuna <span className={code}>/sifre</span> yazar. Telegram hesabı üyeliğine bağlıysa bot tek kullanımlık, 15 dakikalık şifre
+          yenileme bağlantısını kendisi gönderir, sana iş düşmez. Bağlı değilse talep “Şifre talebi” türünde bilet olarak gelir: kullanıcı adını ve kayıtlı e-postasını
+          karşılaştır, sonra <b>Üyeler → üye → Şifre → Bağlantı üret</b> ile bağlantıyı kopyalayıp bilete cevap olarak gönder.
+        </li>
       </ul>
     ),
   },
@@ -397,6 +402,11 @@ const SETUP_STEPS: GuideStep[] = [
         </li>
         <li>
           <b>Destek</b> ayarları: yetkili grubu, sponsor grupları, hazır cevaplar ve cevapsız bilet uyarısı.
+        </li>
+        <li>
+          <b>Yeni sponsor grubu</b>: sponsorla ortak grubu aç, Destek botunu ekleyip yönetici yap. Sonra ya <b>Destek → Sponsor destek grupları</b>nda sponsor adını ilk
+          kutuya, grubu ikinci kutuya yazıp <b>Ekle</b> de, ya da o grupta <span className={code}>/sponsor Sponsor Adı</span> yaz (komut sadece yetkili grubundaki ekip
+          üyelerinde çalışır). Aynı sponsor ya da aynı grup yeniden eklenirse eski kaydın yerine geçer.
         </li>
       </ul>
     ),

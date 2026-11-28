@@ -98,6 +98,8 @@ const SETTINGS: ({ title: string; words?: string; query?: string; anyOf?: PanelM
   { title: 'Üye rolleri', words: 'rol görevli moderatör sponsor destek kp kazanmaz sıralamada görünmez marketten alamaz etkinliklere katılamaz kısıt', row: 'users' },
   { title: 'Toplu üye işlemi', words: 'toplu mesaj hediye dondur çoklu seçim', row: 'users' },
   { title: 'Personel notları', words: 'üye notu not düş', row: 'users' },
+  { title: 'Üye şifresi ve bilgileri', words: 'şifre değiştir şifre sıfırla şifremi unuttum yenileme bağlantısı kullanıcı adı e-posta telefon değiştir üyelik bilgisi', row: 'users' },
+  { title: 'Telegram bağlantısını kaldır', words: 'yanlış telegram hesabı bağlantı kaldır bağlı hesap çöz', row: 'users' },
   { title: 'Coin dökümü', words: 'coin hareket bakiye geçmiş döküm ekstre nereden geldi nereye gitti', row: 'users' },
   { title: 'Süreli kısıtlama', words: 'geçici kısıt bitiş tarihi süre kendiliğinden kalkar', row: 'limits' },
   { title: 'Görev kopyala / arşivle', words: 'görev kopya çoğalt arşiv eski görev kaldır', row: 'tasks' },
